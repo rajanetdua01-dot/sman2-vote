@@ -36,8 +36,9 @@
 
         <div class="login-footer">
           <p>
-            Bukan admin? <router-link to="/login-calon">Login sebagai Calon</router-link> |
-            <router-link to="/">Kembali ke Home</router-link>
+            Bukan admin?
+            <router-link to="/#/login-calon">Login sebagai Calon</router-link> |
+            <router-link to="/#/">Kembali ke Home</router-link>
           </p>
           <p class="hint">
             <strong>Default Admin:</strong><br />
@@ -55,12 +56,12 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
+const router = useRouter()
+
 const nip = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
-
-const router = useRouter()
 
 const handleLogin = async () => {
   if (!nip.value || !password.value) {
@@ -77,7 +78,7 @@ const handleLogin = async () => {
       .from('pengguna')
       .select('*')
       .eq('nip', nip.value)
-      .eq('peran', 'admin') // Hanya role admin yang bisa login
+      .eq('peran', 'admin')
       .single()
 
     if (userError || !user) {
@@ -107,7 +108,7 @@ const handleLogin = async () => {
     localStorage.setItem('smanda_session', JSON.stringify({ type: 'admin' }))
 
     // 4. Redirect ke admin dashboard
-    router.push('/admin-dashboard')
+    router.push('/#/admin-dashboard')
   } catch (err) {
     error.value = err.message
   } finally {
