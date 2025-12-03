@@ -330,7 +330,7 @@
           </div>
 
           <div class="token-list" v-if="tokens.length > 0">
-            <h3>Daftar Token (6 Digit)</h3>
+            <h3>Daftar Token (6 Digit) - Semua {{ tokens.length }} Token</h3>
             <div class="table-container">
               <table>
                 <thead>
@@ -343,7 +343,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(token, index) in tokens.slice(0, 20)" :key="token.id">
+                  <tr v-for="(token, index) in tokens" :key="token.id">
                     <td>{{ index + 1 }}</td>
                     <td>{{ token.pengguna?.nama_lengkap || 'Tidak diketahui' }}</td>
                     <td>
@@ -366,9 +366,7 @@
                 </tbody>
               </table>
             </div>
-            <p class="view-more" v-if="tokens.length > 20">
-              ...dan {{ tokens.length - 20 }} token lainnya
-            </p>
+            <p class="view-more">Menampilkan semua {{ tokens.length }} token</p>
           </div>
 
           <div v-else class="empty-state">
@@ -515,6 +513,27 @@
       </div>
     </div>
 
+    <!-- Confirm Action Modal -->
+    <div v-if="showConfirmModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>⚠️ Konfirmasi Aksi</h3>
+          <button @click="showConfirmModal = false" class="btn-close">×</button>
+        </div>
+
+        <div class="modal-body">
+          <p>{{ confirmMessage }}</p>
+
+          <div class="modal-actions">
+            <button @click="showConfirmModal = false" class="btn-cancel">Batal</button>
+            <button @click="executeAction" class="btn-save" :disabled="executingAction">
+              {{ executingAction ? 'Memproses...' : 'Ya, Lanjutkan' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Error Toast -->
     <div v-if="toastMessage" class="toast" :class="toastType">
       {{ toastMessage }}
@@ -523,7 +542,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
@@ -560,6 +579,10 @@ const generatingTokens = ref(false)
 // Modal State
 const showCreateModal = ref(false)
 const creatingSession = ref(false)
+const showConfirmModal = ref(false)
+const confirmMessage = ref('')
+const pendingAction = ref(null)
+const executingAction = ref(false)
 
 // Form State
 const newSessionForm = ref({
@@ -570,6 +593,10 @@ const newSessionForm = ref({
 // Toast
 const toastMessage = ref('')
 const toastType = ref('success')
+
+// Auto-refresh
+let refreshInterval = null
+let isRefreshing = false
 
 // Computed
 const votingStatusText = computed(() => {
@@ -582,15 +609,33 @@ const votingStatusClass = computed(() => {
   return `status-${activeSession.value.status}`
 })
 
+// Watch for badge updates
+watch(
+  [() => candidateStats.value.pending, () => stats.value.availableTokens],
+  ([pending, availableTokens]) => {
+    tabs.value = tabs.value.map((tab) => {
+      const newTab = { ...tab }
+      if (tab.id === 'candidates' && pending > 0) {
+        newTab.badge = pending
+      } else if (tab.id === 'tokens' && availableTokens > 0) {
+        newTab.badge = availableTokens
+      } else {
+        newTab.badge = null
+      }
+      return newTab
+    })
+  },
+)
+
 // Methods
-const checkAuth = () => {
+const checkAuth = async () => {
   console.log('🔐 Checking admin authentication...')
 
   const adminSession = localStorage.getItem('smanda_admin')
 
   if (!adminSession) {
-    console.log('❌ No admin session found')
-    isAuthenticated.value = false
+    console.log('❌ No admin session found - Redirecting to login')
+    router.push('/admin-login')
     loading.value = false
     return
   }
@@ -601,15 +646,14 @@ const checkAuth = () => {
     if (!session.user || session.type !== 'admin') {
       console.log('❌ Invalid admin session structure')
       localStorage.removeItem('smanda_admin')
-      isAuthenticated.value = false
-      loading.value = false
+      router.push('/admin-login')
       return
     }
 
     if (session.user.peran !== 'admin') {
       console.log('❌ User does not have admin role:', session.user.peran)
-      isAuthenticated.value = false
-      loading.value = false
+      localStorage.removeItem('smanda_admin')
+      router.push('/admin-login')
       return
     }
 
@@ -618,19 +662,21 @@ const checkAuth = () => {
     isAuthenticated.value = true
 
     // Load data setelah auth berhasil
-    loadDashboardData()
+    await loadDashboardData()
   } catch (error) {
     console.error('❌ Error parsing admin session:', error)
     localStorage.removeItem('smanda_admin')
-    isAuthenticated.value = false
-    loading.value = false
+    router.push('/admin-login')
   }
 }
 
 const loadDashboardData = async () => {
   try {
-    // Load semua data secara parallel
-    await Promise.all([loadStats(), loadTokens(), loadActiveSession(), loadCandidateStats()])
+    // Load active session dulu
+    await loadActiveSession()
+
+    // Load lainnya
+    await Promise.all([loadStats(), loadTokens(), loadCandidateStats()])
   } catch (error) {
     console.error('Error loading dashboard data:', error)
     showToast('Gagal memuat data dashboard', 'error')
@@ -644,31 +690,45 @@ const loadStats = async () => {
     // Total guru
     const { count: totalGuru, error: guruError } = await supabase
       .from('pengguna')
-      .select('*', { count: 'exact', head: true })
+      .select('*', { count: 'exact' })
       .eq('peran', 'guru')
 
     if (guruError) throw guruError
 
-    // Total yang sudah voting
-    const { count: votedCount, error: voteError } = await supabase
-      .from('token_qr')
-      .select('*', { count: 'exact', head: true })
-      .eq('sudah_digunakan', true)
+    // Total yang sudah voting (distinct pemilih)
+    let votedCount = 0
+    if (activeSession.value?.id) {
+      const { data: votingData, error: voteError } = await supabase
+        .from('suara')
+        .select('pemilih_id', { distinct: true })
+        .eq('is_draft', false)
+        .eq('sesi_id', activeSession.value.id)
 
-    if (voteError) throw voteError
+      if (voteError) throw voteError
+      votedCount = votingData?.length || 0
+    }
 
     // Token stats
-    const { data: allTokens, error: tokenError } = await supabase.from('token_qr').select('*')
+    let totalTokens = 0
+    let usedTokens = 0
+    let availableTokens = 0
 
-    if (tokenError) throw tokenError
+    if (activeSession.value?.id) {
+      const { data: allTokens, error: tokenError } = await supabase
+        .from('token_qr')
+        .select('*')
+        .eq('sesi_id', activeSession.value.id)
 
-    const totalTokens = allTokens?.length || 0
-    const usedTokens = allTokens?.filter((t) => t.sudah_digunakan).length || 0
-    const availableTokens = totalTokens - usedTokens
+      if (tokenError) throw tokenError
+
+      totalTokens = allTokens?.length || 0
+      usedTokens = allTokens?.filter((t) => t.sudah_digunakan).length || 0
+      availableTokens = totalTokens - usedTokens
+    }
 
     stats.value = {
       totalGuru: totalGuru || 0,
-      votedCount: votedCount || 0,
+      votedCount,
       participationRate: totalGuru ? Math.round((votedCount / totalGuru) * 100) : 0,
       totalTokens,
       usedTokens,
@@ -676,12 +736,24 @@ const loadStats = async () => {
     }
   } catch (error) {
     console.error('Error loading stats:', error)
-    showToast('Gagal memuat statistik', 'error')
+    stats.value = {
+      totalGuru: 0,
+      votedCount: 0,
+      participationRate: 0,
+      totalTokens: 0,
+      usedTokens: 0,
+      availableTokens: 0,
+    }
   }
 }
 
 const loadTokens = async () => {
   try {
+    if (!activeSession.value?.id) {
+      tokens.value = []
+      return
+    }
+
     const { data, error } = await supabase
       .from('token_qr')
       .select(
@@ -692,8 +764,8 @@ const loadTokens = async () => {
         )
       `,
       )
+      .eq('sesi_id', activeSession.value.id)
       .order('dibuat_pada', { ascending: false })
-      .limit(50)
 
     if (error) {
       console.error('Token query error:', error)
@@ -701,33 +773,11 @@ const loadTokens = async () => {
       const { data: simpleData } = await supabase
         .from('token_qr')
         .select('*')
+        .eq('sesi_id', activeSession.value.id)
         .order('dibuat_pada', { ascending: false })
-        .limit(50)
 
       if (simpleData) {
-        // Get user names separately
-        const userIds = [...new Set(simpleData.map((t) => t.pengguna_id).filter(Boolean))]
-        let usersMap = {}
-
-        if (userIds.length > 0) {
-          const { data: usersData } = await supabase
-            .from('pengguna')
-            .select('id, nama_lengkap')
-            .in('id', userIds)
-
-          if (usersData) {
-            usersData.forEach((user) => {
-              usersMap[user.id] = user.nama_lengkap
-            })
-          }
-        }
-
-        tokens.value = simpleData.map((token) => ({
-          ...token,
-          pengguna: {
-            nama_lengkap: usersMap[token.pengguna_id] || 'Tidak diketahui',
-          },
-        }))
+        tokens.value = simpleData
       }
       return
     }
@@ -735,7 +785,6 @@ const loadTokens = async () => {
     tokens.value = data || []
   } catch (error) {
     console.error('Error loading tokens:', error)
-    showToast('Gagal memuat token', 'error')
     tokens.value = []
   }
 }
@@ -759,26 +808,39 @@ const loadActiveSession = async () => {
 
 const loadCandidateStats = async () => {
   try {
-    // Count pending registrations
-    const { count: pending } = await supabase
-      .from('pendaftaran_kandidat')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'menunggu')
+    let pending = 0
+    let approved = 0
+    let rejected = 0
 
-    const { count: approved } = await supabase
-      .from('pendaftaran_kandidat')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'disetujui')
+    if (activeSession.value?.id) {
+      // Count pending registrations
+      const { count: pendingCount } = await supabase
+        .from('pendaftaran_kandidat')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'menunggu')
+        .eq('sesi_id', activeSession.value.id)
 
-    const { count: rejected } = await supabase
-      .from('pendaftaran_kandidat')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'ditolak')
+      const { count: approvedCount } = await supabase
+        .from('pendaftaran_kandidat')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'disetujui')
+        .eq('sesi_id', activeSession.value.id)
+
+      const { count: rejectedCount } = await supabase
+        .from('pendaftaran_kandidat')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'ditolak')
+        .eq('sesi_id', activeSession.value.id)
+
+      pending = pendingCount || 0
+      approved = approvedCount || 0
+      rejected = rejectedCount || 0
+    }
 
     candidateStats.value = {
-      pending: pending || 0,
-      approved: approved || 0,
-      rejected: rejected || 0,
+      pending,
+      approved,
+      rejected,
     }
   } catch (error) {
     console.error('Error loading candidate stats:', error)
@@ -802,7 +864,6 @@ const createNewSession = async () => {
     const { error } = await supabase.from('sesi_pemilihan').insert({
       nama_sesi: newSessionForm.value.nama_sesi,
       tahun_ajaran: newSessionForm.value.tahun_ajaran,
-      // Fill with dummy dates (not used in our manual system)
       waktu_mulai_pendaftaran: now,
       waktu_selesai_pendaftaran: nextWeek,
       waktu_mulai_voting: nextWeek,
@@ -830,8 +891,8 @@ const createNewSession = async () => {
   }
 }
 
-const confirmAction = async (action) => {
-  const confirmMessages = {
+const confirmAction = (action) => {
+  const messages = {
     bukaPendaftaran: 'Buka pendaftaran? Guru bisa daftar sebagai calon kandidat.',
     bukaVoting: 'Buka voting? Token 6 digit akan otomatis dibuat untuk semua guru.',
     tutupVoting: 'Tutup voting? Voting akan dihentikan dan hasil menjadi final.',
@@ -839,27 +900,30 @@ const confirmAction = async (action) => {
     generateTokensNow: 'Generate token sekarang? Token 6 digit akan dibuat untuk semua guru.',
   }
 
-  const confirmText = confirmMessages[action]
-  if (!confirmText) {
+  if (!messages[action]) {
     console.error('Unknown action:', action)
     return
   }
 
-  if (!confirm(confirmText)) {
-    return
-  }
+  confirmMessage.value = messages[action]
+  pendingAction.value = action
+  showConfirmModal.value = true
+}
+
+const executeAction = async () => {
+  if (!pendingAction.value) return
+
+  executingAction.value = true
 
   try {
-    switch (action) {
+    switch (pendingAction.value) {
       case 'bukaPendaftaran':
         await updateSessionStatus('pendaftaran')
         showToast('Pendaftaran dibuka! Guru bisa daftar sebagai calon.', 'success')
         break
 
       case 'bukaVoting':
-        // Generate tokens first
         await generateTokensForAllGuru()
-        // Then update status
         await updateSessionStatus('voting')
         showToast('Voting dibuka! Token sudah dibuat.', 'success')
         break
@@ -884,8 +948,12 @@ const confirmAction = async (action) => {
     // Refresh data
     await loadDashboardData()
   } catch (error) {
-    console.error('Error in action:', action, error)
+    console.error('Error in action:', pendingAction.value, error)
     showToast('Gagal: ' + error.message, 'error')
+  } finally {
+    executingAction.value = false
+    showConfirmModal.value = false
+    pendingAction.value = null
   }
 }
 
@@ -936,16 +1004,48 @@ const generateTokensForAllGuru = async () => {
     // Delete old tokens for this session
     await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
 
-    // Generate tokens
-    const tokensToInsert = allGuru.map((guru) => ({
-      pengguna_id: guru.id,
-      sesi_id: activeSession.value.id,
-      token: generate6DigitToken(),
-      tipe_token: 'voting',
-      kadaluarsa_pada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 hari
-      sudah_digunakan: false,
-      dibuat_oleh: adminUser.value.id,
-    }))
+    // Generate unique tokens
+    const tokensToInsert = []
+    const existingTokens = new Set()
+
+    for (const guru of allGuru) {
+      let token
+      let attempts = 0
+      const maxAttempts = 50
+
+      // Generate unique token
+      while (attempts < maxAttempts) {
+        token = await generate6DigitToken(existingTokens)
+
+        // Check in database
+        const { data: existing } = await supabase
+          .from('token_qr')
+          .select('token')
+          .eq('token', token)
+          .limit(1)
+
+        if (!existing || existing.length === 0) {
+          existingTokens.add(token)
+          break
+        }
+        attempts++
+      }
+
+      // Fallback if no unique token found
+      if (!token) {
+        token = Math.floor(100000 + Math.random() * 900000).toString()
+      }
+
+      tokensToInsert.push({
+        pengguna_id: guru.id,
+        sesi_id: activeSession.value.id,
+        token: token,
+        tipe_token: 'voting',
+        kadaluarsa_pada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        sudah_digunakan: false,
+        dibuat_oleh: adminUser.value.id,
+      })
+    }
 
     const { error: insertError } = await supabase.from('token_qr').insert(tokensToInsert)
 
@@ -961,30 +1061,31 @@ const generateTokensForAllGuru = async () => {
   }
 }
 
-const generate6DigitToken = () => {
-  // Generate 6 digit number (100000 - 999999) dengan pattern check
-  const maxAttempts = 20
+const generate6DigitToken = async (existingTokens = new Set()) => {
+  const maxAttempts = 30
 
   for (let attempts = 0; attempts < maxAttempts; attempts++) {
     const token = Math.floor(100000 + Math.random() * 900000).toString()
 
-    // Cek pattern yang tidak diinginkan
-    const allSame = /^(\d)\1{5}$/.test(token) // 111111, 222222, etc
-    const isSequential = '01234567890123456789'.includes(token) // 123456, 456789
-    const isReverse = '98765432109876543210987654'.includes(token) // 654321, 987654
+    // Check for bad patterns
+    const allSame = /^(\d)\1{5}$/.test(token) // 111111
+    const isSequential = '01234567890123456789'.includes(token) // 123456
+    const isReverse = '98765432109876543210987654'.includes(token) // 654321
 
-    // Skip jika ada pattern yang tidak diinginkan
     if (allSame || isSequential || isReverse) {
-      continue // Coba lagi
+      continue
     }
 
-    // Token bagus, return
+    // Check if already in this batch
+    if (existingTokens.has(token)) {
+      continue
+    }
+
     return token
   }
 
-  // Fallback setelah max attempts
-  const fallback = Math.floor(100000 + Math.random() * 900000).toString()
-  return fallback
+  // Fallback
+  return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
 const resetSessionData = async () => {
@@ -992,9 +1093,14 @@ const resetSessionData = async () => {
 
   try {
     // Delete all related data
-    await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
-    await supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id)
+    const deletePromises = [
+      supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id),
+      supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id),
+      supabase.from('suara').delete().eq('sesi_id', activeSession.value.id),
+      supabase.from('kandidat').delete().eq('sesi_id', activeSession.value.id),
+    ]
 
+    await Promise.all(deletePromises)
     showToast('Data sesi berhasil direset', 'success')
   } catch (error) {
     console.error('Error resetting session data:', error)
@@ -1146,761 +1252,120 @@ const showToast = (message, type = 'success') => {
 }
 
 const handleLogout = () => {
-  if (confirm('Yakin ingin logout?')) {
-    localStorage.removeItem('smanda_admin')
-    router.push('/admin-login')
-  }
+  localStorage.removeItem('smanda_admin')
+  router.push('/admin-login')
 }
 
 // Lifecycle
-onMounted(() => {
-  checkAuth()
+onMounted(async () => {
+  await checkAuth()
 
-  // Auto refresh setiap 30 detik
-  const refreshInterval = setInterval(() => {
-    if (isAuthenticated.value && activeSession.value?.status === 'voting') {
-      loadStats() // Refresh stats saat voting berlangsung
+  // Auto refresh setiap 30 detik untuk sesi voting
+  refreshInterval = setInterval(async () => {
+    if (isAuthenticated.value && activeSession.value?.status === 'voting' && !isRefreshing) {
+      isRefreshing = true
+      try {
+        await loadStats()
+      } catch (error) {
+        console.warn('Auto-refresh failed:', error)
+      } finally {
+        isRefreshing = false
+      }
     }
   }, 30000)
+})
 
-  onUnmounted(() => {
-    clearInterval(refreshInterval)
-  })
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
 })
 </script>
 
 <style scoped>
-/* Status Flow Styles */
-.status-flow {
-  background: white;
-  padding: 1.5rem;
-  margin: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.flow-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.flow-step {
-  text-align: center;
-  padding: 1rem;
-  min-width: 120px;
-  opacity: 0.6;
-  transition: all 0.3s;
-}
-
-.flow-step.active {
-  opacity: 1;
-  transform: scale(1.05);
-}
-
-.flow-step.completed {
-  opacity: 0.8;
-}
-
-.flow-step.completed .step-circle {
-  background: #10b981;
-  color: white;
-}
-
-.flow-step.active .step-circle {
-  background: #1e3a8a;
-  color: white;
-  box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.2);
-}
-
-.step-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin: 0 auto 0.5rem;
-  transition: all 0.3s;
-}
-
-.step-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #374151;
-  margin-bottom: 0.25rem;
-}
-
-.step-description {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
-.flow-arrow {
-  color: #9ca3af;
-  font-size: 1.5rem;
-}
-
-/* Session Card */
-.session-card {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.session-header {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f3f4f6;
-}
-
-.session-header h3 {
-  color: #1e3a8a;
-  margin-bottom: 0.5rem;
-}
-
-.session-meta {
-  display: flex;
-  gap: 1rem;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
-.session-year {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.session-status-display {
-  background: #f8fafc;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-}
-
-.current-status {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.status-label {
-  font-weight: 600;
-  color: #374151;
-}
-
-.status-badge-large {
-  padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 1.1rem;
-  letter-spacing: 0.5px;
-}
-
-.status-badge-large.draft {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.status-badge-large.pendaftaran {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge-large.voting {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge-large.selesai {
-  background: #d1fae5;
-  color: #065f46;
-  border: 2px solid #10b981;
-}
-
-/* Action Buttons */
-.action-buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-.action-btn {
-  padding: 1.5rem;
-  border: none;
-  border-radius: 10px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  color: white;
-  text-decoration: none;
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-}
-
-.action-btn.btn-primary {
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-}
-
-.action-btn.btn-success {
-  background: linear-gradient(135deg, #059669, #10b981);
-}
-
-.action-btn.btn-warning {
-  background: linear-gradient(135deg, #d97706, #f59e0b);
-}
-
-.action-btn.btn-danger {
-  background: linear-gradient(135deg, #dc2626, #ef4444);
-}
-
-.action-btn.btn-secondary {
-  background: linear-gradient(135deg, #4b5563, #6b7280);
-}
-
-.action-btn.btn-info {
-  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
-}
-
-.action-icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-}
-
-.action-text {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.action-desc {
-  font-size: 0.9rem;
-  opacity: 0.9;
-  line-height: 1.4;
-}
-
-/* Quick Info */
-.quick-info {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.info-card {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 1.5rem;
-}
-
-.info-card h5 {
-  color: #0369a1;
-  margin-bottom: 1rem;
-}
-
-.info-card ul {
-  margin: 0;
-  padding-left: 1.5rem;
-  color: #1e40af;
-}
-
-.info-card li {
-  margin-bottom: 0.5rem;
-  line-height: 1.5;
-}
-
-/* Token Controls */
-.token-controls {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.control-info {
-  margin-bottom: 1rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 6px;
-}
-
-/* Quick Actions List */
-.quick-actions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.quick-action-btn {
-  padding: 1rem;
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  text-align: left;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: inherit;
-}
-
-.quick-action-btn:hover {
-  border-color: #1e3a8a;
-  background: #f0f7ff;
-}
-
-/* Form Info */
-.form-info {
-  background: #f0f9ff;
-  padding: 1rem;
-  border-radius: 6px;
-  margin: 1.5rem 0;
-  color: #0369a1;
-}
-
-.form-info ul {
-  margin: 0.5rem 0 0 1.5rem;
-}
-
-.form-info li {
-  margin-bottom: 0.25rem;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .status-flow {
-    margin: 1rem;
-    padding: 1rem;
-  }
-
-  .flow-container {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .flow-arrow {
-    transform: rotate(90deg);
-  }
-
-  .flow-step {
-    min-width: 100%;
-  }
-
-  .action-buttons-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .session-card {
-    padding: 1.5rem;
-    margin: 0 1rem;
-  }
-
-  .admin-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
-    padding: 1rem;
-  }
-
-  .stats-overview {
-    grid-template-columns: 1fr 1fr;
-    padding: 1rem;
-  }
-}
-</style>
-
-<style scoped>
-/* Status Flow Styles */
-.status-flow {
-  background: white;
-  padding: 1.5rem;
-  margin: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.flow-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.flow-step {
-  text-align: center;
-  padding: 1rem;
-  min-width: 120px;
-  opacity: 0.6;
-  transition: all 0.3s;
-}
-
-.flow-step.active {
-  opacity: 1;
-  transform: scale(1.05);
-}
-
-.flow-step.completed {
-  opacity: 0.8;
-}
-
-.flow-step.completed .step-circle {
-  background: #10b981;
-  color: white;
-}
-
-.flow-step.active .step-circle {
-  background: #1e3a8a;
-  color: white;
-  box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.2);
-}
-
-.step-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin: 0 auto 0.5rem;
-  transition: all 0.3s;
-}
-
-.step-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #374151;
-  margin-bottom: 0.25rem;
-}
-
-.step-description {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
-.flow-arrow {
-  color: #9ca3af;
-  font-size: 1.5rem;
-}
-
-/* Session Card */
-.session-card {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.session-header {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f3f4f6;
-}
-
-.session-header h3 {
-  color: #1e3a8a;
-  margin-bottom: 0.5rem;
-}
-
-.session-meta {
-  display: flex;
-  gap: 1rem;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
-.session-year {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.session-status-display {
-  background: #f8fafc;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-}
-
-.current-status {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.status-label {
-  font-weight: 600;
-  color: #374151;
-}
-
-.status-badge-large {
-  padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 1.1rem;
-  letter-spacing: 0.5px;
-}
-
-.status-badge-large.draft {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-.status-badge-large.pendaftaran {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge-large.voting {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge-large.selesai {
-  background: #d1fae5;
-  color: #065f46;
-  border: 2px solid #10b981;
-}
-
-/* Action Buttons */
-.action-buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-.action-btn {
-  padding: 1.5rem;
-  border: none;
-  border-radius: 10px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  color: white;
-  text-decoration: none;
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-}
-
-.action-btn.btn-primary {
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-}
-
-.action-btn.btn-success {
-  background: linear-gradient(135deg, #059669, #10b981);
-}
-
-.action-btn.btn-warning {
-  background: linear-gradient(135deg, #d97706, #f59e0b);
-}
-
-.action-btn.btn-danger {
-  background: linear-gradient(135deg, #dc2626, #ef4444);
-}
-
-.action-btn.btn-secondary {
-  background: linear-gradient(135deg, #4b5563, #6b7280);
-}
-
-.action-btn.btn-info {
-  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
-}
-
-.action-icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-}
-
-.action-text {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.action-desc {
-  font-size: 0.9rem;
-  opacity: 0.9;
-  line-height: 1.4;
-}
-
-/* Quick Info */
-.quick-info {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.info-card {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 1.5rem;
-}
-
-.info-card h5 {
-  color: #0369a1;
-  margin-bottom: 1rem;
-}
-
-.info-card ul {
-  margin: 0;
-  padding-left: 1.5rem;
-  color: #1e40af;
-}
-
-.info-card li {
-  margin-bottom: 0.5rem;
-  line-height: 1.5;
-}
-
-/* Token Controls */
-.token-controls {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.control-info {
-  margin-bottom: 1rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 6px;
-}
-
-/* Quick Actions List */
-.quick-actions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.quick-action-btn {
-  padding: 1rem;
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  text-align: left;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: inherit;
-}
-
-.quick-action-btn:hover {
-  border-color: #1e3a8a;
-  background: #f0f7ff;
-}
-
-/* Form Info */
-.form-info {
-  background: #f0f9ff;
-  padding: 1rem;
-  border-radius: 6px;
-  margin: 1.5rem 0;
-  color: #0369a1;
-}
-
-.form-info ul {
-  margin: 0.5rem 0 0 1.5rem;
-}
-
-.form-info li {
-  margin-bottom: 0.25rem;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .status-flow {
-    margin: 1rem;
-    padding: 1rem;
-  }
-
-  .flow-container {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .flow-arrow {
-    transform: rotate(90deg);
-  }
-
-  .flow-step {
-    min-width: 100%;
-  }
-
-  .action-buttons-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .session-card {
-    padding: 1.5rem;
-    margin: 0 1rem;
-  }
-
-  .admin-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
-    padding: 1rem;
-  }
-
-  .stats-overview {
-    grid-template-columns: 1fr 1fr;
-    padding: 1rem;
-  }
-}
-</style>
-
-<style scoped>
-/* Tambahkan CSS ini di bawah style yang sudah ada */
+/* ============================================
+   ADMIN DASHBOARD STYLES
+   ============================================ */
+
+/* Base Layout */
 .admin-dashboard {
   min-height: 100vh;
   background: #f8f9fa;
 }
 
-/* Header Improvements */
+/* Loading & Unauthorized States */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 1rem;
+}
+
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #1e3a8a;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.unauthorized {
+  text-align: center;
+  padding: 3rem;
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.unauthorized h2 {
+  color: #dc2626;
+  margin-bottom: 1rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.btn-login,
+.btn-home {
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-login {
+  background: #1e3a8a;
+  color: white;
+}
+
+.btn-home {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-login:hover,
+.btn-home:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* Header */
 .admin-header {
   background: white;
   padding: 1.5rem 2rem;
@@ -1946,24 +1411,29 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.status-badge.draft,
 .status-draft {
   background: #f1f5f9;
   color: #64748b;
 }
 
+.status-badge.pendaftaran,
 .status-pendaftaran {
   background: #fef3c7;
   color: #92400e;
 }
 
+.status-badge.voting,
 .status-voting {
   background: #d1fae5;
   color: #065f46;
 }
 
+.status-badge.selesai,
 .status-selesai {
-  background: #fecaca;
-  color: #991b1b;
+  background: #d1fae5;
+  color: #065f46;
+  border: 2px solid #10b981;
 }
 
 .header-right {
@@ -2076,10 +1546,79 @@ onMounted(() => {
   color: #1e3a8a;
 }
 
-.stat-time {
-  color: #64748b;
+/* Status Flow */
+.status-flow {
+  background: white;
+  padding: 1.5rem;
+  margin: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.flow-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  text-align: center;
+  padding: 1rem;
+  min-width: 120px;
+  opacity: 0.6;
+  transition: all 0.3s;
+}
+
+.flow-step.active {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.flow-step.completed {
+  opacity: 0.8;
+}
+
+.flow-step.completed .step-circle {
+  background: #10b981;
+  color: white;
+}
+
+.flow-step.active .step-circle {
+  background: #1e3a8a;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.2);
+}
+
+.step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin: 0 auto 0.5rem;
+  transition: all 0.3s;
+}
+
+.step-label {
+  font-weight: 600;
   font-size: 0.9rem;
-  margin-top: 0.25rem;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.step-description {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.flow-arrow {
+  color: #9ca3af;
+  font-size: 1.5rem;
 }
 
 /* Tabs */
@@ -2103,6 +1642,7 @@ onMounted(() => {
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
+  transition: all 0.2s;
 }
 
 .tab-btn:hover {
@@ -2156,7 +1696,205 @@ onMounted(() => {
   color: #666;
 }
 
-/* Token Actions */
+/* Session Management */
+.session-management {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.session-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.session-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.session-header h3 {
+  color: #1e3a8a;
+  margin-bottom: 0.5rem;
+}
+
+.session-meta {
+  display: flex;
+  gap: 1rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.session-year {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.session-status-display {
+  background: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.current-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.status-label {
+  font-weight: 600;
+  color: #374151;
+}
+
+.status-badge-large {
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+}
+
+.status-badge-large.draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.status-badge-large.pendaftaran {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge-large.voting {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge-large.selesai {
+  background: #d1fae5;
+  color: #065f46;
+  border: 2px solid #10b981;
+}
+
+/* Action Buttons */
+.action-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.action-btn {
+  padding: 1.5rem;
+  border: none;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: white;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.btn-primary {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+}
+
+.action-btn.btn-success {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.action-btn.btn-warning {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+
+.action-btn.btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+
+.action-btn.btn-secondary {
+  background: linear-gradient(135deg, #4b5563, #6b7280);
+}
+
+.action-btn.btn-info {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+}
+
+.action-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.action-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.action-desc {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+/* Quick Info */
+.quick-info {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.info-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-card h5 {
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.info-card ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #1e40af;
+}
+
+.info-card li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+/* Token Management */
+.token-controls {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.control-info {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
 .token-actions {
   display: flex;
   gap: 1rem;
@@ -2175,6 +1913,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  transition: all 0.2s;
 }
 
 .btn-primary {
@@ -2184,6 +1923,7 @@ onMounted(() => {
 
 .btn-primary:hover:not(:disabled) {
   background: #1e40af;
+  transform: translateY(-2px);
 }
 
 .btn-secondary {
@@ -2193,6 +1933,7 @@ onMounted(() => {
 
 .btn-secondary:hover:not(:disabled) {
   background: #4b5563;
+  transform: translateY(-2px);
 }
 
 .btn-refresh {
@@ -2202,12 +1943,14 @@ onMounted(() => {
 
 .btn-refresh:hover {
   background: #0da271;
+  transform: translateY(-2px);
 }
 
 .btn-primary:disabled,
 .btn-secondary:disabled {
   background: #94a3b8;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 /* Token Stats */
@@ -2245,8 +1988,8 @@ onMounted(() => {
   color: #3b82f6;
 }
 
-.token-stat .expired {
-  color: #ef4444;
+.token-stat .percentage {
+  color: #1e3a8a;
 }
 
 /* Token List */
@@ -2306,30 +2049,6 @@ tr:hover {
   font-weight: 600;
 }
 
-.status-expired {
-  color: #ef4444;
-  font-weight: 600;
-}
-
-.btn-small {
-  background: #6b7280;
-  color: white;
-  border: none;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-
-.btn-small:hover:not(:disabled) {
-  background: #4b5563;
-}
-
-.btn-small:disabled {
-  background: #d1d5db;
-  cursor: not-allowed;
-}
-
 .view-more {
   text-align: center;
   color: #64748b;
@@ -2337,17 +2056,11 @@ tr:hover {
   font-size: 0.9rem;
 }
 
-/* Monitoring Grid */
+/* Monitoring */
 .monitoring-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 2rem;
-}
-
-@media (max-width: 768px) {
-  .monitoring-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .monitor-card {
@@ -2404,122 +2117,35 @@ tr:hover {
   padding-top: 1rem;
 }
 
-.time-info h4 {
-  color: #374151;
-  margin-bottom: 0.5rem;
-}
-
-.time-remaining {
-  color: #dc2626;
-  font-weight: 600;
-  margin-top: 0.5rem;
-}
-
-.results-preview {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.result-item {
-  padding: 0.75rem;
-  background: #f8fafc;
-  border-radius: 6px;
-}
-
-.result-item h4 {
-  color: #1e3a8a;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-}
-
-.no-results {
-  text-align: center;
-  padding: 2rem;
-  color: #9ca3af;
-}
-
-.btn-view-results {
-  display: inline-block;
+.quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-top: 1rem;
-  color: #1e3a8a;
-  text-decoration: none;
-  font-weight: 600;
 }
 
-.btn-view-results:hover {
-  text-decoration: underline;
-}
-
-/* Session Card */
-.session-card {
+.quick-action-btn {
+  padding: 1rem;
   background: white;
+  border: 2px solid #e5e7eb;
   border-radius: 8px;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  max-width: 600px;
-}
-
-.session-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.session-header h3 {
-  color: #1e3a8a;
-}
-
-.detail-row {
-  display: flex;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-row label {
-  width: 120px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.detail-row span {
-  flex: 1;
-  color: #64748b;
-}
-
-.session-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.status-btn {
-  padding: 0.5rem 1rem;
-  border: 2px solid #e2e8f0;
-  background: white;
-  border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  color: #64748b;
+  text-align: left;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: inherit;
 }
 
-.status-btn:hover {
-  border-color: #94a3b8;
-}
-
-.status-btn.active {
+.quick-action-btn:hover {
   border-color: #1e3a8a;
-  background: #1e3a8a;
-  color: white;
+  background: #f0f7ff;
 }
 
-/* Candidates Stats */
+/* Candidates */
 .candidates-stats {
   display: flex;
   gap: 1rem;
@@ -2572,219 +2198,7 @@ tr:hover {
   margin-top: 0.5rem;
 }
 
-/* Toast */
-.toast {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  color: white;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  animation: slideIn 0.3s ease;
-}
-
-.toast.success {
-  background: #10b981;
-}
-
-.toast.error {
-  background: #ef4444;
-}
-
-.toast.warning {
-  background: #f59e0b;
-}
-
-.toast.info {
-  background: #3b82f6;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-/* Loading & Unauthorized */
-.loading-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  gap: 1rem;
-}
-
-.loader {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #1e3a8a;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.unauthorized {
-  text-align: center;
-  padding: 3rem;
-  min-height: 60vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.unauthorized h2 {
-  color: #dc2626;
-  margin-bottom: 1rem;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.btn-login,
-.btn-home {
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s;
-}
-
-.btn-login {
-  background: #1e3a8a;
-  color: white;
-}
-
-.btn-home {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-login:hover,
-.btn-home:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .admin-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .stats-overview {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .token-actions {
-    flex-direction: column;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-refresh {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .tabs {
-    padding: 0 1rem;
-  }
-
-  .tab-btn {
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-  }
-
-  .tab-content {
-    padding: 1rem;
-  }
-}
-
-/* Tambah di bagian style AdminDashboard.vue */
-
-/* Form elements di modal */
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #374151;
-  font-size: 0.9rem;
-}
-
-.form-group input[type='text'],
-.form-group input[type='datetime-local'],
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-  background: white;
-}
-
-.form-group input:focus,
-.form-group textarea:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #1e3a8a;
-  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-}
-
-.form-group textarea {
-  min-height: 100px;
-  resize: vertical;
-  font-family: inherit;
-}
-
-/* Form row untuk 2 kolom */
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Modal styles */
+/* Modals */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -2806,9 +2220,7 @@ tr:hover {
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
   animation: modalSlideIn 0.3s ease;
 }
 
@@ -2858,6 +2270,50 @@ tr:hover {
   padding: 1.5rem;
 }
 
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+  background: white;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #1e3a8a;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.form-info {
+  background: #f0f9ff;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  color: #0369a1;
+}
+
+.form-info ul {
+  margin: 0.5rem 0 0 1.5rem;
+}
+
+.form-info li {
+  margin-bottom: 0.25rem;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -2902,456 +2358,52 @@ tr:hover {
   cursor: not-allowed;
 }
 
-/* Session status buttons & controls */
-.session-management {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.session-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-.session-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f3f4f6;
-}
-
-.session-header h3 {
-  color: #1f2937;
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-.session-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-.session-badge.draft {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
-.session-badge.pendaftaran {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.session-badge.voting {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.session-badge.selesai {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.session-details {
-  background: #f9fafb;
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  padding: 1rem 1.5rem;
   border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.detail-row {
-  display: flex;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.detail-row:last-child {
-  border-bottom: none;
-}
-
-.detail-row label {
-  min-width: 140px;
-  font-weight: 600;
-  color: #4b5563;
-  font-size: 0.9rem;
-}
-
-.detail-row span {
-  color: #1f2937;
-  flex: 1;
-}
-
-.detail-row .status-draft {
-  color: #6b7280;
-  font-weight: 600;
-}
-
-.detail-row .status-pendaftaran {
-  color: #d97706;
-  font-weight: 600;
-}
-
-.detail-row .status-voting {
-  color: #059669;
-  font-weight: 600;
-}
-
-.detail-row .status-selesai {
-  color: #dc2626;
-  font-weight: 600;
-}
-
-/* Status control buttons */
-.status-controls {
-  margin-bottom: 1.5rem;
-  padding: 1.5rem;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.status-controls h4 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  color: #374151;
-  font-size: 1rem;
-}
-
-.status-buttons {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.status-btn {
-  flex: 1;
-  min-width: 120px;
-  padding: 0.75rem 1rem;
-  border: 2px solid #e2e8f0;
-  background: white;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  color: #4a5568;
-  transition: all 0.2s;
-  text-align: center;
-}
-
-.status-btn:hover:not(.active) {
-  border-color: #94a3b8;
-  background: #f8fafc;
-}
-
-.status-btn.active {
-  border-color: #1e3a8a;
-  background: #1e3a8a;
   color: white;
-}
-
-.status-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Edit controls */
-.edit-controls {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-}
-
-.btn-edit {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
   font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: slideIn 0.3s ease;
 }
 
-.btn-edit:hover {
-  background: #2563eb;
+.toast.success {
+  background: #10b981;
 }
 
-.btn-delete {
+.toast.error {
   background: #ef4444;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s;
 }
 
-.btn-delete:hover {
-  background: #dc2626;
+.toast.warning {
+  background: #f59e0b;
 }
 
-/* Session rules */
-.session-rules {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-top: 2rem;
+.toast.info {
+  background: #3b82f6;
 }
 
-.session-rules h4 {
-  color: #0369a1;
-  margin-top: 0;
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.session-rules ul {
-  margin: 0;
-  padding-left: 1.5rem;
-  color: #1e40af;
-}
-
-.session-rules li {
-  margin-bottom: 0.5rem;
-  line-height: 1.5;
-}
-
-.session-rules li:last-child {
-  margin-bottom: 0;
-}
-
-/* Candidate stats enhancement */
-.candidates-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.candidate-stat {
-  background: white;
-  border-radius: 10px;
-  padding: 1.5rem;
-  text-align: center;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  border-top: 5px solid;
-  transition: transform 0.2s;
-}
-
-.candidate-stat:hover {
-  transform: translateY(-3px);
-}
-
-.candidate-stat.pending {
-  border-color: #f59e0b;
-}
-
-.candidate-stat.approved {
-  border-color: #10b981;
-}
-
-.candidate-stat.rejected {
-  border-color: #ef4444;
-}
-
-.candidate-stat h4 {
-  font-size: 0.9rem;
-  color: #6b7280;
-  margin: 0 0 0.75rem 0;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.candidate-stat p {
-  font-size: 2rem;
-  font-weight: 800;
-  margin: 0;
-  color: #1e3a8a;
-}
-
-/* Table enhancements */
-.table-container {
-  background: white;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  margin-top: 1rem;
-}
-
-.table-container table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table-container thead {
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-}
-
-.table-container th {
-  padding: 1rem 1.25rem;
-  text-align: left;
-  color: white;
-  font-weight: 600;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.table-container tbody tr {
-  border-bottom: 1px solid #f1f5f9;
-  transition: background-color 0.2s;
-}
-
-.table-container tbody tr:hover {
-  background: #f8fafc;
-}
-
-.table-container td {
-  padding: 1rem 1.25rem;
-  color: #374151;
-  vertical-align: middle;
-}
-
-.table-container .token-code {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', monospace;
-  background: #f1f5f9;
-  padding: 0.375rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  border: 1px solid #e2e8f0;
-  display: inline-block;
-  letter-spacing: 0.5px;
-}
-
-/* Status badges in table */
-.table-container .status-used,
-.table-container .status-available,
-.table-container .status-expired {
-  padding: 0.375rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-.status-used {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-available {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.status-expired {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-/* View more link */
-.view-more {
-  text-align: center;
-  padding: 1rem;
-  color: #6b7280;
-  font-size: 0.875rem;
-  background: #f9fafb;
-  border-top: 1px solid #e5e7eb;
-  border-radius: 0 0 10px 10px;
-}
-
-/* Enhanced empty states */
-.empty-state {
-  text-align: center;
-  padding: 3rem 2rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  margin: 2rem 0;
-  border: 2px dashed #d1d5db;
-}
-
-.empty-state p {
-  font-size: 1.125rem;
-  color: #6b7280;
-  margin-bottom: 1.5rem;
-}
-
-.empty-state .hint {
-  font-size: 0.875rem;
-  color: #9ca3af;
-  max-width: 400px;
-  margin: 0 auto 1.5rem;
-  line-height: 1.5;
-}
-
-.empty-state .btn-primary {
-  margin-top: 1rem;
-}
-
-/* No results state */
-.no-results {
-  padding: 2rem;
-  text-align: center;
-  color: #9ca3af;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px dashed #d1d5db;
-}
-
-/* Loading enhancements */
-.loading-screen {
-  min-height: 60vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-}
-
-.loader {
-  width: 50px;
-  height: 50px;
-  border: 3px solid #f3f4f6;
-  border-top: 3px solid #1e3a8a;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
   }
-  100% {
-    transform: rotate(360deg);
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
 
-/* Mobile responsive */
-@media (max-width: 640px) {
+/* Responsive */
+@media (max-width: 768px) {
   .admin-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 1rem;
     padding: 1rem;
   }
 
@@ -3360,40 +2412,54 @@ tr:hover {
     gap: 1rem;
   }
 
-  .admin-info {
-    justify-content: center;
-  }
-
   .logout-btn {
     width: 100%;
     text-align: center;
   }
 
   .stats-overview {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     padding: 1rem;
   }
 
-  .stat-card {
+  .status-flow {
+    margin: 1rem;
+    padding: 1rem;
+  }
+
+  .flow-container {
     flex-direction: column;
-    text-align: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
+
+  .flow-step {
+    min-width: 100%;
   }
 
   .tabs {
-    padding: 0 0.5rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem;
   }
 
   .tab-btn {
     padding: 0.75rem 1rem;
-    font-size: 0.8rem;
-    white-space: nowrap;
+    font-size: 0.9rem;
   }
 
   .tab-content {
     padding: 1rem;
+  }
+
+  .action-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .session-card {
+    padding: 1.5rem;
+    margin: 0 1rem;
   }
 
   .token-actions {
@@ -3404,15 +2470,15 @@ tr:hover {
   .btn-secondary,
   .btn-refresh {
     width: 100%;
+    justify-content: center;
   }
 
-  .table-container {
-    font-size: 0.85rem;
+  .monitoring-grid {
+    grid-template-columns: 1fr;
   }
 
-  .table-container th,
-  .table-container td {
-    padding: 0.75rem;
+  .candidates-stats {
+    flex-direction: column;
   }
 
   .modal {
@@ -3433,71 +2499,21 @@ tr:hover {
   }
 }
 
-/* Tablet responsive */
-@media (min-width: 641px) and (max-width: 1024px) {
+@media (max-width: 480px) {
   .stats-overview {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .monitoring-grid {
     grid-template-columns: 1fr;
   }
 
-  .candidates-stats {
-    grid-template-columns: repeat(2, 1fr);
+  .token-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
   }
 }
 
-/* Add smooth transitions */
-.tab-pane,
-.stat-card,
-.token-stat,
-.candidate-stat,
-.session-card {
-  transition: all 0.3s ease;
-}
-
-/* Hover effects */
-.btn-primary:hover,
-.btn-secondary:hover,
-.btn-refresh:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Fade in animations */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tab-pane {
-  animation: fadeInUp 0.4s ease;
-}
-
-/* Toast animation */
-.toast {
-  animation: slideInRight 0.3s ease;
-}
-
-@keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-/* Custom scrollbar for better UX */
+/* Custom Scrollbar */
 .modal::-webkit-scrollbar,
 .table-container::-webkit-scrollbar {
   width: 8px;
