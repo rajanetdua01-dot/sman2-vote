@@ -1,102 +1,144 @@
 import { defineStore } from 'pinia'
 import { supabase } from '@/utils/supabase'
 
-export const useAuthStore = defineStore('auth', () => {
-  // Login Calon Kandidat
-  const loginCalon = async (nip, tanggalLahir) => {
-    try {
-      // Cari user berdasarkan NIP
-      const { data: user, error: userError } = await supabase
-        .from('pengguna')
-        .select('*')
-        .eq('nip', nip)
-        .eq('peran', 'guru')
-        .single()
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    user: null,
+    loading: false,
+    error: null,
+  }),
 
-      if (userError || !user) {
-        return { success: false, error: 'NIP tidak ditemukan' }
-      }
+  actions: {
+    // Login Admin
+    async loginAdmin(nip, password) {
+      this.loading = true
+      this.error = null
 
-      // Validasi password (format: DDMMYYYY)
-      const birthDate = new Date(user.tanggal_lahir)
-      const day = String(birthDate.getDate()).padStart(2, '0')
-      const month = String(birthDate.getMonth() + 1).padStart(2, '0')
-      const year = birthDate.getFullYear()
-      const expectedPassword = `${day}${month}${year}`
+      try {
+        // Cari admin di database
+        const { data: user, error: userError } = await supabase
+          .from('pengguna')
+          .select('*')
+          .eq('nip', nip)
+          .eq('peran', 'admin')
+          .single()
 
-      if (tanggalLahir !== expectedPassword) {
-        return { success: false, error: 'Password salah' }
-      }
+        if (userError || !user) {
+          throw new Error('Admin tidak ditemukan')
+        }
 
-      // Simpan session
-      localStorage.setItem('smanda_user', JSON.stringify(user))
-      localStorage.setItem(
-        'smanda_session',
-        JSON.stringify({
-          type: 'calon',
+        // Validasi password (format DDMMYYYY)
+        const birthDate = new Date(user.tanggal_lahir)
+        const day = String(birthDate.getDate()).padStart(2, '0')
+        const month = String(birthDate.getMonth() + 1).padStart(2, '0')
+        const year = birthDate.getFullYear()
+        const expectedPassword = `${day}${month}${year}`
+
+        if (password !== expectedPassword) {
+          throw new Error('Password salah')
+        }
+
+        // Simpan session
+        const adminSession = {
+          user,
+          type: 'admin',
+          role: user.peran,
           timestamp: new Date().toISOString(),
-        }),
-      )
+        }
 
-      return { success: true, user }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
+        localStorage.setItem('smanda_admin', JSON.stringify(adminSession))
+        this.user = user
 
-  // Login dengan QR Token
-  const loginWithQR = async (token) => {
-    try {
-      // Cari token yang valid dan belum digunakan
-      const { data: tokenData, error: tokenError } = await supabase
-        .from('token_qr')
-        .select('*, pengguna(*)')
-        .eq('token', token)
-        .eq('sudah_digunakan', false)
-        .gt('kadaluarsa_pada', new Date().toISOString())
-        .single()
-
-      if (tokenError || !tokenData) {
-        return { success: false, error: 'Token tidak valid atau sudah digunakan' }
+        return { success: true, user }
+      } catch (error) {
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
       }
+    },
 
-      // Update token sebagai digunakan
-      await supabase
-        .from('token_qr')
-        .update({
-          sudah_digunakan: true,
-          digunakan_pada: new Date().toISOString(),
-        })
-        .eq('id', tokenData.id)
+    // Login Calon (guru)
+    async loginCalon(nip, tanggalLahir) {
+      this.loading = true
+      this.error = null
 
-      // Simpan session pemilih
-      localStorage.setItem('smanda_voter', JSON.stringify(tokenData.pengguna))
-      localStorage.setItem(
-        'smanda_voter_token',
-        JSON.stringify({
-          token: token,
-          timestamp: new Date().toISOString(),
-        }),
-      )
+      try {
+        const { data: user, error: userError } = await supabase
+          .from('pengguna')
+          .select('*')
+          .eq('nip', nip)
+          .eq('peran', 'guru')
+          .single()
 
-      return { success: true, user: tokenData.pengguna }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
+        if (userError || !user) {
+          throw new Error('NIP tidak ditemukan')
+        }
 
-  // Logout
-  const logout = () => {
-    localStorage.removeItem('smanda_user')
-    localStorage.removeItem('smanda_admin')
-    localStorage.removeItem('smanda_session')
-    localStorage.removeItem('smanda_voter')
-    localStorage.removeItem('smanda_voter_token')
-  }
+        // Validasi password
+        const birthDate = new Date(user.tanggal_lahir)
+        const day = String(birthDate.getDate()).padStart(2, '0')
+        const month = String(birthDate.getMonth() + 1).padStart(2, '0')
+        const year = birthDate.getFullYear()
+        const expectedPassword = `${day}${month}${year}`
 
-  return {
-    loginCalon,
-    loginWithQR,
-    logout,
-  }
+        if (tanggalLahir !== expectedPassword) {
+          throw new Error('Password salah')
+        }
+
+        // Simpan session
+        localStorage.setItem('smanda_user', JSON.stringify(user))
+        localStorage.setItem(
+          'smanda_session',
+          JSON.stringify({
+            type: 'calon',
+            timestamp: new Date().toISOString(),
+          }),
+        )
+
+        this.user = user
+        return { success: true, user }
+      } catch (error) {
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
+      }
+    },
+
+    // Logout
+    logout() {
+      this.user = null
+      this.error = null
+      localStorage.removeItem('smanda_admin')
+      localStorage.removeItem('smanda_user')
+      localStorage.setItem('smanda_session')
+    },
+
+    // Check if user is authenticated
+    checkAuth() {
+      try {
+        const adminSession = localStorage.getItem('smanda_admin')
+        const userSession = localStorage.getItem('smanda_user')
+
+        if (adminSession) {
+          const session = JSON.parse(adminSession)
+          this.user = session.user
+          return { isAuthenticated: true, role: 'admin', user: session.user }
+        }
+
+        if (userSession) {
+          const user = JSON.parse(userSession)
+          this.user = user
+          return { isAuthenticated: true, role: 'guru', user }
+        }
+
+        return { isAuthenticated: false, role: null, user: null }
+      } catch (error) {
+        console.error('Auth check error:', error)
+        this.logout()
+        return { isAuthenticated: false, role: null, user: null }
+      }
+    },
+  },
 })

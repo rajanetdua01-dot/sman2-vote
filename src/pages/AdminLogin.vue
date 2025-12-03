@@ -42,8 +42,8 @@
           </p>
           <p class="hint">
             <strong>Default Admin:</strong><br />
-            NIP: <code>admin001</code><br />
-            Password: <code>10081975</code> (10 Agustus 1975)
+            NIP: <code>19771107201407001</code><br />
+            Password: <code>07111977</code> (07 November 1977)
           </p>
         </div>
       </div>
@@ -85,15 +85,21 @@ const handleLogin = async () => {
       throw new Error('NIP admin tidak ditemukan')
     }
 
-    // 2. Validasi password (tanggal lahir)
+    // 2. Validasi password (tanggal lahir DDMMYYYY)
     const birthDate = new Date(user.tanggal_lahir)
     const day = String(birthDate.getDate()).padStart(2, '0')
     const month = String(birthDate.getMonth() + 1).padStart(2, '0')
     const year = birthDate.getFullYear()
     const birthPassword = `${day}${month}${year}`
 
+    console.log('Login attempt:', {
+      input: password.value,
+      expected: birthPassword,
+      tanggal_lahir: user.tanggal_lahir,
+    })
+
     if (password.value !== birthPassword) {
-      throw new Error('Password salah')
+      throw new Error('Password salah. Format: DDMMYYYY dari tanggal lahir')
     }
 
     // 3. Simpan session admin
@@ -101,15 +107,15 @@ const handleLogin = async () => {
       user,
       type: 'admin',
       role: user.peran,
+      timestamp: new Date().toISOString(),
     }
 
     localStorage.setItem('smanda_admin', JSON.stringify(adminSession))
-    localStorage.setItem('smanda_user', JSON.stringify(user))
-    localStorage.setItem('smanda_session', JSON.stringify({ type: 'admin' }))
 
     // 4. Redirect ke admin dashboard
     router.push('/admin-dashboard')
   } catch (err) {
+    console.error('Login error:', err)
     error.value = err.message
   } finally {
     loading.value = false
