@@ -1,7 +1,8 @@
-// src/stores/auth.js - ADD NULL CHECKS
+// src/stores/auth.js - FIXED VERSION
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/utils/supabase'
+// HAPUS import supabase karena gak dipakai di auth store
+// import { supabase } from '@/utils/supabase'  // <- HAPUS BARIS INI
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -48,8 +49,9 @@ export const useAuthStore = defineStore('auth', () => {
           clearAuth()
         }
       }
-    } catch (error) {
-      console.error('Auth check error:', error)
+    } catch (err) {
+      console.error('Auth check error:', err)
+      error.value = err.message
     } finally {
       loading.value = false
     }
@@ -63,6 +65,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('smanda_session')
   }
 
+  // Tambah fungsi logout untuk dipakai di App.vue
+  const logout = () => {
+    clearAuth()
+    window.location.href = '/#/'
+  }
+
   return {
     user,
     session,
@@ -73,5 +81,6 @@ export const useAuthStore = defineStore('auth', () => {
     userRole,
     checkAuth,
     clearAuth,
+    logout, // Export logout function
   }
 })

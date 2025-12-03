@@ -1,12 +1,30 @@
 <template>
   <div v-if="!hasError">
     <!-- Simple Navigation -->
-    <nav style="background: #1e3a8a; padding: 1rem">
+    <nav style="background: #1e3a8a; padding: 1rem; color: white">
       <a href="/#/" style="color: white; margin-right: 1rem">Home</a>
       <a href="/#/test" style="color: white; margin-right: 1rem">Test</a>
       <a href="/#/login-calon" style="color: white; margin-right: 1rem">Calon</a>
       <a href="/#/admin-login" style="color: white; margin-right: 1rem">Admin</a>
       <a href="/#/scan" style="color: white; margin-right: 1rem">Scan</a>
+
+      <!-- Logout button jika logged in -->
+      <span v-if="authStore.isLoggedIn" style="margin-left: auto">
+        {{ authStore.userName }}
+        <button
+          @click="handleLogout"
+          style="
+            margin-left: 0.5rem;
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+          "
+        >
+          Logout
+        </button>
+      </span>
     </nav>
 
     <!-- Main Content -->
@@ -29,28 +47,26 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
+const authStore = useAuthStore()
 const hasError = ref(false)
 const routerReady = ref(false)
 
 onMounted(() => {
   routerReady.value = true
+  authStore.checkAuth() // Check auth saat app mount
 
-  // Add global error handler
+  // Error handling
   window.addEventListener('error', (e) => {
     console.error('Global error:', e)
     hasError.value = true
   })
-
-  // Vue error handler
-  const app = window.__VUE_APP__
-  if (app && app.config) {
-    app.config.errorHandler = (err, instance, info) => {
-      console.error('Vue error:', err, info)
-      hasError.value = true
-    }
-  }
 })
+
+const handleLogout = () => {
+  authStore.logout() // Pakai logout dari store
+}
 
 const resetError = () => {
   hasError.value = false
