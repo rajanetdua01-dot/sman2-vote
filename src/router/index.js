@@ -1,161 +1,114 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
-// Lazy load components - SEMUA dari '@/pages/'
+// Import semua pages
 const HomeView = () => import('@/views/HomeView.vue')
+const TestConnection = () => import('@/pages/TestConnection.vue')
 const LoginCalon = () => import('@/pages/LoginCalon.vue')
 const ScanQR = () => import('@/pages/ScanQR.vue')
-const TestConnection = () => import('@/pages/TestConnection.vue')
-const DashboardCalon = () => import('@/pages/DashboardCalon.vue')
-const VotingPage = () => import('@/pages/VotingPage.vue')
-const LiveResults = () => import('@/pages/LiveResults.vue')
 const AdminLogin = () => import('@/pages/AdminLogin.vue')
+const LiveResults = () => import('@/pages/LiveResults.vue')
+const DashboardCalon = () => import('@/pages/DashboardCalon.vue')
 const AdminDashboard = () => import('@/pages/AdminDashboard.vue')
+const VotingPage = () => import('@/pages/VotingPage.vue')
 const PageNotFound = () => import('@/pages/PageNotFound.vue')
 
+// Routes
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: HomeView,
+    meta: { title: 'SMANDA VOTE' },
+  },
+  {
+    path: '/test',
+    name: 'test',
+    component: TestConnection,
+    meta: { title: 'Test Connection' },
+  },
+  {
+    path: '/login-calon',
+    name: 'loginCalon',
+    component: LoginCalon,
+    meta: { title: 'Login Calon' },
+  },
+  {
+    path: '/admin-login',
+    name: 'adminLogin',
+    component: AdminLogin,
+    meta: { title: 'Admin Login' },
+  },
+  {
+    path: '/scan',
+    name: 'scan',
+    component: ScanQR,
+    meta: { title: 'Scan QR' },
+  },
+  {
+    path: '/live-results',
+    name: 'liveResults',
+    component: LiveResults,
+    meta: { title: 'Live Results' },
+  },
+  {
+    path: '/dashboard-calon',
+    name: 'dashboardCalon',
+    component: DashboardCalon,
+    meta: {
+      title: 'Dashboard Calon',
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/admin-dashboard',
+    name: 'adminDashboard',
+    component: AdminDashboard,
+    meta: {
+      title: 'Admin Dashboard',
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/voting',
+    name: 'voting',
+    component: VotingPage,
+    meta: {
+      title: 'Voting',
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/:path(.*)',
+    name: 'notFound',
+    component: PageNotFound,
+    meta: { title: '404 - Not Found' },
+  },
+]
+
+// Create router
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/',
-      name: 'home',
-      component: HomeView,
-      meta: { title: 'SMANDA VOTE - Home' },
-    },
-    {
-      path: '/test',
-      name: 'test',
-      component: TestConnection,
-      meta: { title: 'Test Connection' },
-    },
-    {
-      path: '/login-calon',
-      name: 'loginCalon',
-      component: LoginCalon,
-      meta: { title: 'Login Calon Kandidat' },
-    },
-    {
-      path: '/scan',
-      name: 'scan',
-      component: ScanQR,
-      meta: { title: 'Scan QR Code' },
-    },
-    {
-      path: '/dashboard-calon',
-      name: 'dashboardCalon',
-      component: DashboardCalon,
-      meta: {
-        title: 'Dashboard Calon',
-        requiresAuth: true,
-        allowedRoles: ['calon'],
-      },
-    },
-    {
-      path: '/voting',
-      name: 'voting',
-      component: VotingPage,
-      meta: {
-        title: 'Voting Page',
-        requiresAuth: true,
-        allowedRoles: ['pemilih'],
-      },
-    },
-    {
-      path: '/live-results',
-      name: 'liveResults',
-      component: LiveResults,
-      meta: { title: 'Hasil Live Voting' },
-    },
-    {
-      path: '/admin-login',
-      name: 'adminLogin',
-      component: AdminLogin,
-      meta: { title: 'Login Admin/Panitia' },
-    },
-    {
-      path: '/admin-dashboard',
-      name: 'adminDashboard',
-      component: AdminDashboard,
-      meta: {
-        title: 'Dashboard Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
-      },
-    },
-    // Fallback route untuk 404
-    {
-      path: '/:pathMatch(.*)*',
-      name: 'notFound',
-      component: PageNotFound,
-      meta: { title: 'Halaman Tidak Ditemukan' },
-    },
-  ],
+  history: createWebHashHistory(),
+  routes,
 })
 
-// Navigation guard untuk auth
+// Simple navigation guard
 router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-
   // Set page title
-  const pageTitle = to.meta?.title || 'SMANDA VOTE'
-  document.title = pageTitle
+  document.title = to.meta.title || 'SMANDA VOTE'
 
-  // Check for admin routes first
-  if (to.path.includes('/admin-')) {
-    const adminSession = localStorage.getItem('smanda_admin')
+  // Check auth for protected routes
+  if (to.meta.requiresAuth) {
+    const hasAdminSession = localStorage.getItem('smanda_admin')
+    const hasUserSession = localStorage.getItem('smanda_user')
 
-    if (!adminSession && to.name !== 'adminLogin') {
-      // Redirect to admin login if not authenticated
-      next({ name: 'adminLogin' })
-      return
-    }
-
-    if (adminSession && to.name === 'adminLogin') {
-      // If already logged in as admin, redirect to dashboard
-      next({ name: 'adminDashboard' })
-      return
-    }
-  }
-
-  // Cek jika route membutuhkan auth
-  if (to.meta?.requiresAuth) {
-    if (!authStore.isLoggedIn) {
-      // Redirect ke login calon jika belum login
-      if (to.meta.allowedRoles?.includes('calon')) {
-        next({ name: 'loginCalon' })
-      } else if (to.meta.allowedRoles?.includes('pemilih')) {
-        next({ name: 'scan' })
+    if (!hasAdminSession && !hasUserSession) {
+      // Redirect to appropriate login
+      if (to.name === 'adminDashboard') {
+        next({ name: 'adminLogin' })
       } else {
-        next({ name: 'home' })
+        next({ name: 'loginCalon' })
       }
       return
-    }
-
-    // Cek role jika ada requirement
-    if (to.meta.allowedRoles) {
-      const userRole = authStore.userRole
-      const sessionType = authStore.session?.type
-      let hasAccess = false
-
-      // Logic untuk role access
-      if (to.meta.allowedRoles.includes('calon') && sessionType === 'calon') {
-        hasAccess = true
-      }
-      if (to.meta.allowedRoles.includes('pemilih') && sessionType === 'pemilih') {
-        hasAccess = true
-      }
-      if (to.meta.allowedRoles.includes('admin') && userRole === 'admin') {
-        hasAccess = true
-      }
-      if (to.meta.allowedRoles.includes('panitia') && userRole === 'panitia') {
-        hasAccess = true
-      }
-
-      if (!hasAccess) {
-        // Redirect ke home jika tidak punya akses
-        next({ name: 'home' })
-        return
-      }
     }
   }
 
