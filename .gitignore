@@ -1,0 +1,47 @@
+# ================================
+# SMANDA VOTE - Vue.js + Vite Project
+# ================================
+
+# Dependencies
+node_modules/
+.pnpm/
+.yarn/
+
+# Environment variables (SUPABASE)
+.env
+.env.local
+.env.production
+.env.development
+
+# Build outputs
+dist/
+dist-ssr/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local development
+*.local
+.history/
+
+# Testing
+coverage/
+.nyc_output
+
+# Optional
+.eslintcache
+.stylelintcache
