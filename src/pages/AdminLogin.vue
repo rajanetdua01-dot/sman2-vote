@@ -37,8 +37,8 @@
         <div class="login-footer">
           <p>
             Bukan admin?
-            <router-link to="/#/login-calon">Login sebagai Calon</router-link> |
-            <router-link to="/#/">Kembali ke Home</router-link>
+            <router-link to="/login-calon">Login sebagai Calon</router-link> |
+            <router-link to="/">Kembali ke Home</router-link>
           </p>
           <p class="hint">
             <strong>Default Admin:</strong><br />
@@ -108,7 +108,7 @@ const handleLogin = async () => {
     localStorage.setItem('smanda_session', JSON.stringify({ type: 'admin' }))
 
     // 4. Redirect ke admin dashboard
-    router.push('/#/admin-dashboard')
+    router.push('/admin-dashboard')
   } catch (err) {
     error.value = err.message
   } finally {
