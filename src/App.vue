@@ -5,17 +5,17 @@
       <div class="nav-container">
         <!-- Logo/Brand -->
         <div class="nav-brand">
-          <router-link to="/#/" class="brand-link"> 🗳️ SMANDA VOTE </router-link>
+          <a href="/#/" class="brand-link"> 🗳️ SMANDA VOTE </a>
         </div>
 
-        <!-- Navigation Links -->
+        <!-- Navigation Links (PAKAI <a> tag bukan router-link) -->
         <div class="nav-links">
-          <router-link to="/#/" class="nav-link">Home</router-link>
-          <router-link to="/#/test" class="nav-link">Test</router-link>
-          <router-link to="/#/login-calon" class="nav-link">Login Calon</router-link>
-          <router-link to="/#/scan" class="nav-link">Scan QR</router-link>
-          <router-link to="/#/live-results" class="nav-link">Hasil</router-link>
-          <router-link to="/#/admin-login" class="nav-link admin-link">Admin</router-link>
+          <a href="/#/" class="nav-link">Home</a>
+          <a href="/#/test" class="nav-link">Test</a>
+          <a href="/#/login-calon" class="nav-link">Login Calon</a>
+          <a href="/#/scan" class="nav-link">Scan QR</a>
+          <a href="/#/live-results" class="nav-link">Hasil</a>
+          <a href="/#/admin-login" class="nav-link admin-link">Admin</a>
 
           <!-- User Info & Logout jika sudah login -->
           <div v-if="authStore.isLoggedIn" class="user-section">
@@ -31,16 +31,16 @@
       <router-view />
     </main>
 
-    <!-- Footer -->
+    <!-- Footer (PAKAI <a> tag) -->
     <footer class="app-footer">
       <div class="footer-container">
         <p>Sistem Voting Online SMAN 2 Bandar Lampung © 2025 - Pemilihan Waka 2025/2026</p>
         <div class="footer-links">
-          <router-link to="/#/admin-login" class="footer-link">Panel Admin</router-link>
+          <a href="/#/admin-login" class="footer-link">Panel Admin</a>
           <span class="separator">•</span>
           <a href="https://sman2.sch.id" target="_blank" class="footer-link">Website SMANDA</a>
           <span class="separator">•</span>
-          <router-link to="/#/test" class="footer-link">Test Koneksi</router-link>
+          <a href="/#/test" class="footer-link">Test Koneksi</a>
         </div>
       </div>
     </footer>
@@ -53,26 +53,22 @@ import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 
-// Auto-redirect jika URL tanpa hash (untuk handle Vercel 404)
+// Auto-redirect jika URL tanpa hash
 const fixHashRouting = () => {
   const currentPath = window.location.pathname
   const hasHash = window.location.hash
 
-  // Jika ada path selain root dan tidak ada hash, redirect ke hash mode
   if (currentPath !== '/' && !hasHash) {
     const newUrl = `/#${currentPath}${window.location.search}`
     window.location.replace(newUrl)
     return true
   }
-
   return false
 }
 
 onMounted(() => {
-  // Check auth saat app mount
   authStore.checkAuth()
 
-  // Fix routing jika perlu
   if (fixHashRouting()) {
     console.log('Fixed routing to hash mode')
   }
@@ -80,13 +76,12 @@ onMounted(() => {
 
 const handleLogout = () => {
   authStore.logout()
-  // Redirect ke home dengan hash
   window.location.href = '/#/'
 }
 </script>
 
 <style scoped>
-/* Navigation Styles */
+/* Styles tetap sama seperti sebelumnya */
 .app-nav {
   background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
   color: white;
@@ -116,10 +111,6 @@ const handleLogout = () => {
   gap: 0.5rem;
 }
 
-.nav-brand .brand-link:hover {
-  opacity: 0.9;
-}
-
 .nav-links {
   display: flex;
   gap: 1.5rem;
@@ -133,29 +124,10 @@ const handleLogout = () => {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
   transition: all 0.3s ease;
-  position: relative;
 }
 
 .nav-link:hover {
   background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.nav-link.router-link-active {
-  background: rgba(255, 255, 255, 0.2);
-  font-weight: 600;
-}
-
-.nav-link.router-link-active::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 3px;
-  background: white;
-  border-radius: 2px;
 }
 
 .admin-link {
@@ -163,11 +135,6 @@ const handleLogout = () => {
   border: 1px solid rgba(220, 38, 38, 0.3);
 }
 
-.admin-link:hover {
-  background: rgba(220, 38, 38, 0.3);
-}
-
-/* User Section */
 .user-section {
   display: flex;
   align-items: center;
@@ -193,22 +160,14 @@ const handleLogout = () => {
   border-radius: 4px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.3s;
 }
 
-.logout-btn:hover {
-  background: #b91c1c;
-  transform: translateY(-1px);
-}
-
-/* Main Content */
 .app-main {
   min-height: calc(100vh - 140px);
   padding: 2rem 1rem;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f8fafc;
 }
 
-/* Footer */
 .app-footer {
   background: #1e293b;
   color: #cbd5e1;
@@ -223,15 +182,9 @@ const handleLogout = () => {
   padding: 0 1rem;
 }
 
-.footer-container p {
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-}
-
 .footer-links {
   display: flex;
   justify-content: center;
-  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -239,20 +192,12 @@ const handleLogout = () => {
 .footer-link {
   color: #94a3b8;
   text-decoration: none;
-  font-size: 0.85rem;
-  transition: color 0.3s;
-}
-
-.footer-link:hover {
-  color: white;
-  text-decoration: underline;
 }
 
 .separator {
   color: #475569;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
   .nav-container {
     flex-direction: column;
@@ -262,12 +207,6 @@ const handleLogout = () => {
   .nav-links {
     flex-wrap: wrap;
     justify-content: center;
-    gap: 0.5rem;
-  }
-
-  .nav-link {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.9rem;
   }
 
   .user-section {
@@ -279,35 +218,30 @@ const handleLogout = () => {
     width: 100%;
     justify-content: center;
   }
-
-  .footer-links {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .separator {
-    display: none;
-  }
-}
-
-/* Animation for page transitions */
-.router-view-enter-active,
-.router-view-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.router-view-enter-from,
-.router-view-leave-to {
-  opacity: 0;
 }
 </style>
 
-<!-- Auto-redirect script untuk handle langsung dari URL -->
+<!-- Script untuk handle semua link clicks -->
 <script>
-// Script untuk handle direct URL access (tanpa hash)
-if (window.location.pathname !== '/' && !window.location.hash) {
-  // Redirect ke hash mode
-  const newPath = window.location.pathname + window.location.search
-  window.location.href = `/#${newPath}`
-}
+document.addEventListener('DOMContentLoaded', function () {
+  // Convert semua internal links ke hash mode
+  document.querySelectorAll('a[href^="/"]').forEach((link) => {
+    const href = link.getAttribute('href')
+    if (href && !href.startsWith('/#') && !href.includes('://')) {
+      link.setAttribute('href', '/#' + href.replace(/^\//, ''))
+    }
+  })
+
+  // Handle click untuk semua links
+  document.addEventListener('click', function (e) {
+    const link = e.target.closest('a')
+    if (link && link.href && link.href.includes(window.location.hostname)) {
+      const url = new URL(link.href)
+      if (url.hash) {
+        e.preventDefault()
+        window.location.hash = url.hash
+      }
+    }
+  })
+})
 </script>
