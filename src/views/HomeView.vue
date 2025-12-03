@@ -1,34 +1,30 @@
 <template>
   <div class="home">
-    <div class="hero">
-      <h2>Selamat Datang di SMANDA VOTE</h2>
-      <p>Sistem Voting Online Pemilihan Waka SMAN 2 Bandar Lampung</p>
-      <p class="date">Tanggal Voting: 8 Desember 2025, 10:00-11:00 WIB</p>
-    </div>
-
+    <!-- ... -->
     <div class="actions">
       <div class="card">
         <h3>👤 Calon Kandidat</h3>
         <p>Daftar sebagai calon Waka</p>
-        <a href="/#/login-calon" class="btn">Login Calon</a>
+        <!-- PAKAI #/ bukan /#/ -->
+        <a href="#/login-calon" class="btn">Login Calon</a>
       </div>
 
       <div class="card">
         <h3>🗳️ Pemilih (Guru/Staff)</h3>
         <p>Gunakan QR Code untuk voting</p>
-        <a href="/#/scan" class="btn">Scan QR</a>
+        <a href="#/scan" class="btn">Scan QR</a>
       </div>
 
       <div class="card">
         <h3>📊 Hasil Live</h3>
         <p>Pantau perkembangan voting</p>
-        <a href="/#/live-results" class="btn">Lihat Hasil</a>
+        <a href="#/live-results" class="btn">Lihat Hasil</a>
       </div>
 
       <div class="card">
         <h3>⚙️ Admin/Panitia</h3>
         <p>Kelola sistem voting</p>
-        <a href="/#/admin-login" class="btn admin-btn">Panel Admin</a>
+        <a href="#/admin-login" class="btn admin-btn">Panel Admin</a>
       </div>
     </div>
   </div>
