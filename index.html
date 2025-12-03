@@ -1,27 +1,47 @@
 <!doctype html>
 <html lang="en">
   <head>
-    ...
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMANDA VOTE</title>
+    <!-- PASTIKAN TIDAK ADA ERROR DI SINI -->
   </head>
   <body>
+    <!-- ELEMENT INI HARUS ADA -->
     <div id="app"></div>
+
+    <!-- SCRIPT INI HARUS LOAD -->
     <script type="module" src="/src/main.js"></script>
 
-    <!-- Fallback script jika Vue gagal load -->
+    <!-- FALLBACK SCRIPT JIKA VUE GAGAL -->
     <script>
       setTimeout(() => {
         const app = document.getElementById('app')
-        if (app && app.innerHTML.includes('router-link')) {
-          console.log('Vue app loaded but links not working')
-          // Force hash navigation
-          document.querySelectorAll('[href^="/"]').forEach((link) => {
-            const href = link.getAttribute('href')
-            if (href && !href.startsWith('/#')) {
-              link.setAttribute('href', '/#' + href)
+        if (app && !app.innerHTML.includes('router-view')) {
+          console.error('VUE FAILED TO LOAD!')
+          app.innerHTML = `
+            <div style="padding: 2rem; text-align: center;">
+              <h1>⚠️ SMANDA VOTE - Loading Error</h1>
+              <p>Application failed to load. Trying to fix...</p>
+              <button onclick="location.reload()">Reload Page</button>
+              <div style="margin-top: 2rem;">
+                <a href="/#/">Go to Home</a> |
+                <a href="/#/admin-login">Admin Login</a> |
+                <a href="/#/test">Test Page</a>
+              </div>
+            </div>
+          `
+
+          // Force semua links ke hash mode
+          document.querySelectorAll('a').forEach((a) => {
+            const href = a.getAttribute('href')
+            if (href && href.startsWith('/') && !href.startsWith('/#')) {
+              a.setAttribute('href', '/#' + href.replace(/^\//, ''))
             }
           })
         }
-      }, 1000)
+      }, 2000)
     </script>
   </body>
 </html>
