@@ -103,7 +103,7 @@
           </div>
 
           <div class="token-actions">
-            <button @click="generateQRTokens" :disabled="generatingTokens" class="btn-primary">
+            <button @click="confirmGenerateTokens" :disabled="generatingTokens" class="btn-primary">
               {{ generatingTokens ? 'Membuat Token...' : '🎫 Generate Semua Token' }}
             </button>
             <button @click="exportTokensCSV" :disabled="!stats.totalTokens" class="btn-secondary">
@@ -261,74 +261,106 @@
             <p>Atur waktu dan status pemilihan</p>
           </div>
 
-          <div class="session-card" v-if="activeSession">
-            <div class="session-header">
-              <h3>{{ activeSession.nama_sesi }}</h3>
-              <span class="session-badge" :class="activeSession.status">
-                {{ activeSession.status.toUpperCase() }}
-              </span>
-            </div>
-
-            <div class="session-details">
-              <div class="detail-row">
-                <label>Tahun Ajaran:</label>
-                <span>{{ activeSession.tahun_ajaran }}</span>
-              </div>
-              <div class="detail-row">
-                <label>Pendaftaran:</label>
-                <span>
-                  {{ formatDateTime(activeSession.waktu_mulai_pendaftaran) }} -
-                  {{ formatDateTime(activeSession.waktu_selesai_pendaftaran) }}
-                </span>
-              </div>
-              <div class="detail-row">
-                <label>Voting:</label>
-                <span>
-                  {{ formatDateTime(activeSession.waktu_mulai_voting) }} -
-                  {{ formatDateTime(activeSession.waktu_selesai_voting) }}
-                </span>
-              </div>
-              <div class="detail-row">
-                <label>Dibuat:</label>
-                <span>{{ formatDate(activeSession.dibuat_pada) }}</span>
-              </div>
-            </div>
-
-            <div class="session-actions">
-              <button
-                @click="updateSessionStatus('draft')"
-                :class="{ active: activeSession.status === 'draft' }"
-                class="status-btn"
-              >
-                Draft
-              </button>
-              <button
-                @click="updateSessionStatus('pendaftaran')"
-                :class="{ active: activeSession.status === 'pendaftaran' }"
-                class="status-btn"
-              >
-                Buka Pendaftaran
-              </button>
-              <button
-                @click="updateSessionStatus('voting')"
-                :class="{ active: activeSession.status === 'voting' }"
-                class="status-btn"
-              >
-                Buka Voting
-              </button>
-              <button
-                @click="updateSessionStatus('selesai')"
-                :class="{ active: activeSession.status === 'selesai' }"
-                class="status-btn"
-              >
-                Selesaikan
-              </button>
-            </div>
+          <div v-if="!activeSession" class="empty-state">
+            <p>Belum ada sesi pemilihan</p>
+            <button @click="showCreateModal = true" class="btn-primary">+ Buat Sesi Baru</button>
           </div>
 
-          <div v-else class="empty-state">
-            <p>Belum ada sesi pemilihan</p>
-            <button @click="createNewSession" class="btn-primary">+ Buat Sesi Baru</button>
+          <div v-else class="session-management">
+            <!-- Session Card -->
+            <div class="session-card">
+              <div class="session-header">
+                <h3>{{ activeSession.nama_sesi }}</h3>
+                <span class="session-badge" :class="activeSession.status">
+                  {{ activeSession.status.toUpperCase() }}
+                </span>
+              </div>
+
+              <div class="session-details">
+                <div class="detail-row">
+                  <label>Tahun Ajaran:</label>
+                  <span>{{ activeSession.tahun_ajaran }}</span>
+                </div>
+                <div class="detail-row">
+                  <label>Pendaftaran:</label>
+                  <span>
+                    {{ formatDateTime(activeSession.waktu_mulai_pendaftaran) }} -
+                    {{ formatDateTime(activeSession.waktu_selesai_pendaftaran) }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <label>Voting:</label>
+                  <span>
+                    {{ formatDateTime(activeSession.waktu_mulai_voting) }} -
+                    {{ formatDateTime(activeSession.waktu_selesai_voting) }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <label>Dibuat:</label>
+                  <span>{{ formatDate(activeSession.dibuat_pada) }}</span>
+                </div>
+                <div class="detail-row">
+                  <label>Status:</label>
+                  <span :class="'status-' + activeSession.status">
+                    {{ getStatusLabel(activeSession.status) }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="session-actions">
+                <div class="status-controls">
+                  <h4>Ubah Status:</h4>
+                  <div class="status-buttons">
+                    <button
+                      @click="confirmChangeStatus('draft')"
+                      :class="{ active: activeSession.status === 'draft' }"
+                      class="status-btn"
+                    >
+                      Draft
+                    </button>
+                    <button
+                      @click="confirmChangeStatus('pendaftaran')"
+                      :class="{ active: activeSession.status === 'pendaftaran' }"
+                      class="status-btn"
+                    >
+                      Buka Pendaftaran
+                    </button>
+                    <button
+                      @click="confirmChangeStatus('voting')"
+                      :class="{ active: activeSession.status === 'voting' }"
+                      class="status-btn"
+                    >
+                      Buka Voting
+                    </button>
+                    <button
+                      @click="confirmChangeStatus('selesai')"
+                      :class="{ active: activeSession.status === 'selesai' }"
+                      class="status-btn"
+                    >
+                      Selesaikan
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Edit Button (hanya di draft) -->
+                <div class="edit-controls" v-if="activeSession.status === 'draft'">
+                  <button @click="openEditModal" class="btn-edit">✏️ Edit Sesi</button>
+                  <button @click="confirmDeleteSession" class="btn-delete">🗑️ Hapus Sesi</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Session Rules -->
+            <div class="session-rules">
+              <h4>📋 Aturan Status:</h4>
+              <ul>
+                <li><strong>DRAFT:</strong> Bisa edit semua data. Guru belum bisa akses.</li>
+                <li><strong>PENDAFTARAN:</strong> Guru bisa daftar sebagai calon.</li>
+                <li><strong>VOTING:</strong> Generate token & mulai pemilihan.</li>
+                <li><strong>SELESAI:</strong> Tutup voting & umumkan hasil.</li>
+              </ul>
+            </div>
           </div>
         </div>
 
@@ -360,6 +392,145 @@
               Data akan muncul ketika guru mendaftar sebagai calon melalui Dashboard Calon
             </p>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Session Modal -->
+    <div v-if="showCreateModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>➕ Buat Sesi Pemilihan Baru</h3>
+          <button @click="showCreateModal = false" class="btn-close">×</button>
+        </div>
+
+        <div class="modal-body">
+          <form @submit.prevent="createNewSession">
+            <div class="form-group">
+              <label>Nama Sesi *</label>
+              <input
+                v-model="newSessionForm.nama_sesi"
+                type="text"
+                placeholder="Contoh: Pemilihan Waka SMAN 2 2025/2026"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Tahun Ajaran *</label>
+              <input
+                v-model="newSessionForm.tahun_ajaran"
+                type="text"
+                placeholder="Contoh: 2025/2026"
+                required
+              />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mulai Pendaftaran *</label>
+                <input
+                  v-model="newSessionForm.waktu_mulai_pendaftaran"
+                  type="datetime-local"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label>Selesai Pendaftaran *</label>
+                <input
+                  v-model="newSessionForm.waktu_selesai_pendaftaran"
+                  type="datetime-local"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mulai Voting *</label>
+                <input v-model="newSessionForm.waktu_mulai_voting" type="datetime-local" required />
+              </div>
+              <div class="form-group">
+                <label>Selesai Voting *</label>
+                <input
+                  v-model="newSessionForm.waktu_selesai_voting"
+                  type="datetime-local"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" @click="showCreateModal = false" class="btn-cancel">
+                Batal
+              </button>
+              <button type="submit" :disabled="creatingSession" class="btn-save">
+                {{ creatingSession ? 'Membuat...' : 'Buat Sesi' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Session Modal -->
+    <div v-if="showEditModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>✏️ Edit Sesi Pemilihan</h3>
+          <button @click="showEditModal = false" class="btn-close">×</button>
+        </div>
+
+        <div class="modal-body">
+          <form @submit.prevent="saveSessionEdit">
+            <div class="form-group">
+              <label>Nama Sesi *</label>
+              <input v-model="editForm.nama_sesi" type="text" required />
+            </div>
+
+            <div class="form-group">
+              <label>Tahun Ajaran *</label>
+              <input
+                v-model="editForm.tahun_ajaran"
+                type="text"
+                placeholder="Contoh: 2025/2026"
+                required
+              />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mulai Pendaftaran *</label>
+                <input v-model="editForm.waktu_mulai_pendaftaran" type="datetime-local" required />
+              </div>
+              <div class="form-group">
+                <label>Selesai Pendaftaran *</label>
+                <input
+                  v-model="editForm.waktu_selesai_pendaftaran"
+                  type="datetime-local"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mulai Voting *</label>
+                <input v-model="editForm.waktu_mulai_voting" type="datetime-local" required />
+              </div>
+              <div class="form-group">
+                <label>Selesai Voting *</label>
+                <input v-model="editForm.waktu_selesai_voting" type="datetime-local" required />
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" @click="showEditModal = false" class="btn-cancel">Batal</button>
+              <button type="submit" :disabled="savingEdit" class="btn-save">
+                {{ savingEdit ? 'Menyimpan...' : 'Simpan Perubahan' }}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -407,6 +578,31 @@ const activeSession = ref(null)
 const results = ref([])
 const candidateStats = ref({})
 const generatingTokens = ref(false)
+
+// Modal State
+const showCreateModal = ref(false)
+const showEditModal = ref(false)
+const creatingSession = ref(false)
+const savingEdit = ref(false)
+
+// Form State
+const newSessionForm = ref({
+  nama_sesi: '',
+  tahun_ajaran: '',
+  waktu_mulai_pendaftaran: '',
+  waktu_selesai_pendaftaran: '',
+  waktu_mulai_voting: '',
+  waktu_selesai_voting: '',
+})
+
+const editForm = ref({
+  nama_sesi: '',
+  tahun_ajaran: '',
+  waktu_mulai_pendaftaran: '',
+  waktu_selesai_pendaftaran: '',
+  waktu_mulai_voting: '',
+  waktu_selesai_voting: '',
+})
 
 // Toast
 const toastMessage = ref('')
@@ -558,13 +754,13 @@ const loadTokens = async () => {
   try {
     console.log('📋 Loading tokens...')
 
-    // Coba dengan foreign key yang benar
+    // Query dengan foreign key yang benar
     const { data, error } = await supabase
       .from('token_qr')
       .select(
         `
         *,
-        pengguna:token_qr_pengguna_id_fkey (
+        pengguna:pengguna_id (
           nama_lengkap
         )
       `,
@@ -637,6 +833,22 @@ const loadActiveSession = async () => {
     if (error) throw error
 
     activeSession.value = data?.[0] || null
+
+    // Set edit form data jika ada session
+    if (activeSession.value) {
+      editForm.value = {
+        nama_sesi: activeSession.value.nama_sesi || '',
+        tahun_ajaran: activeSession.value.tahun_ajaran || '',
+        waktu_mulai_pendaftaran: formatDateTimeForInput(
+          activeSession.value.waktu_mulai_pendaftaran,
+        ),
+        waktu_selesai_pendaftaran: formatDateTimeForInput(
+          activeSession.value.waktu_selesai_pendaftaran,
+        ),
+        waktu_mulai_voting: formatDateTimeForInput(activeSession.value.waktu_mulai_voting),
+        waktu_selesai_voting: formatDateTimeForInput(activeSession.value.waktu_selesai_voting),
+      }
+    }
   } catch (error) {
     console.error('Error loading session:', error)
     activeSession.value = null
@@ -657,7 +869,170 @@ const loadCandidateStats = async () => {
   }
 }
 
-const generateQRTokens = async () => {
+// Session Management
+const createNewSession = async () => {
+  if (!newSessionForm.value.nama_sesi || !newSessionForm.value.tahun_ajaran) {
+    showToast('Nama sesi dan tahun ajaran harus diisi', 'error')
+    return
+  }
+
+  creatingSession.value = true
+
+  try {
+    const { error } = await supabase.from('sesi_pemilihan').insert({
+      nama_sesi: newSessionForm.value.nama_sesi,
+      tahun_ajaran: newSessionForm.value.tahun_ajaran,
+      waktu_mulai_pendaftaran: newSessionForm.value.waktu_mulai_pendaftaran,
+      waktu_selesai_pendaftaran: newSessionForm.value.waktu_selesai_pendaftaran,
+      waktu_mulai_voting: newSessionForm.value.waktu_mulai_voting,
+      waktu_selesai_voting: newSessionForm.value.waktu_selesai_voting,
+      status: 'draft',
+      dibuat_oleh: adminUser.value.id,
+    })
+
+    if (error) throw error
+
+    showToast('Sesi baru berhasil dibuat!', 'success')
+    showCreateModal.value = false
+    await loadActiveSession()
+
+    // Reset form
+    newSessionForm.value = {
+      nama_sesi: '',
+      tahun_ajaran: '',
+      waktu_mulai_pendaftaran: '',
+      waktu_selesai_pendaftaran: '',
+      waktu_mulai_voting: '',
+      waktu_selesai_voting: '',
+    }
+  } catch (error) {
+    console.error('Error creating session:', error)
+    showToast('Gagal membuat sesi: ' + error.message, 'error')
+  } finally {
+    creatingSession.value = false
+  }
+}
+
+const openEditModal = () => {
+  if (!activeSession.value) return
+
+  // Set edit form dengan data current session
+  editForm.value = {
+    nama_sesi: activeSession.value.nama_sesi || '',
+    tahun_ajaran: activeSession.value.tahun_ajaran || '',
+    waktu_mulai_pendaftaran: formatDateTimeForInput(activeSession.value.waktu_mulai_pendaftaran),
+    waktu_selesai_pendaftaran: formatDateTimeForInput(
+      activeSession.value.waktu_selesai_pendaftaran,
+    ),
+    waktu_mulai_voting: formatDateTimeForInput(activeSession.value.waktu_mulai_voting),
+    waktu_selesai_voting: formatDateTimeForInput(activeSession.value.waktu_selesai_voting),
+  }
+
+  showEditModal.value = true
+}
+
+const saveSessionEdit = async () => {
+  if (!activeSession.value) return
+
+  savingEdit.value = true
+
+  try {
+    const { error } = await supabase
+      .from('sesi_pemilihan')
+      .update({
+        nama_sesi: editForm.value.nama_sesi,
+        tahun_ajaran: editForm.value.tahun_ajaran,
+        waktu_mulai_pendaftaran: editForm.value.waktu_mulai_pendaftaran,
+        waktu_selesai_pendaftaran: editForm.value.waktu_selesai_pendaftaran,
+        waktu_mulai_voting: editForm.value.waktu_mulai_voting,
+        waktu_selesai_voting: editForm.value.waktu_selesai_voting,
+        diperbarui_pada: new Date().toISOString(),
+      })
+      .eq('id', activeSession.value.id)
+
+    if (error) throw error
+
+    showToast('Perubahan berhasil disimpan!', 'success')
+    showEditModal.value = false
+    await loadActiveSession()
+  } catch (error) {
+    console.error('Error updating session:', error)
+    showToast('Gagal menyimpan perubahan: ' + error.message, 'error')
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+const confirmDeleteSession = async () => {
+  if (!activeSession.value) return
+
+  if (!confirm('Yakin menghapus sesi ini? Semua data terkait (token, voting) juga akan dihapus.')) {
+    return
+  }
+
+  try {
+    // Hapus semua data terkait dulu
+    await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
+    await supabase.from('kandidat').delete().eq('sesi_id', activeSession.value.id)
+    await supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id)
+
+    // Hapus sesi
+    const { error } = await supabase
+      .from('sesi_pemilihan')
+      .delete()
+      .eq('id', activeSession.value.id)
+
+    if (error) throw error
+
+    showToast('Sesi berhasil dihapus!', 'success')
+    activeSession.value = null
+  } catch (error) {
+    console.error('Error deleting session:', error)
+    showToast('Gagal menghapus sesi: ' + error.message, 'error')
+  }
+}
+
+const confirmChangeStatus = (status) => {
+  if (activeSession.value.status !== status) {
+    const messages = {
+      draft: 'Yakin ubah ke DRAFT? Semua data voting akan direset.',
+      pendaftaran: 'Yakin buka pendaftaran?',
+      voting: 'Yakin buka voting? Pastikan token sudah digenerate.',
+      selesai: 'Yakin selesaikan sesi? Voting akan ditutup permanen.',
+    }
+
+    if (confirm(messages[status])) {
+      updateSessionStatus(status)
+    }
+  } else {
+    updateSessionStatus(status) // Status sama, langsung update
+  }
+}
+
+const updateSessionStatus = async (status) => {
+  if (!activeSession.value) return
+
+  try {
+    const { error } = await supabase
+      .from('sesi_pemilihan')
+      .update({
+        status,
+        diperbarui_pada: new Date().toISOString(),
+      })
+      .eq('id', activeSession.value.id)
+
+    if (error) throw error
+
+    showToast(`Status sesi berhasil diubah ke "${getStatusLabel(status)}"`, 'success')
+    await loadActiveSession()
+  } catch (error) {
+    console.error('Error updating session status:', error)
+    showToast('Gagal mengubah status sesi', 'error')
+  }
+}
+
+// Token Management
+const confirmGenerateTokens = async () => {
   if (
     !confirm('Generate QR tokens untuk semua guru?\n\nPastikan sudah ada sesi pemilihan aktif.')
   ) {
@@ -770,29 +1145,7 @@ const refreshData = async () => {
   showToast('Data berhasil diperbarui', 'success')
 }
 
-const updateSessionStatus = async (status) => {
-  if (!activeSession.value) return
-
-  try {
-    const { error } = await supabase
-      .from('sesi_pemilihan')
-      .update({ status })
-      .eq('id', activeSession.value.id)
-
-    if (error) throw error
-
-    showToast(`Status sesi berhasil diubah ke "${status}"`, 'success')
-    await loadActiveSession()
-  } catch (error) {
-    console.error('Error updating session status:', error)
-    showToast('Gagal mengubah status sesi', 'error')
-  }
-}
-
-const createNewSession = () => {
-  showToast('Fitur buat sesi baru akan segera tersedia', 'info')
-}
-
+// Helper Functions
 const getTokenStatus = (token) => {
   if (token.sudah_digunakan) return 'Digunakan'
   if (new Date(token.kadaluarsa_pada) <= new Date()) return 'Expired'
@@ -807,6 +1160,16 @@ const getPositionName = (jabatan) => {
     kurikulum: 'Waka Kurikulum',
   }
   return map[jabatan] || jabatan
+}
+
+const getStatusLabel = (status) => {
+  const map = {
+    draft: 'Draft',
+    pendaftaran: 'Pendaftaran',
+    voting: 'Voting',
+    selesai: 'Selesai',
+  }
+  return map[status] || status
 }
 
 const getInitials = (name) => {
@@ -837,6 +1200,12 @@ const formatDateTime = (dateString) => {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+const formatDateTimeForInput = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toISOString().slice(0, 16) // Format: YYYY-MM-DDTHH:MM
 }
 
 const showToast = (message, type = 'success') => {
@@ -871,10 +1240,6 @@ onMounted(() => {
   })
 })
 </script>
-
-<!-- PAKAI STYLE YANG SUDAH ADA -->
-
-<!-- STYLE PAKAI YANG SUDAH ADA, JANGAN DIUBAH -->
 
 <style scoped>
 /* Tambahkan CSS ini di bawah style yang sudah ada */
@@ -1709,5 +2074,798 @@ tr:hover {
   .tab-content {
     padding: 1rem;
   }
+}
+
+/* Tambah di bagian style AdminDashboard.vue */
+
+/* Form elements di modal */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.form-group input[type='text'],
+.form-group input[type='datetime-local'],
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #1e3a8a;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Form row untuk 2 kolom */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 1.25rem;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn-cancel {
+  background: #6b7280;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-cancel:hover {
+  background: #4b5563;
+}
+
+.btn-save {
+  background: #1e3a8a;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-save:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.btn-save:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Session status buttons & controls */
+.session-management {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.session-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.session-header h3 {
+  color: #1f2937;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.session-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.session-badge.draft {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.session-badge.pendaftaran {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.session-badge.voting {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.session-badge.selesai {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.session-details {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detail-row {
+  display: flex;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row label {
+  min-width: 140px;
+  font-weight: 600;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.detail-row span {
+  color: #1f2937;
+  flex: 1;
+}
+
+.detail-row .status-draft {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.detail-row .status-pendaftaran {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.detail-row .status-voting {
+  color: #059669;
+  font-weight: 600;
+}
+
+.detail-row .status-selesai {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+/* Status control buttons */
+.status-controls {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.status-controls h4 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #374151;
+  font-size: 1rem;
+}
+
+.status-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #4a5568;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.status-btn:hover:not(.active) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.status-btn.active {
+  border-color: #1e3a8a;
+  background: #1e3a8a;
+  color: white;
+}
+
+.status-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Edit controls */
+.edit-controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.btn-edit {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+  background: #2563eb;
+}
+
+.btn-delete {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+  background: #dc2626;
+}
+
+/* Session rules */
+.session-rules {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.session-rules h4 {
+  color: #0369a1;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-rules ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #1e40af;
+}
+
+.session-rules li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.session-rules li:last-child {
+  margin-bottom: 0;
+}
+
+/* Candidate stats enhancement */
+.candidates-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.candidate-stat {
+  background: white;
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  border-top: 5px solid;
+  transition: transform 0.2s;
+}
+
+.candidate-stat:hover {
+  transform: translateY(-3px);
+}
+
+.candidate-stat.pending {
+  border-color: #f59e0b;
+}
+
+.candidate-stat.approved {
+  border-color: #10b981;
+}
+
+.candidate-stat.rejected {
+  border-color: #ef4444;
+}
+
+.candidate-stat h4 {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.candidate-stat p {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 0;
+  color: #1e3a8a;
+}
+
+/* Table enhancements */
+.table-container {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-top: 1rem;
+}
+
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-container thead {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+}
+
+.table-container th {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table-container tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.2s;
+}
+
+.table-container tbody tr:hover {
+  background: #f8fafc;
+}
+
+.table-container td {
+  padding: 1rem 1.25rem;
+  color: #374151;
+  vertical-align: middle;
+}
+
+.table-container .token-code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', monospace;
+  background: #f1f5f9;
+  padding: 0.375rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+  display: inline-block;
+  letter-spacing: 0.5px;
+}
+
+/* Status badges in table */
+.table-container .status-used,
+.table-container .status-available,
+.table-container .status-expired {
+  padding: 0.375rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.status-used {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-available {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-expired {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* View more link */
+.view-more {
+  text-align: center;
+  padding: 1rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  border-radius: 0 0 10px 10px;
+}
+
+/* Enhanced empty states */
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  margin: 2rem 0;
+  border: 2px dashed #d1d5db;
+}
+
+.empty-state p {
+  font-size: 1.125rem;
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state .hint {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  max-width: 400px;
+  margin: 0 auto 1.5rem;
+  line-height: 1.5;
+}
+
+.empty-state .btn-primary {
+  margin-top: 1rem;
+}
+
+/* No results state */
+.no-results {
+  padding: 2rem;
+  text-align: center;
+  color: #9ca3af;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px dashed #d1d5db;
+}
+
+/* Loading enhancements */
+.loading-screen {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.loader {
+  width: 50px;
+  height: 50px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #1e3a8a;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .admin-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .header-right {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .admin-info {
+    justify-content: center;
+  }
+
+  .logout-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .stats-overview {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .stat-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+  }
+
+  .tabs {
+    padding: 0 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .tab-content {
+    padding: 1rem;
+  }
+
+  .token-actions {
+    flex-direction: column;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-refresh {
+    width: 100%;
+  }
+
+  .table-container {
+    font-size: 0.85rem;
+  }
+
+  .table-container th,
+  .table-container td {
+    padding: 0.75rem;
+  }
+
+  .modal {
+    margin: 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .btn-cancel,
+  .btn-save {
+    width: 100%;
+  }
+}
+
+/* Tablet responsive */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .stats-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .monitoring-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .candidates-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Add smooth transitions */
+.tab-pane,
+.stat-card,
+.token-stat,
+.candidate-stat,
+.session-card {
+  transition: all 0.3s ease;
+}
+
+/* Hover effects */
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-refresh:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Fade in animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-pane {
+  animation: fadeInUp 0.4s ease;
+}
+
+/* Toast animation */
+.toast {
+  animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Custom scrollbar for better UX */
+.modal::-webkit-scrollbar,
+.table-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.modal::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.modal::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+.modal::-webkit-scrollbar-thumb:hover,
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 </style>
