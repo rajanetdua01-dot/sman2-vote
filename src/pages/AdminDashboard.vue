@@ -24,9 +24,9 @@
           <h1>Dashboard Admin</h1>
           <p>Panel Kontrol Sistem Voting SMANDA</p>
           <div class="session-info" v-if="activeSession">
-            <span class="session-badge">Sesi Aktif: {{ activeSession.nama_sesi }}</span>
+            <span class="session-badge">Sesi: {{ activeSession.nama_sesi }}</span>
             <span class="status-badge" :class="activeSession.status">{{
-              activeSession.status
+              activeSession.status.toUpperCase()
             }}</span>
           </div>
         </div>
@@ -72,9 +72,61 @@
         <div class="stat-card">
           <div class="stat-icon">⏰</div>
           <div class="stat-content">
-            <h3>Status Voting</h3>
+            <h3>Status Sesi</h3>
             <p class="stat-status" :class="votingStatusClass">{{ votingStatusText }}</p>
-            <p class="stat-time" v-if="timeRemaining">{{ timeRemaining }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Session Status Flow -->
+      <div class="status-flow" v-if="activeSession">
+        <div class="flow-container">
+          <div
+            class="flow-step"
+            :class="{
+              active: activeSession.status === 'draft',
+              completed: ['pendaftaran', 'voting', 'selesai'].includes(activeSession.status),
+            }"
+          >
+            <div class="step-circle">1</div>
+            <div class="step-label">DRAFT</div>
+            <div class="step-description">Buat sesi pemilihan</div>
+          </div>
+
+          <div class="flow-arrow">→</div>
+
+          <div
+            class="flow-step"
+            :class="{
+              active: activeSession.status === 'pendaftaran',
+              completed: ['voting', 'selesai'].includes(activeSession.status),
+            }"
+          >
+            <div class="step-circle">2</div>
+            <div class="step-label">PENDAFTARAN</div>
+            <div class="step-description">Guru daftar calon</div>
+          </div>
+
+          <div class="flow-arrow">→</div>
+
+          <div
+            class="flow-step"
+            :class="{
+              active: activeSession.status === 'voting',
+              completed: activeSession.status === 'selesai',
+            }"
+          >
+            <div class="step-circle">3</div>
+            <div class="step-label">VOTING</div>
+            <div class="step-description">Pemungutan suara</div>
+          </div>
+
+          <div class="flow-arrow">→</div>
+
+          <div class="flow-step" :class="{ active: activeSession.status === 'selesai' }">
+            <div class="step-circle">4</div>
+            <div class="step-label">SELESAI</div>
+            <div class="step-description">Hasil final</div>
           </div>
         </div>
       </div>
@@ -95,21 +147,167 @@
 
       <!-- Tab Content -->
       <div class="tab-content">
-        <!-- TAB 1: Kelola Token -->
-        <div v-if="activeTab === 'tokens'" class="tab-pane">
+        <!-- TAB 1: Kelola Sesi -->
+        <div v-if="activeTab === 'session'" class="tab-pane">
           <div class="section-header">
-            <h2>🎫 Kelola Token QR</h2>
-            <p>Generate dan kelola token untuk pemilih</p>
+            <h2>⚙️ Kelola Sesi Pemilihan</h2>
+            <p>Kontrol manual sistem voting</p>
           </div>
 
-          <div class="token-actions">
-            <button @click="confirmGenerateTokens" :disabled="generatingTokens" class="btn-primary">
-              {{ generatingTokens ? 'Membuat Token...' : '🎫 Generate Semua Token' }}
-            </button>
-            <button @click="exportTokensCSV" :disabled="!stats.totalTokens" class="btn-secondary">
-              📁 Export ke CSV
-            </button>
-            <button @click="refreshData" class="btn-refresh">🔄 Refresh Data</button>
+          <div v-if="!activeSession" class="empty-state">
+            <p>Belum ada sesi pemilihan aktif</p>
+            <button @click="showCreateModal = true" class="btn-primary">+ Buat Sesi Baru</button>
+          </div>
+
+          <div v-else class="session-management">
+            <!-- Session Card -->
+            <div class="session-card">
+              <div class="session-header">
+                <h3>{{ activeSession.nama_sesi }}</h3>
+                <div class="session-meta">
+                  <span class="session-year">{{ activeSession.tahun_ajaran }}</span>
+                  <span class="session-date"
+                    >Dibuat: {{ formatDate(activeSession.dibuat_pada) }}</span
+                  >
+                </div>
+              </div>
+
+              <div class="session-status-display">
+                <div class="current-status">
+                  <span class="status-label">Status saat ini:</span>
+                  <span class="status-badge-large" :class="activeSession.status">
+                    {{ getStatusLabel(activeSession.status) }}
+                  </span>
+                </div>
+
+                <div class="status-info" v-if="activeSession.status === 'voting'">
+                  <p>
+                    📊 Partisipasi: {{ stats.participationRate }}% ({{ stats.votedCount }}/{{
+                      stats.totalGuru
+                    }})
+                  </p>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="session-actions">
+                <div class="action-group">
+                  <h4>Kontrol Sesi:</h4>
+
+                  <div class="action-buttons-grid">
+                    <!-- DRAFT → PENDAFTARAN -->
+                    <button
+                      v-if="activeSession.status === 'draft'"
+                      @click="confirmAction('bukaPendaftaran')"
+                      class="action-btn btn-primary"
+                    >
+                      <span class="action-icon">🚀</span>
+                      <span class="action-text">BUKA PENDAFTARAN</span>
+                      <span class="action-desc">Guru bisa daftar sebagai calon</span>
+                    </button>
+
+                    <!-- PENDAFTARAN → VOTING -->
+                    <button
+                      v-if="activeSession.status === 'pendaftaran'"
+                      @click="confirmAction('bukaVoting')"
+                      class="action-btn btn-success"
+                    >
+                      <span class="action-icon">🗳️</span>
+                      <span class="action-text">BUKA VOTING</span>
+                      <span class="action-desc">Auto generate token 6 digit untuk semua guru</span>
+                    </button>
+
+                    <!-- VOTING → SELESAI -->
+                    <button
+                      v-if="activeSession.status === 'voting'"
+                      @click="confirmAction('tutupVoting')"
+                      class="action-btn btn-warning"
+                    >
+                      <span class="action-icon">✅</span>
+                      <span class="action-text">TUTUP VOTING</span>
+                      <span class="action-desc">Selesaikan & umumkan hasil</span>
+                    </button>
+
+                    <!-- SELESAI → DRAFT (Reset) -->
+                    <button
+                      v-if="activeSession.status === 'selesai'"
+                      @click="confirmAction('resetSesi')"
+                      class="action-btn btn-danger"
+                    >
+                      <span class="action-icon">🔄</span>
+                      <span class="action-text">RESET SESI</span>
+                      <span class="action-desc">Kembali ke status DRAFT</span>
+                    </button>
+
+                    <!-- Additional Actions -->
+                    <button
+                      v-if="activeSession.status === 'pendaftaran'"
+                      @click="activeTab = 'candidates'"
+                      class="action-btn btn-secondary"
+                    >
+                      <span class="action-icon">👥</span>
+                      <span class="action-text">VERIFIKASI CALON</span>
+                      <span class="action-desc">Lihat & verifikasi pendaftar</span>
+                    </button>
+
+                    <button
+                      v-if="activeSession.status === 'voting'"
+                      @click="activeTab = 'monitor'"
+                      class="action-btn btn-info"
+                    >
+                      <span class="action-icon">📊</span>
+                      <span class="action-text">MONITOR VOTING</span>
+                      <span class="action-desc">Pantau perkembangan real-time</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Quick Info -->
+                <div class="quick-info">
+                  <div class="info-card">
+                    <h5>Panduan Status:</h5>
+                    <ul>
+                      <li><strong>DRAFT:</strong> Sesi dibuat, belum aktif</li>
+                      <li><strong>PENDAFTARAN:</strong> Guru bisa daftar sebagai calon</li>
+                      <li><strong>VOTING:</strong> Token otomatis dibuat, pemilih bisa voting</li>
+                      <li><strong>SELESAI:</strong> Voting ditutup, hasil final</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Kelola Token -->
+        <div v-else-if="activeTab === 'tokens'" class="tab-pane">
+          <div class="section-header">
+            <h2>🎫 Token Voting (6 Digit)</h2>
+            <p>Token otomatis dibuat saat BUKA VOTING</p>
+          </div>
+
+          <div class="token-controls">
+            <div class="control-info">
+              <p v-if="activeSession?.status !== 'voting' && activeSession?.status !== 'selesai'">
+                ⚠️ Token akan otomatis dibuat saat <strong>BUKA VOTING</strong>
+              </p>
+              <p v-else-if="stats.totalTokens === 0">
+                <button @click="confirmAction('generateTokensNow')" class="btn-primary">
+                  🎫 Generate Token Sekarang
+                </button>
+              </p>
+              <p v-else>✅ Token sudah digenerate untuk {{ stats.totalGuru }} guru</p>
+            </div>
+
+            <div class="token-actions">
+              <button @click="exportTokensCSV" :disabled="!stats.totalTokens" class="btn-secondary">
+                📁 Export ke CSV
+              </button>
+              <button @click="printTokens" :disabled="!stats.totalTokens" class="btn-secondary">
+                🖨️ Cetak Token
+              </button>
+              <button @click="refreshData" class="btn-refresh">🔄 Refresh</button>
+            </div>
           </div>
 
           <div class="token-stats">
@@ -126,26 +324,27 @@
               <p class="available">{{ stats.availableTokens || 0 }}</p>
             </div>
             <div class="token-stat">
-              <h4>Expired</h4>
-              <p class="expired">{{ stats.expiredTokens || 0 }}</p>
+              <h4>Partisipasi</h4>
+              <p class="percentage">{{ stats.participationRate || 0 }}%</p>
             </div>
           </div>
 
           <div class="token-list" v-if="tokens.length > 0">
-            <h3>Daftar Token Terbaru</h3>
+            <h3>Daftar Token (6 Digit)</h3>
             <div class="table-container">
               <table>
                 <thead>
                   <tr>
+                    <th>No</th>
                     <th>Nama Guru</th>
                     <th>Token</th>
                     <th>Status</th>
-                    <th>Expired</th>
-                    <th>Aksi</th>
+                    <th>Digunakan</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="token in tokens.slice(0, 10)" :key="token.id">
+                  <tr v-for="(token, index) in tokens.slice(0, 20)" :key="token.id">
+                    <td>{{ index + 1 }}</td>
                     <td>{{ token.pengguna?.nama_lengkap || 'Tidak diketahui' }}</td>
                     <td>
                       <code class="token-code">{{ token.token }}</code>
@@ -154,41 +353,35 @@
                       <span
                         :class="{
                           'status-used': token.sudah_digunakan,
-                          'status-available':
-                            !token.sudah_digunakan && new Date(token.kadaluarsa_pada) > new Date(),
-                          'status-expired':
-                            !token.sudah_digunakan && new Date(token.kadaluarsa_pada) <= new Date(),
+                          'status-available': !token.sudah_digunakan,
                         }"
                       >
-                        {{ getTokenStatus(token) }}
+                        {{ token.sudah_digunakan ? '✅ Digunakan' : '⏳ Tersedia' }}
                       </span>
                     </td>
-                    <td>{{ formatDate(token.kadaluarsa_pada) }}</td>
                     <td>
-                      <button
-                        @click="copyToken(token.token)"
-                        class="btn-small"
-                        :disabled="token.sudah_digunakan"
-                      >
-                        📋 Copy
-                      </button>
+                      {{ token.digunakan_pada ? formatDateTime(token.digunakan_pada) : '-' }}
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p class="view-more" v-if="tokens.length > 10">
-              ...dan {{ tokens.length - 10 }} token lainnya
+            <p class="view-more" v-if="tokens.length > 20">
+              ...dan {{ tokens.length - 20 }} token lainnya
             </p>
           </div>
 
           <div v-else class="empty-state">
-            <p>Belum ada token yang digenerate</p>
-            <p class="hint">Klik "Generate Semua Token" untuk membuat token untuk semua guru</p>
+            <p v-if="activeSession?.status === 'voting' || activeSession?.status === 'selesai'">
+              Token belum digenerate. Klik "Generate Token Sekarang" di atas.
+            </p>
+            <p v-else>
+              Token akan otomatis dibuat saat sesi mencapai status <strong>VOTING</strong>
+            </p>
           </div>
         </div>
 
-        <!-- TAB 2: Monitoring -->
+        <!-- TAB 3: Monitoring -->
         <div v-else-if="activeTab === 'monitor'" class="tab-pane">
           <div class="section-header">
             <h2>📊 Live Monitoring</h2>
@@ -197,10 +390,10 @@
 
           <div class="monitoring-grid">
             <div class="monitor-card large">
-              <h3>Statistik Voting</h3>
+              <h3>Statistik Partisipasi</h3>
               <div class="progress-container">
                 <div class="progress-info">
-                  <span class="progress-label">Partisipasi</span>
+                  <span class="progress-label">Guru sudah voting</span>
                   <span class="progress-percentage">{{ stats.participationRate }}%</span>
                 </div>
                 <div class="progress-bar">
@@ -209,157 +402,29 @@
                     :style="{ width: stats.participationRate + '%' }"
                   ></div>
                 </div>
-                <p class="progress-text">
-                  {{ stats.votedCount }} dari {{ stats.totalGuru }} guru sudah voting
-                </p>
+                <p class="progress-text">{{ stats.votedCount }} dari {{ stats.totalGuru }} guru</p>
               </div>
 
-              <div class="time-info" v-if="activeSession">
-                <h4>Waktu Voting:</h4>
+              <div class="time-info">
                 <p>
-                  {{ formatDateTime(activeSession.waktu_mulai_voting) }} -
-                  {{ formatDateTime(activeSession.waktu_selesai_voting) }}
+                  Status: <strong>{{ votingStatusText }}</strong>
                 </p>
-                <p class="time-remaining" v-if="timeRemaining">⏰ {{ timeRemaining }}</p>
+                <p v-if="activeSession?.status === 'voting'">⏰ Voting sedang berlangsung</p>
+                <p v-if="activeSession?.status === 'selesai'">✅ Voting sudah selesai</p>
               </div>
             </div>
 
             <div class="monitor-card">
-              <h3>Hasil Sementara</h3>
-              <div v-if="results.length > 0" class="results-preview">
-                <div
-                  v-for="result in results.slice(0, 4)"
-                  :key="result.jabatan"
-                  class="result-item"
-                >
-                  <h4>{{ getPositionName(result.jabatan) }}</h4>
-                  <div v-if="result.topCandidate">
-                    <p>
-                      <strong>{{ result.topCandidate.nama }}</strong>
-                    </p>
-                    <p>{{ result.topCandidate.votes }} suara</p>
-                  </div>
-                  <div v-else>
-                    <p>Belum ada data</p>
-                  </div>
-                </div>
+              <h3>Quick Actions</h3>
+              <div class="quick-actions-list">
+                <button @click="activeTab = 'tokens'" class="quick-action-btn">
+                  🎫 Lihat Token
+                </button>
+                <button @click="activeTab = 'session'" class="quick-action-btn">
+                  ⚙️ Kelola Sesi
+                </button>
+                <a href="/live-results" target="_blank" class="quick-action-btn"> 📈 Hasil Live </a>
               </div>
-              <div v-else class="no-results">
-                <p>Belum ada hasil voting</p>
-              </div>
-              <router-link to="/live-results" class="btn-view-results">
-                Lihat Hasil Lengkap →
-              </router-link>
-            </div>
-          </div>
-        </div>
-
-        <!-- TAB 3: Kelola Sesi -->
-        <div v-else-if="activeTab === 'session'" class="tab-pane">
-          <div class="section-header">
-            <h2>⚙️ Kelola Sesi Pemilihan</h2>
-            <p>Atur waktu dan status pemilihan</p>
-          </div>
-
-          <div v-if="!activeSession" class="empty-state">
-            <p>Belum ada sesi pemilihan</p>
-            <button @click="showCreateModal = true" class="btn-primary">+ Buat Sesi Baru</button>
-          </div>
-
-          <div v-else class="session-management">
-            <!-- Session Card -->
-            <div class="session-card">
-              <div class="session-header">
-                <h3>{{ activeSession.nama_sesi }}</h3>
-                <span class="session-badge" :class="activeSession.status">
-                  {{ activeSession.status.toUpperCase() }}
-                </span>
-              </div>
-
-              <div class="session-details">
-                <div class="detail-row">
-                  <label>Tahun Ajaran:</label>
-                  <span>{{ activeSession.tahun_ajaran }}</span>
-                </div>
-                <div class="detail-row">
-                  <label>Pendaftaran:</label>
-                  <span>
-                    {{ formatDateTime(activeSession.waktu_mulai_pendaftaran) }} -
-                    {{ formatDateTime(activeSession.waktu_selesai_pendaftaran) }}
-                  </span>
-                </div>
-                <div class="detail-row">
-                  <label>Voting:</label>
-                  <span>
-                    {{ formatDateTime(activeSession.waktu_mulai_voting) }} -
-                    {{ formatDateTime(activeSession.waktu_selesai_voting) }}
-                  </span>
-                </div>
-                <div class="detail-row">
-                  <label>Dibuat:</label>
-                  <span>{{ formatDate(activeSession.dibuat_pada) }}</span>
-                </div>
-                <div class="detail-row">
-                  <label>Status:</label>
-                  <span :class="'status-' + activeSession.status">
-                    {{ getStatusLabel(activeSession.status) }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="session-actions">
-                <div class="status-controls">
-                  <h4>Ubah Status:</h4>
-                  <div class="status-buttons">
-                    <button
-                      @click="confirmChangeStatus('draft')"
-                      :class="{ active: activeSession.status === 'draft' }"
-                      class="status-btn"
-                    >
-                      Draft
-                    </button>
-                    <button
-                      @click="confirmChangeStatus('pendaftaran')"
-                      :class="{ active: activeSession.status === 'pendaftaran' }"
-                      class="status-btn"
-                    >
-                      Buka Pendaftaran
-                    </button>
-                    <button
-                      @click="confirmChangeStatus('voting')"
-                      :class="{ active: activeSession.status === 'voting' }"
-                      class="status-btn"
-                    >
-                      Buka Voting
-                    </button>
-                    <button
-                      @click="confirmChangeStatus('selesai')"
-                      :class="{ active: activeSession.status === 'selesai' }"
-                      class="status-btn"
-                    >
-                      Selesaikan
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Edit Button (hanya di draft) -->
-                <div class="edit-controls" v-if="activeSession.status === 'draft'">
-                  <button @click="openEditModal" class="btn-edit">✏️ Edit Sesi</button>
-                  <button @click="confirmDeleteSession" class="btn-delete">🗑️ Hapus Sesi</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Session Rules -->
-            <div class="session-rules">
-              <h4>📋 Aturan Status:</h4>
-              <ul>
-                <li><strong>DRAFT:</strong> Bisa edit semua data. Guru belum bisa akses.</li>
-                <li><strong>PENDAFTARAN:</strong> Guru bisa daftar sebagai calon.</li>
-                <li><strong>VOTING:</strong> Generate token & mulai pemilihan.</li>
-                <li><strong>SELESAI:</strong> Tutup voting & umumkan hasil.</li>
-              </ul>
             </div>
           </div>
         </div>
@@ -387,9 +452,10 @@
           </div>
 
           <div class="empty-state">
-            <p>Belum ada data calon kandidat</p>
+            <p>Fitur verifikasi calon akan segera tersedia</p>
             <p class="hint">
-              Data akan muncul ketika guru mendaftar sebagai calon melalui Dashboard Calon
+              Saat ini guru bisa langsung daftar di Dashboard Calon ketika status
+              <strong>PENDAFTARAN</strong> aktif
             </p>
           </div>
         </div>
@@ -426,38 +492,14 @@
               />
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mulai Pendaftaran *</label>
-                <input
-                  v-model="newSessionForm.waktu_mulai_pendaftaran"
-                  type="datetime-local"
-                  required
-                />
-              </div>
-              <div class="form-group">
-                <label>Selesai Pendaftaran *</label>
-                <input
-                  v-model="newSessionForm.waktu_selesai_pendaftaran"
-                  type="datetime-local"
-                  required
-                />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mulai Voting *</label>
-                <input v-model="newSessionForm.waktu_mulai_voting" type="datetime-local" required />
-              </div>
-              <div class="form-group">
-                <label>Selesai Voting *</label>
-                <input
-                  v-model="newSessionForm.waktu_selesai_voting"
-                  type="datetime-local"
-                  required
-                />
-              </div>
+            <div class="form-info">
+              <p>📌 Sistem akan menggunakan kontrol manual:</p>
+              <ul>
+                <li>DRAFT → Buat sesi</li>
+                <li>PENDAFTARAN → Buka pendaftaran calon</li>
+                <li>VOTING → Auto generate token & mulai voting</li>
+                <li>SELESAI → Tutup voting & umumkan hasil</li>
+              </ul>
             </div>
 
             <div class="modal-actions">
@@ -466,68 +508,6 @@
               </button>
               <button type="submit" :disabled="creatingSession" class="btn-save">
                 {{ creatingSession ? 'Membuat...' : 'Buat Sesi' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <!-- Edit Session Modal -->
-    <div v-if="showEditModal" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header">
-          <h3>✏️ Edit Sesi Pemilihan</h3>
-          <button @click="showEditModal = false" class="btn-close">×</button>
-        </div>
-
-        <div class="modal-body">
-          <form @submit.prevent="saveSessionEdit">
-            <div class="form-group">
-              <label>Nama Sesi *</label>
-              <input v-model="editForm.nama_sesi" type="text" required />
-            </div>
-
-            <div class="form-group">
-              <label>Tahun Ajaran *</label>
-              <input
-                v-model="editForm.tahun_ajaran"
-                type="text"
-                placeholder="Contoh: 2025/2026"
-                required
-              />
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mulai Pendaftaran *</label>
-                <input v-model="editForm.waktu_mulai_pendaftaran" type="datetime-local" required />
-              </div>
-              <div class="form-group">
-                <label>Selesai Pendaftaran *</label>
-                <input
-                  v-model="editForm.waktu_selesai_pendaftaran"
-                  type="datetime-local"
-                  required
-                />
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mulai Voting *</label>
-                <input v-model="editForm.waktu_mulai_voting" type="datetime-local" required />
-              </div>
-              <div class="form-group">
-                <label>Selesai Voting *</label>
-                <input v-model="editForm.waktu_selesai_voting" type="datetime-local" required />
-              </div>
-            </div>
-
-            <div class="modal-actions">
-              <button type="button" @click="showEditModal = false" class="btn-cancel">Batal</button>
-              <button type="submit" :disabled="savingEdit" class="btn-save">
-                {{ savingEdit ? 'Menyimpan...' : 'Simpan Perubahan' }}
               </button>
             </div>
           </form>
@@ -555,11 +535,11 @@ const isAuthenticated = ref(false)
 const adminUser = ref(null)
 
 // UI State
-const activeTab = ref('tokens')
+const activeTab = ref('session')
 const tabs = ref([
-  { id: 'tokens', label: 'Kelola Token', badge: null },
-  { id: 'monitor', label: 'Live Monitor', badge: null },
   { id: 'session', label: 'Kelola Sesi', badge: null },
+  { id: 'tokens', label: 'Token', badge: null },
+  { id: 'monitor', label: 'Monitoring', badge: null },
   { id: 'candidates', label: 'Verifikasi Calon', badge: null },
 ])
 
@@ -571,37 +551,20 @@ const stats = ref({
   totalTokens: 0,
   usedTokens: 0,
   availableTokens: 0,
-  expiredTokens: 0,
 })
 const tokens = ref([])
 const activeSession = ref(null)
-const results = ref([])
 const candidateStats = ref({})
 const generatingTokens = ref(false)
 
 // Modal State
 const showCreateModal = ref(false)
-const showEditModal = ref(false)
 const creatingSession = ref(false)
-const savingEdit = ref(false)
 
 // Form State
 const newSessionForm = ref({
   nama_sesi: '',
   tahun_ajaran: '',
-  waktu_mulai_pendaftaran: '',
-  waktu_selesai_pendaftaran: '',
-  waktu_mulai_voting: '',
-  waktu_selesai_voting: '',
-})
-
-const editForm = ref({
-  nama_sesi: '',
-  tahun_ajaran: '',
-  waktu_mulai_pendaftaran: '',
-  waktu_selesai_pendaftaran: '',
-  waktu_mulai_voting: '',
-  waktu_selesai_voting: '',
 })
 
 // Toast
@@ -611,33 +574,12 @@ const toastType = ref('success')
 // Computed
 const votingStatusText = computed(() => {
   if (!activeSession.value) return 'Tidak ada sesi'
-  const now = new Date()
-  const start = new Date(activeSession.value.waktu_mulai_voting)
-  const end = new Date(activeSession.value.waktu_selesai_voting)
-
-  if (now < start) return 'Belum dimulai'
-  if (now > end) return 'Selesai'
-  return 'Berlangsung'
+  return getStatusLabel(activeSession.value.status)
 })
 
 const votingStatusClass = computed(() => {
   if (!activeSession.value) return 'status-draft'
   return `status-${activeSession.value.status}`
-})
-
-const timeRemaining = computed(() => {
-  if (!activeSession.value || activeSession.value.status !== 'voting') return ''
-
-  const end = new Date(activeSession.value.waktu_selesai_voting)
-  const now = new Date()
-  const diff = end - now
-
-  if (diff <= 0) return 'Waktu habis'
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-  return `${hours} jam ${minutes} menit lagi`
 })
 
 // Methods
@@ -688,13 +630,7 @@ const checkAuth = () => {
 const loadDashboardData = async () => {
   try {
     // Load semua data secara parallel
-    await Promise.all([
-      loadStats(),
-      loadTokens(),
-      loadActiveSession(),
-      loadResults(),
-      loadCandidateStats(),
-    ])
+    await Promise.all([loadStats(), loadTokens(), loadActiveSession(), loadCandidateStats()])
   } catch (error) {
     console.error('Error loading dashboard data:', error)
     showToast('Gagal memuat data dashboard', 'error')
@@ -713,7 +649,7 @@ const loadStats = async () => {
 
     if (guruError) throw guruError
 
-    // Total yang sudah voting (hitung dari token digunakan)
+    // Total yang sudah voting
     const { count: votedCount, error: voteError } = await supabase
       .from('token_qr')
       .select('*', { count: 'exact', head: true })
@@ -728,12 +664,7 @@ const loadStats = async () => {
 
     const totalTokens = allTokens?.length || 0
     const usedTokens = allTokens?.filter((t) => t.sudah_digunakan).length || 0
-    const availableTokens =
-      allTokens?.filter((t) => !t.sudah_digunakan && new Date(t.kadaluarsa_pada) > new Date())
-        .length || 0
-    const expiredTokens =
-      allTokens?.filter((t) => !t.sudah_digunakan && new Date(t.kadaluarsa_pada) <= new Date())
-        .length || 0
+    const availableTokens = totalTokens - usedTokens
 
     stats.value = {
       totalGuru: totalGuru || 0,
@@ -742,7 +673,6 @@ const loadStats = async () => {
       totalTokens,
       usedTokens,
       availableTokens,
-      expiredTokens,
     }
   } catch (error) {
     console.error('Error loading stats:', error)
@@ -752,9 +682,6 @@ const loadStats = async () => {
 
 const loadTokens = async () => {
   try {
-    console.log('📋 Loading tokens...')
-
-    // Query dengan foreign key yang benar
     const { data, error } = await supabase
       .from('token_qr')
       .select(
@@ -769,55 +696,46 @@ const loadTokens = async () => {
       .limit(50)
 
     if (error) {
-      console.error('❌ Token query error (trying fallback):', error)
-
-      // FALLBACK: Ambil data tanpa join dulu
-      const { data: simpleData, error: simpleError } = await supabase
+      console.error('Token query error:', error)
+      // Fallback tanpa join
+      const { data: simpleData } = await supabase
         .from('token_qr')
         .select('*')
         .order('dibuat_pada', { ascending: false })
         .limit(50)
 
-      if (simpleError) throw simpleError
+      if (simpleData) {
+        // Get user names separately
+        const userIds = [...new Set(simpleData.map((t) => t.pengguna_id).filter(Boolean))]
+        let usersMap = {}
 
-      if (!simpleData || simpleData.length === 0) {
-        tokens.value = []
-        return
-      }
+        if (userIds.length > 0) {
+          const { data: usersData } = await supabase
+            .from('pengguna')
+            .select('id, nama_lengkap')
+            .in('id', userIds)
 
-      // Ambil nama guru secara terpisah
-      const userIds = [...new Set(simpleData.map((t) => t.pengguna_id).filter(Boolean))]
-      let usersMap = {}
-
-      if (userIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from('pengguna')
-          .select('id, nama_lengkap')
-          .in('id', userIds)
-
-        if (usersData) {
-          usersData.forEach((user) => {
-            usersMap[user.id] = user.nama_lengkap
-          })
+          if (usersData) {
+            usersData.forEach((user) => {
+              usersMap[user.id] = user.nama_lengkap
+            })
+          }
         }
+
+        tokens.value = simpleData.map((token) => ({
+          ...token,
+          pengguna: {
+            nama_lengkap: usersMap[token.pengguna_id] || 'Tidak diketahui',
+          },
+        }))
       }
-
-      // Gabungkan data
-      tokens.value = simpleData.map((token) => ({
-        ...token,
-        pengguna: {
-          nama_lengkap: usersMap[token.pengguna_id] || 'Tidak diketahui',
-        },
-      }))
-
       return
     }
 
-    console.log('✅ Tokens loaded:', data?.length || 0)
     tokens.value = data || []
   } catch (error) {
-    console.error('🚨 Error in loadTokens:', error)
-    showToast('Gagal memuat data token', 'error')
+    console.error('Error loading tokens:', error)
+    showToast('Gagal memuat token', 'error')
     tokens.value = []
   }
 }
@@ -833,39 +751,38 @@ const loadActiveSession = async () => {
     if (error) throw error
 
     activeSession.value = data?.[0] || null
-
-    // Set edit form data jika ada session
-    if (activeSession.value) {
-      editForm.value = {
-        nama_sesi: activeSession.value.nama_sesi || '',
-        tahun_ajaran: activeSession.value.tahun_ajaran || '',
-        waktu_mulai_pendaftaran: formatDateTimeForInput(
-          activeSession.value.waktu_mulai_pendaftaran,
-        ),
-        waktu_selesai_pendaftaran: formatDateTimeForInput(
-          activeSession.value.waktu_selesai_pendaftaran,
-        ),
-        waktu_mulai_voting: formatDateTimeForInput(activeSession.value.waktu_mulai_voting),
-        waktu_selesai_voting: formatDateTimeForInput(activeSession.value.waktu_selesai_voting),
-      }
-    }
   } catch (error) {
     console.error('Error loading session:', error)
     activeSession.value = null
   }
 }
 
-const loadResults = async () => {
-  // Placeholder untuk hasil voting
-  results.value = []
-}
-
 const loadCandidateStats = async () => {
-  // Placeholder untuk statistik calon
-  candidateStats.value = {
-    pending: 0,
-    approved: 0,
-    rejected: 0,
+  try {
+    // Count pending registrations
+    const { count: pending } = await supabase
+      .from('pendaftaran_kandidat')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'menunggu')
+
+    const { count: approved } = await supabase
+      .from('pendaftaran_kandidat')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'disetujui')
+
+    const { count: rejected } = await supabase
+      .from('pendaftaran_kandidat')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'ditolak')
+
+    candidateStats.value = {
+      pending: pending || 0,
+      approved: approved || 0,
+      rejected: rejected || 0,
+    }
+  } catch (error) {
+    console.error('Error loading candidate stats:', error)
+    candidateStats.value = { pending: 0, approved: 0, rejected: 0 }
   }
 }
 
@@ -879,13 +796,17 @@ const createNewSession = async () => {
   creatingSession.value = true
 
   try {
+    const now = new Date()
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
     const { error } = await supabase.from('sesi_pemilihan').insert({
       nama_sesi: newSessionForm.value.nama_sesi,
       tahun_ajaran: newSessionForm.value.tahun_ajaran,
-      waktu_mulai_pendaftaran: newSessionForm.value.waktu_mulai_pendaftaran,
-      waktu_selesai_pendaftaran: newSessionForm.value.waktu_selesai_pendaftaran,
-      waktu_mulai_voting: newSessionForm.value.waktu_mulai_voting,
-      waktu_selesai_voting: newSessionForm.value.waktu_selesai_voting,
+      // Fill with dummy dates (not used in our manual system)
+      waktu_mulai_pendaftaran: now,
+      waktu_selesai_pendaftaran: nextWeek,
+      waktu_mulai_voting: nextWeek,
+      waktu_selesai_voting: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000),
       status: 'draft',
       dibuat_oleh: adminUser.value.id,
     })
@@ -900,10 +821,6 @@ const createNewSession = async () => {
     newSessionForm.value = {
       nama_sesi: '',
       tahun_ajaran: '',
-      waktu_mulai_pendaftaran: '',
-      waktu_selesai_pendaftaran: '',
-      waktu_mulai_voting: '',
-      waktu_selesai_voting: '',
     }
   } catch (error) {
     console.error('Error creating session:', error)
@@ -913,99 +830,62 @@ const createNewSession = async () => {
   }
 }
 
-const openEditModal = () => {
-  if (!activeSession.value) return
-
-  // Set edit form dengan data current session
-  editForm.value = {
-    nama_sesi: activeSession.value.nama_sesi || '',
-    tahun_ajaran: activeSession.value.tahun_ajaran || '',
-    waktu_mulai_pendaftaran: formatDateTimeForInput(activeSession.value.waktu_mulai_pendaftaran),
-    waktu_selesai_pendaftaran: formatDateTimeForInput(
-      activeSession.value.waktu_selesai_pendaftaran,
-    ),
-    waktu_mulai_voting: formatDateTimeForInput(activeSession.value.waktu_mulai_voting),
-    waktu_selesai_voting: formatDateTimeForInput(activeSession.value.waktu_selesai_voting),
+const confirmAction = async (action) => {
+  const confirmMessages = {
+    bukaPendaftaran: 'Buka pendaftaran? Guru bisa daftar sebagai calon kandidat.',
+    bukaVoting: 'Buka voting? Token 6 digit akan otomatis dibuat untuk semua guru.',
+    tutupVoting: 'Tutup voting? Voting akan dihentikan dan hasil menjadi final.',
+    resetSesi: 'Reset sesi? Semua data (token, voting) akan dihapus dan status kembali ke DRAFT.',
+    generateTokensNow: 'Generate token sekarang? Token 6 digit akan dibuat untuk semua guru.',
   }
 
-  showEditModal.value = true
-}
-
-const saveSessionEdit = async () => {
-  if (!activeSession.value) return
-
-  savingEdit.value = true
-
-  try {
-    const { error } = await supabase
-      .from('sesi_pemilihan')
-      .update({
-        nama_sesi: editForm.value.nama_sesi,
-        tahun_ajaran: editForm.value.tahun_ajaran,
-        waktu_mulai_pendaftaran: editForm.value.waktu_mulai_pendaftaran,
-        waktu_selesai_pendaftaran: editForm.value.waktu_selesai_pendaftaran,
-        waktu_mulai_voting: editForm.value.waktu_mulai_voting,
-        waktu_selesai_voting: editForm.value.waktu_selesai_voting,
-        diperbarui_pada: new Date().toISOString(),
-      })
-      .eq('id', activeSession.value.id)
-
-    if (error) throw error
-
-    showToast('Perubahan berhasil disimpan!', 'success')
-    showEditModal.value = false
-    await loadActiveSession()
-  } catch (error) {
-    console.error('Error updating session:', error)
-    showToast('Gagal menyimpan perubahan: ' + error.message, 'error')
-  } finally {
-    savingEdit.value = false
+  const confirmText = confirmMessages[action]
+  if (!confirmText) {
+    console.error('Unknown action:', action)
+    return
   }
-}
 
-const confirmDeleteSession = async () => {
-  if (!activeSession.value) return
-
-  if (!confirm('Yakin menghapus sesi ini? Semua data terkait (token, voting) juga akan dihapus.')) {
+  if (!confirm(confirmText)) {
     return
   }
 
   try {
-    // Hapus semua data terkait dulu
-    await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
-    await supabase.from('kandidat').delete().eq('sesi_id', activeSession.value.id)
-    await supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id)
+    switch (action) {
+      case 'bukaPendaftaran':
+        await updateSessionStatus('pendaftaran')
+        showToast('Pendaftaran dibuka! Guru bisa daftar sebagai calon.', 'success')
+        break
 
-    // Hapus sesi
-    const { error } = await supabase
-      .from('sesi_pemilihan')
-      .delete()
-      .eq('id', activeSession.value.id)
+      case 'bukaVoting':
+        // Generate tokens first
+        await generateTokensForAllGuru()
+        // Then update status
+        await updateSessionStatus('voting')
+        showToast('Voting dibuka! Token sudah dibuat.', 'success')
+        break
 
-    if (error) throw error
+      case 'tutupVoting':
+        await updateSessionStatus('selesai')
+        showToast('Voting ditutup! Hasil sudah final.', 'success')
+        break
 
-    showToast('Sesi berhasil dihapus!', 'success')
-    activeSession.value = null
+      case 'resetSesi':
+        await resetSessionData()
+        await updateSessionStatus('draft')
+        showToast('Sesi direset! Kembali ke status DRAFT.', 'success')
+        break
+
+      case 'generateTokensNow':
+        await generateTokensForAllGuru()
+        showToast('Token berhasil digenerate!', 'success')
+        break
+    }
+
+    // Refresh data
+    await loadDashboardData()
   } catch (error) {
-    console.error('Error deleting session:', error)
-    showToast('Gagal menghapus sesi: ' + error.message, 'error')
-  }
-}
-
-const confirmChangeStatus = (status) => {
-  if (activeSession.value.status !== status) {
-    const messages = {
-      draft: 'Yakin ubah ke DRAFT? Semua data voting akan direset.',
-      pendaftaran: 'Yakin buka pendaftaran?',
-      voting: 'Yakin buka voting? Pastikan token sudah digenerate.',
-      selesai: 'Yakin selesaikan sesi? Voting akan ditutup permanen.',
-    }
-
-    if (confirm(messages[status])) {
-      updateSessionStatus(status)
-    }
-  } else {
-    updateSessionStatus(status) // Status sama, langsung update
+    console.error('Error in action:', action, error)
+    showToast('Gagal: ' + error.message, 'error')
   }
 }
 
@@ -1023,34 +903,24 @@ const updateSessionStatus = async (status) => {
 
     if (error) throw error
 
-    showToast(`Status sesi berhasil diubah ke "${getStatusLabel(status)}"`, 'success')
-    await loadActiveSession()
+    // Update local state
+    activeSession.value.status = status
   } catch (error) {
     console.error('Error updating session status:', error)
-    showToast('Gagal mengubah status sesi', 'error')
+    throw error
   }
 }
 
-// Token Management
-const confirmGenerateTokens = async () => {
-  if (
-    !confirm('Generate QR tokens untuk semua guru?\n\nPastikan sudah ada sesi pemilihan aktif.')
-  ) {
+const generateTokensForAllGuru = async () => {
+  if (!activeSession.value) {
+    showToast('Tidak ada sesi aktif', 'error')
     return
   }
 
   generatingTokens.value = true
 
   try {
-    // 1. Dapatkan sesi aktif atau buat baru
-    let session = activeSession.value
-    if (!session) {
-      showToast('Buat sesi pemilihan terlebih dahulu', 'error')
-      activeTab.value = 'session'
-      return
-    }
-
-    // 2. Dapatkan semua guru
+    // Get all teachers
     const { data: allGuru, error: guruError } = await supabase
       .from('pengguna')
       .select('id')
@@ -1063,16 +933,16 @@ const confirmGenerateTokens = async () => {
       return
     }
 
-    // 3. Hapus token lama untuk sesi ini
-    await supabase.from('token_qr').delete().eq('sesi_id', session.id)
+    // Delete old tokens for this session
+    await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
 
-    // 4. Buat token baru untuk setiap guru
+    // Generate tokens
     const tokensToInsert = allGuru.map((guru) => ({
       pengguna_id: guru.id,
-      sesi_id: session.id,
-      token: generateUniqueToken(guru.id),
+      sesi_id: activeSession.value.id,
+      token: generate6DigitToken(),
       tipe_token: 'voting',
-      kadaluarsa_pada: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 hari
+      kadaluarsa_pada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 hari
       sudah_digunakan: false,
       dibuat_oleh: adminUser.value.id,
     }))
@@ -1081,37 +951,70 @@ const confirmGenerateTokens = async () => {
 
     if (insertError) throw insertError
 
-    showToast(`Berhasil generate ${allGuru.length} token QR`, 'success')
-
-    // 5. Refresh data
-    await loadTokens()
-    await loadStats()
+    showToast(`Berhasil generate ${allGuru.length} token`, 'success')
   } catch (error) {
     console.error('Error generating tokens:', error)
     showToast('Gagal generate token: ' + error.message, 'error')
+    throw error
   } finally {
     generatingTokens.value = false
   }
 }
 
-const generateUniqueToken = (userId) => {
-  const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase()
-  const timestamp = Date.now().toString(36).substring(4, 8)
-  return `VOTE-${randomPart}-${timestamp}-${userId.toString().slice(-4)}`
+const generate6DigitToken = () => {
+  // Generate 6 digit number (100000 - 999999) dengan pattern check
+  const maxAttempts = 20
+
+  for (let attempts = 0; attempts < maxAttempts; attempts++) {
+    const token = Math.floor(100000 + Math.random() * 900000).toString()
+
+    // Cek pattern yang tidak diinginkan
+    const allSame = /^(\d)\1{5}$/.test(token) // 111111, 222222, etc
+    const isSequential = '01234567890123456789'.includes(token) // 123456, 456789
+    const isReverse = '98765432109876543210987654'.includes(token) // 654321, 987654
+
+    // Skip jika ada pattern yang tidak diinginkan
+    if (allSame || isSequential || isReverse) {
+      continue // Coba lagi
+    }
+
+    // Token bagus, return
+    return token
+  }
+
+  // Fallback setelah max attempts
+  const fallback = Math.floor(100000 + Math.random() * 900000).toString()
+  return fallback
 }
 
+const resetSessionData = async () => {
+  if (!activeSession.value) return
+
+  try {
+    // Delete all related data
+    await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
+    await supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id)
+
+    showToast('Data sesi berhasil direset', 'success')
+  } catch (error) {
+    console.error('Error resetting session data:', error)
+    throw error
+  }
+}
+
+// Token Management
 const exportTokensCSV = () => {
   if (tokens.value.length === 0) {
     showToast('Tidak ada data token untuk diexport', 'warning')
     return
   }
 
-  const headers = ['Nama Guru', 'Token', 'Status', 'Expired', 'Digunakan Pada']
-  const csvData = tokens.value.map((token) => [
+  const headers = ['No', 'Nama Guru', 'Token', 'Status', 'Digunakan Pada']
+  const csvData = tokens.value.map((token, index) => [
+    index + 1,
     token.pengguna?.nama_lengkap || '',
     token.token,
-    getTokenStatus(token),
-    formatDate(token.kadaluarsa_pada),
+    token.sudah_digunakan ? 'Digunakan' : 'Tersedia',
     token.digunakan_pada ? formatDateTime(token.digunakan_pada) : '-',
   ])
 
@@ -1121,7 +1024,7 @@ const exportTokensCSV = () => {
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `token-qr-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `token-voting-${new Date().toISOString().slice(0, 10)}.csv`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -1129,14 +1032,61 @@ const exportTokensCSV = () => {
   showToast(`Berhasil export ${tokens.value.length} token ke CSV`, 'success')
 }
 
-const copyToken = async (token) => {
-  try {
-    await navigator.clipboard.writeText(token)
-    showToast('Token berhasil disalin!', 'success')
-  } catch (error) {
-    console.error('Error copying token:', error)
-    showToast('Gagal menyalin token', 'error')
+const printTokens = () => {
+  if (tokens.value.length === 0) {
+    showToast('Tidak ada data token untuk dicetak', 'warning')
+    return
   }
+
+  const printContent = `
+    <html>
+      <head>
+        <title>Token Voting SMANDA</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { text-align: center; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #000; padding: 8px; text-align: center; }
+          th { background-color: #f0f0f0; }
+          .token { font-family: monospace; font-size: 1.2em; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <h1>Token Voting SMANDA</h1>
+        <h3>Sesi: ${activeSession.value?.nama_sesi || ''}</h3>
+        <p>Total: ${tokens.value.length} token | Dicetak: ${new Date().toLocaleString()}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama Guru</th>
+              <th>Token (6 Digit)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tokens.value
+              .map(
+                (token, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${token.pengguna?.nama_lengkap || ''}</td>
+                <td class="token">${token.token}</td>
+                <td>${token.sudah_digunakan ? '✓ Digunakan' : '● Tersedia'}</td>
+              </tr>
+            `,
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `
+
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(printContent)
+  printWindow.document.close()
+  printWindow.print()
 }
 
 const refreshData = async () => {
@@ -1146,28 +1096,12 @@ const refreshData = async () => {
 }
 
 // Helper Functions
-const getTokenStatus = (token) => {
-  if (token.sudah_digunakan) return 'Digunakan'
-  if (new Date(token.kadaluarsa_pada) <= new Date()) return 'Expired'
-  return 'Tersedia'
-}
-
-const getPositionName = (jabatan) => {
-  const map = {
-    humas: 'Waka Humas',
-    sarpras: 'Waka Sarpras',
-    kesiswaan: 'Waka Kesiswaan',
-    kurikulum: 'Waka Kurikulum',
-  }
-  return map[jabatan] || jabatan
-}
-
 const getStatusLabel = (status) => {
   const map = {
-    draft: 'Draft',
-    pendaftaran: 'Pendaftaran',
-    voting: 'Voting',
-    selesai: 'Selesai',
+    draft: 'DRAFT',
+    pendaftaran: 'PENDAFTARAN',
+    voting: 'VOTING',
+    selesai: 'SELESAI',
   }
   return map[status] || status
 }
@@ -1202,12 +1136,6 @@ const formatDateTime = (dateString) => {
   })
 }
 
-const formatDateTimeForInput = (dateString) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toISOString().slice(0, 16) // Format: YYYY-MM-DDTHH:MM
-}
-
 const showToast = (message, type = 'success') => {
   toastMessage.value = message
   toastType.value = type
@@ -1230,8 +1158,8 @@ onMounted(() => {
 
   // Auto refresh setiap 30 detik
   const refreshInterval = setInterval(() => {
-    if (isAuthenticated.value) {
-      loadStats()
+    if (isAuthenticated.value && activeSession.value?.status === 'voting') {
+      loadStats() // Refresh stats saat voting berlangsung
     }
   }, 30000)
 
@@ -1240,6 +1168,730 @@ onMounted(() => {
   })
 })
 </script>
+
+<style scoped>
+/* Status Flow Styles */
+.status-flow {
+  background: white;
+  padding: 1.5rem;
+  margin: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.flow-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  text-align: center;
+  padding: 1rem;
+  min-width: 120px;
+  opacity: 0.6;
+  transition: all 0.3s;
+}
+
+.flow-step.active {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.flow-step.completed {
+  opacity: 0.8;
+}
+
+.flow-step.completed .step-circle {
+  background: #10b981;
+  color: white;
+}
+
+.flow-step.active .step-circle {
+  background: #1e3a8a;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.2);
+}
+
+.step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin: 0 auto 0.5rem;
+  transition: all 0.3s;
+}
+
+.step-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.step-description {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.flow-arrow {
+  color: #9ca3af;
+  font-size: 1.5rem;
+}
+
+/* Session Card */
+.session-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.session-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.session-header h3 {
+  color: #1e3a8a;
+  margin-bottom: 0.5rem;
+}
+
+.session-meta {
+  display: flex;
+  gap: 1rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.session-year {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.session-status-display {
+  background: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.current-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.status-label {
+  font-weight: 600;
+  color: #374151;
+}
+
+.status-badge-large {
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+}
+
+.status-badge-large.draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.status-badge-large.pendaftaran {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge-large.voting {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge-large.selesai {
+  background: #d1fae5;
+  color: #065f46;
+  border: 2px solid #10b981;
+}
+
+/* Action Buttons */
+.action-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.action-btn {
+  padding: 1.5rem;
+  border: none;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: white;
+  text-decoration: none;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.btn-primary {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+}
+
+.action-btn.btn-success {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.action-btn.btn-warning {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+
+.action-btn.btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+
+.action-btn.btn-secondary {
+  background: linear-gradient(135deg, #4b5563, #6b7280);
+}
+
+.action-btn.btn-info {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+}
+
+.action-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.action-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.action-desc {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+/* Quick Info */
+.quick-info {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.info-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-card h5 {
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.info-card ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #1e40af;
+}
+
+.info-card li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+/* Token Controls */
+.token-controls {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.control-info {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+/* Quick Actions List */
+.quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.quick-action-btn {
+  padding: 1rem;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  text-align: left;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.quick-action-btn:hover {
+  border-color: #1e3a8a;
+  background: #f0f7ff;
+}
+
+/* Form Info */
+.form-info {
+  background: #f0f9ff;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  color: #0369a1;
+}
+
+.form-info ul {
+  margin: 0.5rem 0 0 1.5rem;
+}
+
+.form-info li {
+  margin-bottom: 0.25rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .status-flow {
+    margin: 1rem;
+    padding: 1rem;
+  }
+
+  .flow-container {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
+
+  .flow-step {
+    min-width: 100%;
+  }
+
+  .action-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .session-card {
+    padding: 1.5rem;
+    margin: 0 1rem;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .stats-overview {
+    grid-template-columns: 1fr 1fr;
+    padding: 1rem;
+  }
+}
+</style>
+
+<style scoped>
+/* Status Flow Styles */
+.status-flow {
+  background: white;
+  padding: 1.5rem;
+  margin: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.flow-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  text-align: center;
+  padding: 1rem;
+  min-width: 120px;
+  opacity: 0.6;
+  transition: all 0.3s;
+}
+
+.flow-step.active {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.flow-step.completed {
+  opacity: 0.8;
+}
+
+.flow-step.completed .step-circle {
+  background: #10b981;
+  color: white;
+}
+
+.flow-step.active .step-circle {
+  background: #1e3a8a;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.2);
+}
+
+.step-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin: 0 auto 0.5rem;
+  transition: all 0.3s;
+}
+
+.step-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.step-description {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.flow-arrow {
+  color: #9ca3af;
+  font-size: 1.5rem;
+}
+
+/* Session Card */
+.session-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.session-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f3f4f6;
+}
+
+.session-header h3 {
+  color: #1e3a8a;
+  margin-bottom: 0.5rem;
+}
+
+.session-meta {
+  display: flex;
+  gap: 1rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.session-year {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.session-status-display {
+  background: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.current-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.status-label {
+  font-weight: 600;
+  color: #374151;
+}
+
+.status-badge-large {
+  padding: 0.5rem 1.5rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+}
+
+.status-badge-large.draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.status-badge-large.pendaftaran {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge-large.voting {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge-large.selesai {
+  background: #d1fae5;
+  color: #065f46;
+  border: 2px solid #10b981;
+}
+
+/* Action Buttons */
+.action-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.action-btn {
+  padding: 1.5rem;
+  border: none;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: white;
+  text-decoration: none;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.btn-primary {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+}
+
+.action-btn.btn-success {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.action-btn.btn-warning {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+
+.action-btn.btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+
+.action-btn.btn-secondary {
+  background: linear-gradient(135deg, #4b5563, #6b7280);
+}
+
+.action-btn.btn-info {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+}
+
+.action-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.action-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.action-desc {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+/* Quick Info */
+.quick-info {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.info-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-card h5 {
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.info-card ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #1e40af;
+}
+
+.info-card li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+/* Token Controls */
+.token-controls {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.control-info {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+/* Quick Actions List */
+.quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.quick-action-btn {
+  padding: 1rem;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  text-align: left;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.quick-action-btn:hover {
+  border-color: #1e3a8a;
+  background: #f0f7ff;
+}
+
+/* Form Info */
+.form-info {
+  background: #f0f9ff;
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  color: #0369a1;
+}
+
+.form-info ul {
+  margin: 0.5rem 0 0 1.5rem;
+}
+
+.form-info li {
+  margin-bottom: 0.25rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .status-flow {
+    margin: 1rem;
+    padding: 1rem;
+  }
+
+  .flow-container {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+  }
+
+  .flow-step {
+    min-width: 100%;
+  }
+
+  .action-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .session-card {
+    padding: 1.5rem;
+    margin: 0 1rem;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .stats-overview {
+    grid-template-columns: 1fr 1fr;
+    padding: 1rem;
+  }
+}
+</style>
 
 <style scoped>
 /* Tambahkan CSS ini di bawah style yang sudah ada */
