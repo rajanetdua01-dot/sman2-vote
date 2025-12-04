@@ -26,11 +26,6 @@
 </template>
 
 <script setup>
-// Props gak perlu dideclare kalau gak dipakai di script
-// Tapi kita butuh props untuk activeSession dan adminUser
-// Jadi kita pakai tapi ESLint complain "unused"
-// Solusi: disable rule untuk line ini
-
 /* eslint-disable-next-line no-unused-vars */
 const props = defineProps({
   activeSession: Object,

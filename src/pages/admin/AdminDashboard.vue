@@ -1,737 +1,1675 @@
 <template>
   <div class="admin-dashboard">
-    <!-- Loading State -->
-    <div v-if="loading" class="loading-screen">
-      <div class="loader"></div>
-      <p>Memuat dashboard...</p>
-    </div>
-
-    <!-- Unauthorized State -->
-    <div v-else-if="!isAuthenticated" class="unauthorized">
-      <h2>⚠️ Akses Ditolak</h2>
-      <p>Anda tidak memiliki izin untuk mengakses halaman ini.</p>
-      <div class="action-buttons">
-        <router-link to="/admin-login" class="btn-login">Login sebagai Admin</router-link>
-        <router-link to="/" class="btn-home">Kembali ke Home</router-link>
+    <!-- Header -->
+    <div class="dashboard-header">
+      <div class="header-left">
+        <h1>Dashboard Admin</h1>
+        <p>Sesi: {{ activeSession?.nama_sesi || 'Tidak ada sesi' }}</p>
+      </div>
+      <div class="header-right">
+        <div class="admin-badge">
+          {{ adminUser?.nama_lengkap || 'Admin' }}
+        </div>
+        <button @click="logout" class="logout-btn">Logout</button>
       </div>
     </div>
 
-    <!-- Authorized Content -->
-    <div v-else class="dashboard-content">
-      <!-- Header -->
-      <AdminHeader :activeSession="activeSession" :adminUser="adminUser" @logout="handleLogout" />
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-content">
+          <h3>Total Guru</h3>
+          <p class="stat-number">{{ stats.totalGuru }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-content">
+          <h3>Sudah Voting</h3>
+          <p class="stat-number">{{ stats.votedCount }}</p>
+          <p class="stat-percentage">{{ stats.participationRate }}%</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🎫</div>
+        <div class="stat-content">
+          <h3>Token Tersedia</h3>
+          <p class="stat-number">{{ stats.availableTokens }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">👤</div>
+        <div class="stat-content">
+          <h3>Calon Menunggu</h3>
+          <p class="stat-number">{{ candidateStats.pending }}</p>
+        </div>
+      </div>
+    </div>
 
-      <!-- Stats Overview -->
-      <AdminStats :stats="stats" :activeSession="activeSession" />
+    <!-- Session Control -->
+    <div class="session-card">
+      <h2>Kontrol Sesi</h2>
 
-      <!-- Tabs Navigation -->
-      <AdminTabs
-        v-model="activeTab"
-        :candidateStats="candidateStats"
-        :tokenStats="{
-          availableTokens: stats.availableTokens,
-          totalTokens: stats.totalTokens,
-        }"
-      />
-
-      <!-- Tab Content -->
-      <div class="tab-content-wrapper">
-        <!-- Session Tab -->
-        <AdminSessionTab
-          v-if="activeTab === 'session'"
-          :activeSession="activeSession"
-          :stats="stats"
-          :loading="loading"
-          @open-create-modal="showCreateModal = true"
-          @confirm-action="confirmAction"
-          @switch-tab="switchTab"
-        />
-
-        <!-- Tokens Tab -->
-        <AdminTokensTab
-          v-if="activeTab === 'tokens'"
-          :activeSession="activeSession"
-          :stats="stats"
-          @refresh="refreshDashboardData"
-        />
-
-        <!-- Candidates Tab -->
-        <AdminCandidatesTab
-          v-if="activeTab === 'candidates'"
-          :activeSession="activeSession"
-          @refresh="refreshDashboardData"
-        />
-
-        <!-- Monitor Tab -->
-        <AdminMonitorTab v-if="activeTab === 'monitor'" :activeSession="activeSession" />
+      <div v-if="!activeSession" class="no-session">
+        <p>Belum ada sesi aktif</p>
+        <button @click="createSession" class="btn-primary">+ Buat Sesi Baru</button>
       </div>
 
-      <!-- Modals -->
-      <!-- Create Session Modal -->
-      <AdminModalCreate
-        v-if="showCreateModal"
-        @close="showCreateModal = false"
-        @create="createNewSession"
-      />
+      <div v-else class="session-info">
+        <div class="session-status">
+          <span class="status-badge" :class="activeSession.status">
+            {{ activeSession.status.toUpperCase() }}
+          </span>
+          <span class="session-name">{{ activeSession.nama_sesi }}</span>
+        </div>
 
-      <!-- Confirm Action Modal -->
-      <AdminModalConfirm
-        v-if="showConfirmModal"
-        :message="confirmMessage"
-        :loading="executingAction"
-        @close="showConfirmModal = false"
-        @confirm="executeAction"
-      />
+        <div class="session-actions">
+          <button
+            v-if="activeSession.status === 'draft'"
+            @click="updateSession('pendaftaran')"
+            class="action-btn btn-primary"
+          >
+            🚀 Buka Pendaftaran
+          </button>
+
+          <button
+            v-if="activeSession.status === 'pendaftaran'"
+            @click="openVoting"
+            class="action-btn btn-success"
+          >
+            🗳️ Buka Voting
+          </button>
+
+          <button
+            v-if="activeSession.status === 'voting'"
+            @click="updateSession('selesai')"
+            class="action-btn btn-warning"
+          >
+            ✅ Tutup Voting
+          </button>
+
+          <button
+            v-if="activeSession.status === 'selesai'"
+            @click="resetSession"
+            class="action-btn btn-danger"
+          >
+            🔄 Reset Sesi
+          </button>
+        </div>
+      </div>
     </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        :class="{ active: activeTab === tab.id }"
+        @click="activeTab = tab.id"
+        class="tab-btn"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Participants -->
+      <div v-if="activeTab === 'participants'" class="tab-pane">
+        <!-- HEADER DENGAN BUTTON TAMBAH YANG JELAS -->
+        <div class="pane-header">
+          <div class="pane-title">
+            <h3>👥 Data Guru</h3>
+            <span class="count-badge">{{ participants.length }} peserta</span>
+          </div>
+          <button @click="addParticipant" class="btn-add">
+            <span class="btn-icon">➕</span>
+            Tambah Peserta
+          </button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Nama</th>
+                <th>NIP</th>
+                <th>Status</th>
+                <th>Voting</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(p, index) in participants" :key="p.id">
+                <td class="text-center">{{ index + 1 }}</td>
+                <td class="name-cell">{{ p.nama_lengkap }}</td>
+                <td>
+                  <code class="nip">{{ p.nip }}</code>
+                </td>
+                <td>
+                  <span :class="['status-badge-small', p.is_active ? 'active' : 'inactive']">
+                    {{ p.is_active ? 'AKTIF' : 'NONAKTIF' }}
+                  </span>
+                </td>
+                <td class="vote-cell">
+                  <span :class="['vote-indicator', p.has_voted ? 'voted' : 'not-voted']">
+                    {{ p.has_voted ? '✅' : '⏳' }}
+                  </span>
+                </td>
+                <td>
+                  <div class="action-buttons">
+                    <button @click="editParticipant(p)" class="btn-action edit" title="Edit">
+                      ✏️ Edit
+                    </button>
+                    <button
+                      @click="toggleParticipant(p)"
+                      class="btn-action toggle"
+                      :title="p.is_active ? 'Nonaktifkan' : 'Aktifkan'"
+                    >
+                      {{ p.is_active ? '⏸️' : '▶️' }}
+                    </button>
+                    <button @click="deleteParticipant(p)" class="btn-action delete" title="Hapus">
+                      🗑️
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tokens -->
+      <div v-if="activeTab === 'tokens'" class="tab-pane">
+        <div class="pane-header">
+          <h3>🎫 Token Voting</h3>
+          <span class="count-badge">{{ tokens.length }} token</span>
+        </div>
+
+        <div v-if="tokens.length === 0" class="empty-state">
+          <div class="empty-icon">⏳</div>
+          <p>Belum ada token</p>
+          <p class="hint">Token akan dibuat otomatis saat status sesi berubah ke VOTING</p>
+        </div>
+        <div v-else class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Guru</th>
+                <th>Token</th>
+                <th>Status</th>
+                <th>Digunakan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(t, index) in tokens" :key="t.id">
+                <td class="text-center">{{ index + 1 }}</td>
+                <td>{{ t.pengguna?.nama_lengkap }}</td>
+                <td>
+                  <div class="token-cell">
+                    <code class="token">{{ t.token }}</code>
+                    <button @click="copyToken(t.token)" class="copy-btn" title="Salin token">
+                      📋
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <span :class="['token-status', t.sudah_digunakan ? 'used' : 'available']">
+                    {{ t.sudah_digunakan ? 'DIGUNAKAN' : 'TERSEDIA' }}
+                  </span>
+                </td>
+                <td>{{ t.digunakan_pada ? formatDate(t.digunakan_pada) : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Candidates -->
+      <div v-if="activeTab === 'candidates'" class="tab-pane">
+        <div class="pane-header">
+          <h3>👤 Verifikasi Calon</h3>
+          <span class="count-badge">{{ registrations.length }} pendaftaran</span>
+        </div>
+
+        <div v-if="registrations.length === 0" class="empty-state">
+          <div class="empty-icon">👥</div>
+          <p>Belum ada pendaftaran calon</p>
+          <p class="hint">Guru dapat mendaftar saat status sesi adalah PENDAFTARAN</p>
+        </div>
+        <div v-else>
+          <!-- Filter -->
+          <div class="filter-bar">
+            <select v-model="filterStatus" class="filter-select">
+              <option value="all">Semua Status</option>
+              <option value="menunggu">Menunggu</option>
+              <option value="disetujui">Disetujui</option>
+              <option value="ditolak">Ditolak</option>
+            </select>
+            <span class="filter-count">
+              {{ filteredRegistrations.length }} dari {{ registrations.length }}
+            </span>
+          </div>
+
+          <!-- Registrations List -->
+          <div class="registrations-list">
+            <div
+              v-for="r in filteredRegistrations"
+              :key="r.id"
+              class="registration-card"
+              :class="r.status"
+            >
+              <div class="candidate-info">
+                <div class="candidate-avatar">
+                  {{ getInitials(r.pengguna?.nama_lengkap) }}
+                </div>
+                <div class="candidate-details">
+                  <h4>{{ r.pengguna?.nama_lengkap }}</h4>
+                  <p class="candidate-nip">NIP: {{ r.pengguna?.nip }}</p>
+                  <p class="candidate-position">Jabatan: {{ formatJabatan(r.jabatan_diajukan) }}</p>
+                </div>
+              </div>
+
+              <div class="registration-right">
+                <div class="registration-status">
+                  <span :class="['status-badge', r.status]">
+                    {{ getStatusLabel(r.status) }}
+                  </span>
+                </div>
+
+                <div v-if="r.status === 'menunggu'" class="registration-actions">
+                  <button @click="approveCandidate(r)" class="btn-action approve">
+                    ✅ Setujui
+                  </button>
+                  <button @click="rejectCandidate(r)" class="btn-action reject">❌ Tolak</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Add Button for Mobile -->
+    <button v-if="activeTab === 'participants'" @click="addParticipant" class="floating-add-btn">
+      <span>➕</span>
+      <span>Tambah Peserta</span>
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
-// Components
-import AdminHeader from './AdminHeader.vue'
-import AdminStats from './AdminStats.vue'
-import AdminTabs from './AdminTabs.vue'
-import AdminSessionTab from './AdminSessionTab.vue'
-import AdminCandidatesTab from './AdminCandidatesTab.vue'
-import AdminTokensTab from './AdminTokensTab.vue'
-import AdminMonitorTab from './AdminMonitorTab.vue' // ✅ IMPORT MONITOR TAB
-import AdminModalCreate from './modals/AdminModalCreate.vue'
-import AdminModalConfirm from './modals/AdminModalConfirm.vue'
-
 const router = useRouter()
 
-// State
-const loading = ref(true)
-const isAuthenticated = ref(false)
+// Data
 const adminUser = ref(null)
-const activeTab = ref('session')
 const activeSession = ref(null)
+const activeTab = ref('participants')
+const filterStatus = ref('all')
+
+// Stats
 const stats = ref({
   totalGuru: 0,
   votedCount: 0,
   participationRate: 0,
-  totalTokens: 0,
-  usedTokens: 0,
   availableTokens: 0,
 })
-const candidateStats = ref({
-  pending: 0,
-  approved: 0,
-  rejected: 0,
-  total: 0,
+
+const candidateStats = ref({ pending: 0 })
+const participants = ref([])
+const tokens = ref([])
+const registrations = ref([])
+
+// Tabs
+const tabs = [
+  { id: 'participants', label: 'Peserta' },
+  { id: 'tokens', label: 'Token' },
+  { id: 'candidates', label: 'Calon' },
+]
+
+// Filtered registrations
+const filteredRegistrations = computed(() => {
+  if (filterStatus.value === 'all') return registrations.value
+  return registrations.value.filter((r) => r.status === filterStatus.value)
 })
 
-// Modal State
-const showCreateModal = ref(false)
-const showConfirmModal = ref(false)
-const confirmMessage = ref('')
-const pendingAction = ref(null)
-const executingAction = ref(false)
+// Initialize
+onMounted(async () => {
+  await checkAuth()
+  await loadAllData()
+})
 
-// Auto-refresh
-let refreshInterval = null
-let isRefreshing = false
-
-// Check Authentication
+// Check auth
 const checkAuth = async () => {
-  console.log('🔐 Checking admin authentication...')
-
-  const adminSession = localStorage.getItem('smanda_admin')
-
-  if (!adminSession) {
-    console.log('❌ No admin session found - Redirecting to login')
+  const session = localStorage.getItem('smanda_admin')
+  if (!session) {
     router.push('/admin-login')
-    loading.value = false
     return
   }
 
   try {
-    const session = JSON.parse(adminSession)
-
-    if (!session.user || session.type !== 'admin') {
-      console.log('❌ Invalid admin session structure')
-      localStorage.removeItem('smanda_admin')
-      router.push('/admin-login')
-      return
-    }
-
-    if (session.user.peran !== 'admin') {
-      console.log('❌ User does not have admin role:', session.user.peran)
-      localStorage.removeItem('smanda_admin')
-      router.push('/admin-login')
-      return
-    }
-
-    console.log('✅ Admin authenticated:', session.user.nama_lengkap)
-    adminUser.value = session.user
-    isAuthenticated.value = true
-
-    // Load data setelah auth berhasil
-    await loadDashboardData()
-  } catch (error) {
-    console.error('❌ Error parsing admin session:', error)
-    localStorage.removeItem('smanda_admin')
+    const data = JSON.parse(session)
+    adminUser.value = data.user
+  } catch {
     router.push('/admin-login')
   }
 }
 
-// Load Dashboard Data
-const loadDashboardData = async () => {
+// Load semua data
+const loadAllData = async () => {
   try {
-    // Load active session dulu
-    await loadActiveSession()
+    // Load semua paralel
+    const [sessionData, participantsData, tokensData, registrationsData] = await Promise.all([
+      loadSession(),
+      loadParticipants(),
+      loadTokens(),
+      loadRegistrations(),
+    ])
 
-    // Load stats
-    await loadStats()
+    activeSession.value = sessionData
+    participants.value = participantsData
+    tokens.value = tokensData
+    registrations.value = registrationsData
 
-    // Load candidate stats
-    await loadCandidateStats()
+    // Hitung stats
+    await calculateStats()
   } catch (error) {
-    console.error('Error loading dashboard data:', error)
-  } finally {
-    loading.value = false
+    console.error('Load error:', error)
   }
 }
 
-// Load Active Session
-const loadActiveSession = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
+// Load session
+const loadSession = async () => {
+  const { data } = await supabase
+    .from('sesi_pemilihan')
+    .select('*')
+    .order('dibuat_pada', { ascending: false })
+    .limit(1)
+    .single()
 
-    if (error) throw error
-
-    activeSession.value = data?.[0] || null
-  } catch (error) {
-    console.error('Error loading session:', error)
-    activeSession.value = null
-  }
+  return data
 }
 
-// Load Stats
-const loadStats = async () => {
-  try {
-    // Total guru
-    const { count: totalGuru, error: guruError } = await supabase
-      .from('pengguna')
-      .select('*', { count: 'exact', head: true })
-      .eq('peran', 'guru')
-      .eq('is_active', true)
+// Load participants
+const loadParticipants = async () => {
+  const { data } = await supabase
+    .from('pengguna')
+    .select('*')
+    .eq('peran', 'guru')
+    .order('nama_lengkap', { ascending: true })
 
-    if (guruError) throw guruError
-
-    // Total yang sudah voting (distinct pemilih)
-    let votedCount = 0
-    if (activeSession.value?.id) {
-      const { data: votingData, error: voteError } = await supabase
-        .from('suara')
-        .select('pemilih_id', { distinct: true })
-        .eq('is_draft', false)
-        .eq('sesi_id', activeSession.value.id)
-
-      if (voteError) throw voteError
-      votedCount = votingData?.length || 0
-    }
-
-    // Token stats
-    let totalTokens = 0
-    let usedTokens = 0
-    let availableTokens = 0
-
-    if (activeSession.value?.id) {
-      const { data: allTokens, error: tokenError } = await supabase
-        .from('token_qr')
-        .select('*')
-        .eq('sesi_id', activeSession.value.id)
-
-      if (tokenError) throw tokenError
-
-      totalTokens = allTokens?.length || 0
-      usedTokens = allTokens?.filter((t) => t.sudah_digunakan).length || 0
-      availableTokens = totalTokens - usedTokens
-    }
-
-    stats.value = {
-      totalGuru: totalGuru || 0,
-      votedCount,
-      participationRate: totalGuru ? Math.round((votedCount / totalGuru) * 100) : 0,
-      totalTokens,
-      usedTokens,
-      availableTokens,
-    }
-  } catch (error) {
-    console.error('Error loading stats:', error)
-  }
+  return data || []
 }
 
-// Load Candidate Stats
-const loadCandidateStats = async () => {
-  try {
-    let pending = 0
-    let approved = 0
-    let rejected = 0
-    let total = 0
+// Load tokens
+const loadTokens = async () => {
+  if (!activeSession.value?.id) return []
 
-    if (activeSession.value?.id) {
-      // Count pending registrations
-      const { data: pendingData } = await supabase
-        .from('pendaftaran_kandidat')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'menunggu')
-        .eq('sesi_id', activeSession.value.id)
+  const { data } = await supabase
+    .from('token_qr')
+    .select(
+      `
+      *,
+      pengguna:pengguna_id (nama_lengkap)
+    `,
+    )
+    .eq('sesi_id', activeSession.value.id)
+    .order('dibuat_pada', { ascending: false })
 
-      const { data: approvedData } = await supabase
-        .from('pendaftaran_kandidat')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'disetujui')
-        .eq('sesi_id', activeSession.value.id)
-
-      const { data: rejectedData } = await supabase
-        .from('pendaftaran_kandidat')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'ditolak')
-        .eq('sesi_id', activeSession.value.id)
-
-      const { data: totalData } = await supabase
-        .from('pendaftaran_kandidat')
-        .select('*', { count: 'exact', head: true })
-        .eq('sesi_id', activeSession.value.id)
-
-      pending = pendingData?.count || 0
-      approved = approvedData?.count || 0
-      rejected = rejectedData?.count || 0
-      total = totalData?.count || 0
-    }
-
-    candidateStats.value = {
-      pending,
-      approved,
-      rejected,
-      total,
-    }
-  } catch (error) {
-    console.error('Error loading candidate stats:', error)
-  }
+  return data || []
 }
 
-// Create New Session
-const createNewSession = async (sessionData) => {
-  if (!sessionData.nama_sesi || !sessionData.tahun_ajaran) return
+// Load registrations
+const loadRegistrations = async () => {
+  if (!activeSession.value?.id) return []
 
-  executingAction.value = true
+  const { data } = await supabase
+    .from('pendaftaran_kandidat')
+    .select(
+      `
+      *,
+      pengguna:pengguna_id (nama_lengkap, nip)
+    `,
+    )
+    .eq('sesi_id', activeSession.value.id)
+    .order('dibuat_pada', { ascending: false })
+
+  return data || []
+}
+
+// Calculate stats
+const calculateStats = async () => {
+  // Total guru
+  const totalGuru = participants.value.length
+
+  // Count votes
+  let votedCount = 0
+  if (activeSession.value?.id) {
+    const { data: votes } = await supabase
+      .from('suara')
+      .select('pemilih_id', { distinct: true })
+      .eq('sesi_id', activeSession.value.id)
+      .eq('is_draft', false)
+
+    votedCount = votes?.length || 0
+  }
+
+  // Count pending candidates
+  const pending = registrations.value.filter((r) => r.status === 'menunggu').length
+
+  // Token stats
+  const availableTokens = tokens.value.filter((t) => !t.sudah_digunakan).length
+
+  stats.value = {
+    totalGuru,
+    votedCount,
+    participationRate: totalGuru ? Math.round((votedCount / totalGuru) * 100) : 0,
+    availableTokens,
+  }
+
+  candidateStats.value = { pending }
+}
+
+// ===== CRUD PARTICIPANTS =====
+
+// Tambah peserta baru
+const addParticipant = async () => {
+  const nama = prompt('Nama lengkap peserta:')
+  if (!nama || nama.trim() === '') return
+
+  const nip = prompt('NIP peserta:')
+  if (!nip || nip.trim() === '') return
+
+  // Check NIP unik
+  const { data: existing } = await supabase
+    .from('pengguna')
+    .select('id')
+    .eq('nip', nip.trim())
+    .single()
+
+  if (existing) {
+    alert('❌ NIP sudah terdaftar!')
+    return
+  }
 
   try {
-    const now = new Date()
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-    const { error } = await supabase.from('sesi_pemilihan').insert({
-      nama_sesi: sessionData.nama_sesi,
-      tahun_ajaran: sessionData.tahun_ajaran,
-      waktu_mulai_pendaftaran: now,
-      waktu_selesai_pendaftaran: nextWeek,
-      waktu_mulai_voting: nextWeek,
-      waktu_selesai_voting: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000),
-      status: 'draft',
-      dibuat_oleh: adminUser.value.id,
+    const { error } = await supabase.from('pengguna').insert({
+      nip: nip.trim(),
+      nama_lengkap: nama.trim(),
+      peran: 'guru',
+      tanggal_lahir: '2000-01-01',
+      is_active: true,
     })
 
     if (error) throw error
 
-    showCreateModal.value = false
-    await loadDashboardData()
+    await loadAllData()
+    alert('✅ Peserta berhasil ditambahkan!')
   } catch (error) {
-    console.error('Error creating session:', error)
-    alert('Gagal membuat sesi: ' + error.message)
-  } finally {
-    executingAction.value = false
+    alert('❌ Gagal menambah peserta: ' + error.message)
   }
 }
 
-// Confirm Action
-const confirmAction = (action) => {
-  const messages = {
-    bukaPendaftaran: 'Buka pendaftaran? Guru bisa daftar sebagai calon kandidat.',
-    bukaVoting: 'Buka voting? Token 6 digit akan otomatis dibuat untuk semua guru.',
-    tutupVoting: 'Tutup voting? Voting akan dihentikan dan hasil menjadi final.',
-    resetSesi: 'Reset sesi? Semua data (token, voting) akan dihapus dan status kembali ke DRAFT.',
-  }
+// Edit peserta
+const editParticipant = async (participant) => {
+  const newNama = prompt('Edit Nama:', participant.nama_lengkap)
+  if (newNama === null || newNama.trim() === '') return
 
-  if (!messages[action]) {
-    console.error('Unknown action:', action)
-    return
-  }
+  const newNIP = prompt('Edit NIP:', participant.nip)
+  if (newNIP === null || newNIP.trim() === '') return
 
-  confirmMessage.value = messages[action]
-  pendingAction.value = action
-  showConfirmModal.value = true
-}
+  // Check NIP unik (kalo berubah)
+  if (newNIP !== participant.nip) {
+    const { data: existing } = await supabase
+      .from('pengguna')
+      .select('id')
+      .eq('nip', newNIP.trim())
+      .neq('id', participant.id)
+      .single()
 
-// Execute Action
-const executeAction = async () => {
-  if (!pendingAction.value) return
-
-  executingAction.value = true
-
-  try {
-    switch (pendingAction.value) {
-      case 'bukaPendaftaran':
-        await updateSessionStatus('pendaftaran')
-        break
-
-      case 'bukaVoting':
-        await updateSessionStatus('voting')
-        // Auto generate tokens when opening voting
-        await generateTokensForAllGuru()
-        break
-
-      case 'tutupVoting':
-        await updateSessionStatus('selesai')
-        break
-
-      case 'resetSesi':
-        await resetSessionData()
-        await updateSessionStatus('draft')
-        break
+    if (existing) {
+      alert('❌ NIP sudah digunakan peserta lain!')
+      return
     }
-
-    // Refresh data
-    await loadDashboardData()
-  } catch (error) {
-    console.error('Error in action:', pendingAction.value, error)
-    alert('Gagal: ' + error.message)
-  } finally {
-    executingAction.value = false
-    showConfirmModal.value = false
-    pendingAction.value = null
   }
-}
-
-// Update Session Status
-const updateSessionStatus = async (status) => {
-  if (!activeSession.value) return
 
   try {
     const { error } = await supabase
-      .from('sesi_pemilihan')
+      .from('pengguna')
       .update({
-        status,
+        nama_lengkap: newNama.trim(),
+        nip: newNIP.trim(),
         diperbarui_pada: new Date().toISOString(),
       })
-      .eq('id', activeSession.value.id)
+      .eq('id', participant.id)
 
     if (error) throw error
 
-    // Update local state
-    activeSession.value.status = status
+    // Update local data
+    participant.nama_lengkap = newNama.trim()
+    participant.nip = newNIP.trim()
+
+    alert('✅ Data peserta berhasil diperbarui!')
   } catch (error) {
-    console.error('Error updating session status:', error)
-    throw error
+    alert('❌ Gagal update: ' + error.message)
   }
 }
 
-// Generate Tokens for All Guru
-const generateTokensForAllGuru = async () => {
-  if (!activeSession.value) {
-    alert('Tidak ada sesi aktif')
-    return
+// Toggle status aktif/nonaktif
+const toggleParticipant = async (participant) => {
+  const action = participant.is_active ? 'menonaktifkan' : 'mengaktifkan'
+  if (!confirm(`${action} ${participant.nama_lengkap}?`)) return
+
+  try {
+    const { error } = await supabase
+      .from('pengguna')
+      .update({
+        is_active: !participant.is_active,
+        diperbarui_pada: new Date().toISOString(),
+      })
+      .eq('id', participant.id)
+
+    if (error) throw error
+
+    participant.is_active = !participant.is_active
+    alert(`✅ Status ${participant.nama_lengkap} berhasil diubah!`)
+  } catch (error) {
+    alert('❌ Gagal mengubah status: ' + error.message)
+  }
+}
+
+// Hapus peserta
+const deleteParticipant = async (participant) => {
+  if (!confirm(`Hapus ${participant.nama_lengkap}? Data akan dihapus permanen!`)) return
+
+  // Cek apakah sudah voting
+  if (participant.has_voted) {
+    if (!confirm('⚠️ Peserta ini sudah voting. Yakin tetap menghapus?')) return
   }
 
   try {
-    // Get all active teachers
-    const { data: allGuru, error: guruError } = await supabase
-      .from('pengguna')
-      .select('id, nama_lengkap')
-      .eq('peran', 'guru')
-      .eq('is_active', true)
+    const { error } = await supabase.from('pengguna').delete().eq('id', participant.id)
 
-    if (guruError) throw guruError
+    if (error) throw error
 
-    if (!allGuru || allGuru.length === 0) {
-      alert('Tidak ada data guru aktif')
-      return
-    }
+    await loadAllData()
+    alert('✅ Peserta berhasil dihapus!')
+  } catch (error) {
+    alert('❌ Gagal menghapus: ' + error.message)
+  }
+}
 
-    // Delete old tokens for this session
-    const { error: deleteError } = await supabase
-      .from('token_qr')
-      .delete()
-      .eq('sesi_id', activeSession.value.id)
+// ===== SESSION ACTIONS =====
+const createSession = async () => {
+  const namaSesi = prompt('Nama sesi baru:')
+  const tahunAjaran = prompt('Tahun ajaran:')
 
-    if (deleteError) throw deleteError
+  if (!namaSesi || !tahunAjaran) return
 
-    // Generate unique tokens
+  const { error } = await supabase.from('sesi_pemilihan').insert({
+    nama_sesi: namaSesi,
+    tahun_ajaran: tahunAjaran,
+    status: 'draft',
+    dibuat_oleh: adminUser.value.id,
+  })
+
+  if (error) {
+    alert('❌ Gagal membuat sesi: ' + error.message)
+    return
+  }
+
+  await loadAllData()
+  alert('✅ Sesi berhasil dibuat!')
+}
+
+const updateSession = async (status) => {
+  if (!activeSession.value) return
+
+  const confirmMsg = {
+    pendaftaran: 'Buka pendaftaran calon?',
+    voting: 'Buka voting?',
+    selesai: 'Tutup voting?',
+  }[status]
+
+  if (!confirm(confirmMsg)) return
+
+  const { error } = await supabase
+    .from('sesi_pemilihan')
+    .update({ status })
+    .eq('id', activeSession.value.id)
+
+  if (error) {
+    alert('❌ Gagal: ' + error.message)
+    return
+  }
+
+  activeSession.value.status = status
+  alert('✅ Berhasil!')
+}
+
+const openVoting = async () => {
+  if (!confirm('Buka voting dan generate token untuk semua guru?')) return
+
+  // Update status
+  await updateSession('voting')
+
+  // Generate tokens
+  await generateTokens()
+}
+
+const generateTokens = async () => {
+  try {
+    // Generate untuk semua guru
     const tokensToInsert = []
-    const existingTokens = new Set()
-
-    for (const guru of allGuru) {
-      let token
-      let attempts = 0
-      const maxAttempts = 50
-
-      // Generate unique token
-      while (attempts < maxAttempts) {
-        token = generate6DigitToken(existingTokens)
-
-        // Check in database
-        const { data: existing } = await supabase
-          .from('token_qr')
-          .select('token')
-          .eq('token', token)
-          .limit(1)
-
-        if (!existing || existing.length === 0) {
-          existingTokens.add(token)
-          break
-        }
-        attempts++
-      }
-
-      // Fallback if no unique token found
-      if (!token) {
-        token = Math.floor(100000 + Math.random() * 900000).toString()
-      }
-
+    for (const guru of participants.value) {
+      const token = Math.floor(100000 + Math.random() * 900000).toString()
       tokensToInsert.push({
         pengguna_id: guru.id,
         sesi_id: activeSession.value.id,
         token: token,
         tipe_token: 'voting',
         kadaluarsa_pada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        sudah_digunakan: false,
-        dibuat_oleh: adminUser.value.id,
       })
     }
 
-    // Insert in batches
-    const batchSize = 100
-    for (let i = 0; i < tokensToInsert.length; i += batchSize) {
-      const batch = tokensToInsert.slice(i, i + batchSize)
-      const { error: insertError } = await supabase.from('token_qr').insert(batch)
+    // Insert semua token
+    const { error } = await supabase.from('token_qr').insert(tokensToInsert)
 
-      if (insertError) {
-        console.error('Batch insert error:', insertError)
-        throw insertError
-      }
-    }
+    if (error) throw error
 
-    console.log(`Generated ${allGuru.length} tokens`)
+    await loadTokens()
+    alert(`✅ ${participants.value.length} token berhasil dibuat!`)
   } catch (error) {
-    console.error('Error generating tokens:', error)
-    alert('Gagal generate token: ' + error.message)
-    throw error
+    alert('❌ Gagal generate token: ' + error.message)
   }
 }
 
-// Generate 6 Digit Token
-const generate6DigitToken = (existingTokens = new Set()) => {
-  const maxAttempts = 30
-
-  for (let attempts = 0; attempts < maxAttempts; attempts++) {
-    const token = Math.floor(100000 + Math.random() * 900000).toString()
-
-    // Check for bad patterns
-    const allSame = /^(\d)\1{5}$/.test(token) // 111111
-    const isSequential = '01234567890123456789'.includes(token) // 123456
-    const isReverse = '98765432109876543210987654'.includes(token) // 654321
-
-    if (allSame || isSequential || isReverse) {
-      continue
-    }
-
-    // Check if already in this batch
-    if (existingTokens.has(token)) {
-      continue
-    }
-
-    return token
-  }
-
-  // Fallback
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
-// Reset Session Data
-const resetSessionData = async () => {
-  if (!activeSession.value) return
+const resetSession = async () => {
+  if (!confirm('Reset sesi? Semua data voting akan dihapus.')) return
 
   try {
-    // Delete all related data
-    const deletePromises = [
-      supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id),
-      supabase.from('pendaftaran_kandidat').delete().eq('sesi_id', activeSession.value.id),
-      supabase.from('suara').delete().eq('sesi_id', activeSession.value.id),
-      supabase.from('kandidat').delete().eq('sesi_id', activeSession.value.id),
-    ]
+    if (activeSession.value?.id) {
+      await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
+      await supabase.from('suara').delete().eq('sesi_id', activeSession.value.id)
+    }
 
-    await Promise.all(deletePromises)
+    await updateSession('draft')
+    alert('✅ Sesi berhasil direset!')
   } catch (error) {
-    console.error('Error resetting session data:', error)
-    throw error
+    alert('❌ Gagal reset: ' + error.message)
   }
 }
 
-// Switch Tab
-const switchTab = (tabId) => {
-  activeTab.value = tabId
+// ===== CANDIDATE ACTIONS =====
+const approveCandidate = async (r) => {
+  if (!confirm(`Setujui ${r.pengguna?.nama_lengkap} sebagai calon?`)) return
+
+  try {
+    const { error } = await supabase
+      .from('pendaftaran_kandidat')
+      .update({
+        status: 'disetujui',
+        ditinjau_pada: new Date().toISOString(),
+      })
+      .eq('id', r.id)
+
+    if (error) throw error
+
+    r.status = 'disetujui'
+    candidateStats.value.pending--
+    alert('✅ Calon berhasil disetujui!')
+  } catch (error) {
+    alert('❌ Gagal: ' + error.message)
+  }
 }
 
-// Refresh Dashboard Data
-const refreshDashboardData = async () => {
-  console.log('🔄 Refreshing dashboard data...')
-  await loadDashboardData()
+const rejectCandidate = async (r) => {
+  const reason = prompt('Alasan penolakan:')
+  if (!reason) return
+
+  try {
+    const { error } = await supabase
+      .from('pendaftaran_kandidat')
+      .update({
+        status: 'ditolak',
+        alasan_ditolak: reason,
+        ditinjau_pada: new Date().toISOString(),
+      })
+      .eq('id', r.id)
+
+    if (error) throw error
+
+    r.status = 'ditolak'
+    candidateStats.value.pending--
+    alert('✅ Calon berhasil ditolak!')
+  } catch (error) {
+    alert('❌ Gagal: ' + error.message)
+  }
 }
 
-// Handle Logout
-const handleLogout = () => {
+// ===== HELPERS =====
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  return new Date(dateString).toLocaleDateString('id-ID')
+}
+
+const formatJabatan = (jabatan) => {
+  const map = {
+    humas: 'Waka Humas',
+    sarpras: 'Waka Sarana Prasarana',
+    kesiswaan: 'Waka Kesiswaan',
+    kurikulum: 'Waka Kurikulum',
+  }
+  return map[jabatan] || jabatan
+}
+
+const getInitials = (name) => {
+  if (!name) return '??'
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
+}
+
+const getStatusLabel = (status) => {
+  const map = {
+    menunggu: 'MENUNGGU',
+    disetujui: 'DISETUJUI',
+    ditolak: 'DITOLAK',
+  }
+  return map[status] || status
+}
+
+const copyToken = (token) => {
+  navigator.clipboard.writeText(token)
+  alert('Token disalin: ' + token)
+}
+
+// Logout
+const logout = () => {
   localStorage.removeItem('smanda_admin')
   router.push('/admin-login')
 }
-
-// Lifecycle
-onMounted(async () => {
-  await checkAuth()
-
-  // Auto refresh setiap 30 detik untuk sesi voting
-  refreshInterval = setInterval(async () => {
-    if (isAuthenticated.value && activeSession.value?.status === 'voting' && !isRefreshing) {
-      isRefreshing = true
-      try {
-        await loadStats()
-        await loadCandidateStats()
-      } catch (error) {
-        console.warn('Auto-refresh failed:', error)
-      } finally {
-        isRefreshing = false
-      }
-    }
-  }, 30000)
-})
-
-onUnmounted(() => {
-  if (refreshInterval) clearInterval(refreshInterval)
-})
 </script>
 
 <style scoped>
+/* ===== DASHBOARD STYLES ===== */
 .admin-dashboard {
-  min-height: 100vh;
-  background: #f8f9fa;
   padding: 1rem;
+  background: #f8fafc;
+  min-height: 100vh;
 }
 
-/* Loading & Unauthorized States */
-.loading-screen,
-.unauthorized {
+/* Header */
+.dashboard-header {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  gap: 1rem;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
 }
 
-.loader {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #1e3a8a;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
+.header-left h1 {
+  margin: 0 0 0.5rem 0;
+  color: #1e3a8a;
+  font-size: 1.8rem;
 }
 
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+.header-left p {
+  margin: 0;
+  color: #64748b;
+  font-size: 1rem;
 }
 
-.unauthorized h2 {
-  color: #dc2626;
-  margin-bottom: 1rem;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.btn-login,
-.btn-home {
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.3s;
-}
-
-.btn-login {
+/* Admin badge - HIGH CONTRAST */
+.admin-badge {
   background: #1e3a8a;
   color: white;
+  font-weight: bold;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3);
 }
 
-.btn-home {
-  background: #6b7280;
+.logout-btn {
+  background: #dc2626;
   color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.btn-login:hover,
-.btn-home:hover {
-  opacity: 0.9;
+.logout-btn:hover {
+  background: #b91c1b;
   transform: translateY(-1px);
 }
 
-/* Dashboard Content */
-.dashboard-content {
-  max-width: 1400px;
-  margin: 0 auto;
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.stat-content h3 {
+  margin: 0 0 0.5rem 0;
+  color: #64748b;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.stat-number {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1e3a8a;
+  line-height: 1;
+}
+
+.stat-percentage {
+  margin: 0.25rem 0 0 0;
+  color: #10b981;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Session Card */
+.session-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.session-card h2 {
+  margin: 0 0 1rem 0;
+  color: #1e3a8a;
+  font-size: 1.3rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.session-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.status-badge.draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.status-badge.pendaftaran {
+  background: #fef3c7;
+  color: #92400e;
+}
+.status-badge.voting {
+  background: #d1fae5;
+  color: #065f46;
+}
+.status-badge.selesai {
+  background: #dcfce7;
+  color: #166534;
+  border: 2px solid #22c55e;
+}
+.status-badge.menunggu {
+  background: #fef3c7;
+  color: #92400e;
+}
+.status-badge.disetujui {
+  background: #d1fae5;
+  color: #065f46;
+}
+.status-badge.ditolak {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.session-name {
+  color: #374151;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary {
+  background: #1e3a8a;
+  color: white;
+}
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+.btn-warning {
+  background: #f59e0b;
+  color: white;
+}
+.btn-danger {
+  background: #dc2626;
+  color: white;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: white;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  border-bottom: none;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 1rem;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #64748b;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #f1f5f9;
+  color: #1e3a8a;
+}
+
+.tab-btn.active {
+  background: white;
+  color: #1e3a8a;
+  border-bottom: 3px solid #1e3a8a;
 }
 
 /* Tab Content */
-.tab-content-wrapper {
+.tab-content {
   background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  border-top: none;
   min-height: 400px;
 }
 
-/* Responsive */
+/* Pane Header */
+.pane-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.pane-header h3 {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.count-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* BUTTON TAMBAH PESERTA - JELAS BANGET */
+.btn-add {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s;
+  border: 2px solid white;
+}
+
+.btn-add:hover {
+  background: linear-gradient(135deg, #0da271, #10b981);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-icon {
+  font-size: 1.2rem;
+}
+
+/* ===== TABLE STYLES - FULL WIDTH ===== */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+th {
+  background: #f8fafc;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+
+td {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
+  vertical-align: middle;
+}
+
+tr:hover {
+  background: #f9fafb;
+}
+
+/* Column widths */
+th:nth-child(1),
+td:nth-child(1) {
+  width: 60px;
+} /* No */
+th:nth-child(2),
+td:nth-child(2) {
+  width: 25%;
+} /* Nama */
+th:nth-child(3),
+td:nth-child(3) {
+  width: 20%;
+} /* NIP */
+th:nth-child(4),
+td:nth-child(4) {
+  width: 15%;
+} /* Status */
+th:nth-child(5),
+td:nth-child(5) {
+  width: 10%;
+} /* Voting */
+th:nth-child(6),
+td:nth-child(6) {
+  width: 30%;
+} /* Aksi */
+
+.text-center {
+  text-align: center;
+}
+
+/* Nama cell */
+.name-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+  font-weight: 500;
+  color: #1e3a8a;
+}
+
+/* NIP & Token */
+.nip,
+.token {
+  font-family: 'SF Mono', 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #4b5563;
+  background: #f1f5f9;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.token-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.7;
+  padding: 0.25rem;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+}
+
+/* Status badges */
+.status-badge-small {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge-small.active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge-small.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* Vote indicator */
+.vote-indicator {
+  font-size: 1.2rem;
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vote-indicator.voted {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.vote-indicator.not-voted {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Token status */
+.token-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.token-status.available {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.token-status.used {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-action {
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-action:hover {
+  transform: translateY(-1px);
+}
+
+.btn-action.edit {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.btn-action.toggle {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.btn-action.delete {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.btn-action.approve {
+  background: #10b981;
+  color: white;
+  border: 1px solid #0da271;
+}
+
+.btn-action.reject {
+  background: #ef4444;
+  color: white;
+  border: 1px solid #dc2626;
+}
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.filter-select {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.95rem;
+}
+
+.filter-count {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* Registrations */
+.registrations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.registration-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  transition: all 0.2s;
+}
+
+.registration-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.registration-card.menunggu {
+  border-left: 4px solid #f59e0b;
+}
+
+.registration-card.disetujui {
+  border-left: 4px solid #10b981;
+}
+
+.registration-card.ditolak {
+  border-left: 4px solid #ef4444;
+}
+
+.candidate-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.candidate-avatar {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.candidate-details h4 {
+  margin: 0 0 0.25rem 0;
+  color: #1e3a8a;
+  font-size: 1.1rem;
+}
+
+.candidate-nip,
+.candidate-position {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.candidate-position {
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.registration-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.registration-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #64748b;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.hint {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+/* Floating Add Button */
+.floating-add-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+  border: none;
+  padding: 1rem 1.5rem;
+  border-radius: 50px;
+  font-weight: bold;
+  font-size: 1rem;
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
+  z-index: 1000;
+  border: 3px solid white;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: none; /* Hide by default, show on mobile */
+}
+
+.floating-add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(30, 58, 138, 0.5);
+}
+
+/* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   .admin-dashboard {
     padding: 0.5rem;
   }
 
-  .tab-content-wrapper {
-    padding: 1.5rem;
+  .dashboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    padding: 1.25rem;
+  }
+
+  .pane-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .pane-title {
+    justify-content: space-between;
+  }
+
+  .btn-add {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .session-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    min-width: calc(50% - 1px);
+    font-size: 0.9rem;
+    padding: 0.75rem 0.5rem;
+  }
+
+  .tab-content {
+    padding: 1rem;
+  }
+
+  /* Table responsive */
+  .table-container {
+    margin: 0 -0.5rem;
+    width: calc(100% + 1rem);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Adjust column widths for mobile */
+  th:nth-child(1),
+  td:nth-child(1) {
+    width: 50px;
+  }
+  th:nth-child(2),
+  td:nth-child(2) {
+    width: 22%;
+    max-width: 150px;
+  }
+  th:nth-child(3),
+  td:nth-child(3) {
+    width: 25%;
+  }
+  th:nth-child(4),
+  td:nth-child(4) {
+    width: 18%;
+  }
+  th:nth-child(5),
+  td:nth-child(5) {
+    width: 10%;
+  }
+  th:nth-child(6),
+  td:nth-child(6) {
+    width: 25%;
   }
 
   .action-buttons {
     flex-direction: column;
-    width: 100%;
-    max-width: 300px;
+    gap: 0.25rem;
   }
 
-  .btn-login,
-  .btn-home {
+  .btn-action {
     width: 100%;
-    text-align: center;
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  /* Show floating button on mobile */
+  .floating-add-btn {
+    display: flex;
+  }
+
+  /* Registration card responsive */
+  .registration-card {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .registration-right {
+    align-items: stretch;
+  }
+
+  .registration-actions {
+    justify-content: stretch;
+  }
+
+  .btn-action.approve,
+  .btn-action.reject {
+    flex: 1;
+    justify-content: center;
   }
 }
 
 @media (max-width: 480px) {
-  .tab-content-wrapper {
-    padding: 1rem;
+  .tab-btn {
+    min-width: 100%;
+    font-size: 0.85rem;
+    padding: 0.75rem;
+  }
+
+  .admin-badge {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+
+  .logout-btn {
+    padding: 0.5rem 1rem;
+  }
+
+  .floating-add-btn {
+    bottom: 1rem;
+    right: 1rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
   }
 }
 </style>
