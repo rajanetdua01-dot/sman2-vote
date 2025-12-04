@@ -1,303 +1,167 @@
 <template>
-  <div class="admin-dashboard">
+  <div class="simple-dashboard">
     <!-- Header -->
-    <div class="dashboard-header">
-      <div class="header-left">
-        <h1>Dashboard Admin</h1>
-        <p>Sesi: {{ activeSession?.nama_sesi || 'Tidak ada sesi' }}</p>
-      </div>
-      <div class="header-right">
-        <div class="admin-badge">
-          {{ adminUser?.nama_lengkap || 'Admin' }}
-        </div>
-        <button @click="logout" class="logout-btn">Logout</button>
+    <div class="header">
+      <h1>🚀 Admin SMANDA VOTE</h1>
+      <div class="session-info">
+        <span class="session-label">Sesi:</span>
+        <span class="session-name">{{ activeSession?.nama_sesi || 'Tidak ada sesi' }}</span>
+        <span v-if="activeSession" :class="['session-status', activeSession.status]">
+          {{ activeSession.status.toUpperCase() }}
+        </span>
       </div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon">👥</div>
-        <div class="stat-content">
-          <h3>Total Guru</h3>
-          <p class="stat-number">{{ stats.totalGuru }}</p>
-        </div>
+    <!-- Admin Info -->
+    <div class="admin-card">
+      <div class="admin-avatar">{{ getInitials(adminUser?.nama_lengkap) }}</div>
+      <div class="admin-details">
+        <h3 class="text-black">{{ adminUser?.nama_lengkap || 'Admin' }}</h3>
+        <p class="text-dark">Administrator</p>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon">✅</div>
-        <div class="stat-content">
-          <h3>Sudah Voting</h3>
-          <p class="stat-number">{{ stats.votedCount }}</p>
-          <p class="stat-percentage">{{ stats.participationRate }}%</p>
-        </div>
+      <button @click="logout" class="logout-btn">Logout</button>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+      <div class="stat">
+        <div class="stat-number">{{ stats.totalGuru }}</div>
+        <div class="stat-label text-black">Total Guru</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon">🎫</div>
-        <div class="stat-content">
-          <h3>Token Tersedia</h3>
-          <p class="stat-number">{{ stats.availableTokens }}</p>
-        </div>
+      <div class="stat">
+        <div class="stat-number">{{ stats.votedCount }}</div>
+        <div class="stat-label text-black">Sudah Voting</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon">👤</div>
-        <div class="stat-content">
-          <h3>Calon Menunggu</h3>
-          <p class="stat-number">{{ candidateStats.pending }}</p>
+      <div class="stat">
+        <div class="stat-number">{{ stats.totalKandidat }}</div>
+        <div class="stat-label text-black">Total Calon</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">{{ stats.totalTokens }}</div>
+        <div class="stat-label text-black">Total Token</div>
+      </div>
+    </div>
+
+    <!-- Main Menu -->
+    <div class="main-menu">
+      <h2 class="text-black">📁 Menu Admin</h2>
+      <div class="menu-grid">
+        <!-- Data Peserta -->
+        <div class="menu-card" @click="goToPeserta">
+          <div class="menu-icon">👥</div>
+          <div class="menu-content">
+            <h3 class="text-black">Data Peserta</h3>
+            <p class="text-dark">Kelola data guru</p>
+            <div class="menu-count">{{ stats.totalGuru }} peserta</div>
+          </div>
+        </div>
+
+        <!-- Token Voting -->
+        <div class="menu-card" @click="goToToken">
+          <div class="menu-icon">🎫</div>
+          <div class="menu-content">
+            <h3 class="text-black">Token Voting</h3>
+            <p class="text-dark">Generate token voting</p>
+            <div class="menu-count">{{ stats.totalTokens }} token</div>
+          </div>
+        </div>
+
+        <!-- Data Kandidat -->
+        <div class="menu-card" @click="goToKandidat">
+          <div class="menu-icon">👤</div>
+          <div class="menu-content">
+            <h3 class="text-black">Data Kandidat</h3>
+            <p class="text-dark">Kelola calon</p>
+            <div class="menu-count">{{ stats.totalKandidat }} calon</div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Session Control -->
-    <div class="session-card">
-      <h2>Kontrol Sesi</h2>
+    <div class="session-control">
+      <h2 class="text-black">⚙️ Kontrol Sesi</h2>
 
       <div v-if="!activeSession" class="no-session">
-        <p>Belum ada sesi aktif</p>
-        <button @click="createSession" class="btn-primary">+ Buat Sesi Baru</button>
+        <p class="text-black">Belum ada sesi aktif</p>
+        <button @click="createSession" class="btn-create">🚀 Buat Sesi Baru</button>
       </div>
 
-      <div v-else class="session-info">
-        <div class="session-status">
-          <span class="status-badge" :class="activeSession.status">
-            {{ activeSession.status.toUpperCase() }}
-          </span>
-          <span class="session-name">{{ activeSession.nama_sesi }}</span>
+      <div v-else class="session-card">
+        <div class="session-header">
+          <h3 class="text-black">{{ activeSession.nama_sesi }}</h3>
+          <div :class="['phase-badge', activeSession.status]">
+            {{ formatPhase(activeSession.status) }}
+          </div>
         </div>
 
         <div class="session-actions">
+          <!-- DRAFT → PENDAFTARAN -->
           <button
             v-if="activeSession.status === 'draft'"
             @click="updateSession('pendaftaran')"
-            class="action-btn btn-primary"
+            class="btn-phase draft"
           >
             🚀 Buka Pendaftaran
           </button>
 
+          <!-- PENDAFTARAN → VOTING -->
           <button
             v-if="activeSession.status === 'pendaftaran'"
             @click="openVoting"
-            class="action-btn btn-success"
+            :disabled="!canOpenVoting"
+            class="btn-phase pendaftaran"
           >
             🗳️ Buka Voting
           </button>
 
+          <!-- VOTING → SELESAI -->
           <button
             v-if="activeSession.status === 'voting'"
             @click="updateSession('selesai')"
-            class="action-btn btn-warning"
+            class="btn-phase voting"
           >
             ✅ Tutup Voting
           </button>
 
+          <!-- SELESAI → RESET -->
           <button
             v-if="activeSession.status === 'selesai'"
             @click="resetSession"
-            class="action-btn btn-danger"
+            class="btn-phase selesai"
           >
             🔄 Reset Sesi
           </button>
         </div>
-      </div>
-    </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        :class="{ active: activeTab === tab.id }"
-        @click="activeTab = tab.id"
-        class="tab-btn"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
-
-    <!-- Tab Content -->
-    <div class="tab-content">
-      <!-- Participants -->
-      <div v-if="activeTab === 'participants'" class="tab-pane">
-        <!-- HEADER DENGAN BUTTON TAMBAH YANG JELAS -->
-        <div class="pane-header">
-          <div class="pane-title">
-            <h3>👥 Data Guru</h3>
-            <span class="count-badge">{{ participants.length }} peserta</span>
-          </div>
-          <button @click="addParticipant" class="btn-add">
-            <span class="btn-icon">➕</span>
-            Tambah Peserta
-          </button>
-        </div>
-
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Nama</th>
-                <th>NIP</th>
-                <th>Status</th>
-                <th>Voting</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(p, index) in participants" :key="p.id">
-                <td class="text-center">{{ index + 1 }}</td>
-                <td class="name-cell">{{ p.nama_lengkap }}</td>
-                <td>
-                  <code class="nip">{{ p.nip }}</code>
-                </td>
-                <td>
-                  <span :class="['status-badge-small', p.is_active ? 'active' : 'inactive']">
-                    {{ p.is_active ? 'AKTIF' : 'NONAKTIF' }}
-                  </span>
-                </td>
-                <td class="vote-cell">
-                  <span :class="['vote-indicator', p.has_voted ? 'voted' : 'not-voted']">
-                    {{ p.has_voted ? '✅' : '⏳' }}
-                  </span>
-                </td>
-                <td>
-                  <div class="action-buttons">
-                    <button @click="editParticipant(p)" class="btn-action edit" title="Edit">
-                      ✏️ Edit
-                    </button>
-                    <button
-                      @click="toggleParticipant(p)"
-                      class="btn-action toggle"
-                      :title="p.is_active ? 'Nonaktifkan' : 'Aktifkan'"
-                    >
-                      {{ p.is_active ? '⏸️' : '▶️' }}
-                    </button>
-                    <button @click="deleteParticipant(p)" class="btn-action delete" title="Hapus">
-                      🗑️
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Tokens -->
-      <div v-if="activeTab === 'tokens'" class="tab-pane">
-        <div class="pane-header">
-          <h3>🎫 Token Voting</h3>
-          <span class="count-badge">{{ tokens.length }} token</span>
-        </div>
-
-        <div v-if="tokens.length === 0" class="empty-state">
-          <div class="empty-icon">⏳</div>
-          <p>Belum ada token</p>
-          <p class="hint">Token akan dibuat otomatis saat status sesi berubah ke VOTING</p>
-        </div>
-        <div v-else class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Guru</th>
-                <th>Token</th>
-                <th>Status</th>
-                <th>Digunakan</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(t, index) in tokens" :key="t.id">
-                <td class="text-center">{{ index + 1 }}</td>
-                <td>{{ t.pengguna?.nama_lengkap }}</td>
-                <td>
-                  <div class="token-cell">
-                    <code class="token">{{ t.token }}</code>
-                    <button @click="copyToken(t.token)" class="copy-btn" title="Salin token">
-                      📋
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <span :class="['token-status', t.sudah_digunakan ? 'used' : 'available']">
-                    {{ t.sudah_digunakan ? 'DIGUNAKAN' : 'TERSEDIA' }}
-                  </span>
-                </td>
-                <td>{{ t.digunakan_pada ? formatDate(t.digunakan_pada) : '-' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Candidates -->
-      <div v-if="activeTab === 'candidates'" class="tab-pane">
-        <div class="pane-header">
-          <h3>👤 Verifikasi Calon</h3>
-          <span class="count-badge">{{ registrations.length }} pendaftaran</span>
-        </div>
-
-        <div v-if="registrations.length === 0" class="empty-state">
-          <div class="empty-icon">👥</div>
-          <p>Belum ada pendaftaran calon</p>
-          <p class="hint">Guru dapat mendaftar saat status sesi adalah PENDAFTARAN</p>
-        </div>
-        <div v-else>
-          <!-- Filter -->
-          <div class="filter-bar">
-            <select v-model="filterStatus" class="filter-select">
-              <option value="all">Semua Status</option>
-              <option value="menunggu">Menunggu</option>
-              <option value="disetujui">Disetujui</option>
-              <option value="ditolak">Ditolak</option>
-            </select>
-            <span class="filter-count">
-              {{ filteredRegistrations.length }} dari {{ registrations.length }}
-            </span>
-          </div>
-
-          <!-- Registrations List -->
-          <div class="registrations-list">
-            <div
-              v-for="r in filteredRegistrations"
-              :key="r.id"
-              class="registration-card"
-              :class="r.status"
-            >
-              <div class="candidate-info">
-                <div class="candidate-avatar">
-                  {{ getInitials(r.pengguna?.nama_lengkap) }}
-                </div>
-                <div class="candidate-details">
-                  <h4>{{ r.pengguna?.nama_lengkap }}</h4>
-                  <p class="candidate-nip">NIP: {{ r.pengguna?.nip }}</p>
-                  <p class="candidate-position">Jabatan: {{ formatJabatan(r.jabatan_diajukan) }}</p>
-                </div>
-              </div>
-
-              <div class="registration-right">
-                <div class="registration-status">
-                  <span :class="['status-badge', r.status]">
-                    {{ getStatusLabel(r.status) }}
-                  </span>
-                </div>
-
-                <div v-if="r.status === 'menunggu'" class="registration-actions">
-                  <button @click="approveCandidate(r)" class="btn-action approve">
-                    ✅ Setujui
-                  </button>
-                  <button @click="rejectCandidate(r)" class="btn-action reject">❌ Tolak</button>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Warning -->
+        <div v-if="activeSession.status === 'pendaftaran' && !canOpenVoting" class="warning">
+          ⚠️ Minimal 1 calon Waka Sarpras dan 1 calon Waka Kesiswaan (Saat ini:
+          {{ stats.kandidatSarpras }} Sarpras, {{ stats.kandidatKesiswaan }} Kesiswaan)
         </div>
       </div>
     </div>
 
-    <!-- Floating Add Button for Mobile -->
-    <button v-if="activeTab === 'participants'" @click="addParticipant" class="floating-add-btn">
-      <span>➕</span>
-      <span>Tambah Peserta</span>
-    </button>
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <h2 class="text-black">⚡ Aksi Cepat</h2>
+      <div class="action-buttons">
+        <button @click="goToPeserta" class="btn-action">
+          <span>➕</span>
+          <span class="text-black">Tambah Peserta</span>
+        </button>
+
+        <button @click="goToKandidat" class="btn-action">
+          <span>👤</span>
+          <span class="text-black">Tambah Kandidat</span>
+        </button>
+
+        <button @click="generateTokens" class="btn-action" :disabled="!canGenerateTokens">
+          <span>🎫</span>
+          <span class="text-black">Generate Token</span>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -311,34 +175,29 @@ const router = useRouter()
 // Data
 const adminUser = ref(null)
 const activeSession = ref(null)
-const activeTab = ref('participants')
-const filterStatus = ref('all')
-
-// Stats
 const stats = ref({
   totalGuru: 0,
   votedCount: 0,
-  participationRate: 0,
-  availableTokens: 0,
+  totalKandidat: 0,
+  totalTokens: 0,
+  kandidatSarpras: 0,
+  kandidatKesiswaan: 0,
 })
 
-const candidateStats = ref({ pending: 0 })
-const participants = ref([])
-const tokens = ref([])
-const registrations = ref([])
-
-// Tabs
-const tabs = [
-  { id: 'participants', label: 'Peserta' },
-  { id: 'tokens', label: 'Token' },
-  { id: 'candidates', label: 'Calon' },
-]
-
-// Filtered registrations
-const filteredRegistrations = computed(() => {
-  if (filterStatus.value === 'all') return registrations.value
-  return registrations.value.filter((r) => r.status === filterStatus.value)
+// Computed
+const canOpenVoting = computed(() => {
+  if (!activeSession.value || activeSession.value.status !== 'pendaftaran') return false
+  return stats.value.kandidatSarpras >= 1 && stats.value.kandidatKesiswaan >= 1
 })
+
+const canGenerateTokens = computed(() => {
+  return activeSession.value?.status === 'voting'
+})
+
+// Navigation
+const goToPeserta = () => router.push('/admin/peserta')
+const goToToken = () => router.push('/admin/token')
+const goToKandidat = () => router.push('/admin/kandidat')
 
 // Initialize
 onMounted(async () => {
@@ -347,7 +206,7 @@ onMounted(async () => {
 })
 
 // Check auth
-const checkAuth = async () => {
+const checkAuth = () => {
   const session = localStorage.getItem('smanda_admin')
   if (!session) {
     router.push('/admin-login')
@@ -362,266 +221,110 @@ const checkAuth = async () => {
   }
 }
 
-// Load semua data
+// Load all real data
 const loadAllData = async () => {
   try {
-    // Load semua paralel
-    const [sessionData, participantsData, tokensData, registrationsData] = await Promise.all([
-      loadSession(),
-      loadParticipants(),
-      loadTokens(),
-      loadRegistrations(),
-    ])
-
-    activeSession.value = sessionData
-    participants.value = participantsData
-    tokens.value = tokensData
-    registrations.value = registrationsData
-
-    // Hitung stats
-    await calculateStats()
-  } catch (error) {
-    console.error('Load error:', error)
-  }
-}
-
-// Load session
-const loadSession = async () => {
-  const { data } = await supabase
-    .from('sesi_pemilihan')
-    .select('*')
-    .order('dibuat_pada', { ascending: false })
-    .limit(1)
-    .single()
-
-  return data
-}
-
-// Load participants
-const loadParticipants = async () => {
-  const { data } = await supabase
-    .from('pengguna')
-    .select('*')
-    .eq('peran', 'guru')
-    .order('nama_lengkap', { ascending: true })
-
-  return data || []
-}
-
-// Load tokens
-const loadTokens = async () => {
-  if (!activeSession.value?.id) return []
-
-  const { data } = await supabase
-    .from('token_qr')
-    .select(
-      `
-      *,
-      pengguna:pengguna_id (nama_lengkap)
-    `,
-    )
-    .eq('sesi_id', activeSession.value.id)
-    .order('dibuat_pada', { ascending: false })
-
-  return data || []
-}
-
-// Load registrations
-const loadRegistrations = async () => {
-  if (!activeSession.value?.id) return []
-
-  const { data } = await supabase
-    .from('pendaftaran_kandidat')
-    .select(
-      `
-      *,
-      pengguna:pengguna_id (nama_lengkap, nip)
-    `,
-    )
-    .eq('sesi_id', activeSession.value.id)
-    .order('dibuat_pada', { ascending: false })
-
-  return data || []
-}
-
-// Calculate stats
-const calculateStats = async () => {
-  // Total guru
-  const totalGuru = participants.value.length
-
-  // Count votes
-  let votedCount = 0
-  if (activeSession.value?.id) {
-    const { data: votes } = await supabase
-      .from('suara')
-      .select('pemilih_id', { distinct: true })
-      .eq('sesi_id', activeSession.value.id)
-      .eq('is_draft', false)
-
-    votedCount = votes?.length || 0
-  }
-
-  // Count pending candidates
-  const pending = registrations.value.filter((r) => r.status === 'menunggu').length
-
-  // Token stats
-  const availableTokens = tokens.value.filter((t) => !t.sudah_digunakan).length
-
-  stats.value = {
-    totalGuru,
-    votedCount,
-    participationRate: totalGuru ? Math.round((votedCount / totalGuru) * 100) : 0,
-    availableTokens,
-  }
-
-  candidateStats.value = { pending }
-}
-
-// ===== CRUD PARTICIPANTS =====
-
-// Tambah peserta baru
-const addParticipant = async () => {
-  const nama = prompt('Nama lengkap peserta:')
-  if (!nama || nama.trim() === '') return
-
-  const nip = prompt('NIP peserta:')
-  if (!nip || nip.trim() === '') return
-
-  // Check NIP unik
-  const { data: existing } = await supabase
-    .from('pengguna')
-    .select('id')
-    .eq('nip', nip.trim())
-    .single()
-
-  if (existing) {
-    alert('❌ NIP sudah terdaftar!')
-    return
-  }
-
-  try {
-    const { error } = await supabase.from('pengguna').insert({
-      nip: nip.trim(),
-      nama_lengkap: nama.trim(),
-      peran: 'guru',
-      tanggal_lahir: '2000-01-01',
-      is_active: true,
-    })
-
-    if (error) throw error
-
-    await loadAllData()
-    alert('✅ Peserta berhasil ditambahkan!')
-  } catch (error) {
-    alert('❌ Gagal menambah peserta: ' + error.message)
-  }
-}
-
-// Edit peserta
-const editParticipant = async (participant) => {
-  const newNama = prompt('Edit Nama:', participant.nama_lengkap)
-  if (newNama === null || newNama.trim() === '') return
-
-  const newNIP = prompt('Edit NIP:', participant.nip)
-  if (newNIP === null || newNIP.trim() === '') return
-
-  // Check NIP unik (kalo berubah)
-  if (newNIP !== participant.nip) {
-    const { data: existing } = await supabase
-      .from('pengguna')
-      .select('id')
-      .eq('nip', newNIP.trim())
-      .neq('id', participant.id)
+    // Load session
+    const { data: session } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
       .single()
 
-    if (existing) {
-      alert('❌ NIP sudah digunakan peserta lain!')
+    activeSession.value = session
+
+    if (!session) {
+      resetStats()
       return
     }
-  }
 
-  try {
-    const { error } = await supabase
-      .from('pengguna')
-      .update({
-        nama_lengkap: newNama.trim(),
-        nip: newNIP.trim(),
-        diperbarui_pada: new Date().toISOString(),
-      })
-      .eq('id', participant.id)
-
-    if (error) throw error
-
-    // Update local data
-    participant.nama_lengkap = newNama.trim()
-    participant.nip = newNIP.trim()
-
-    alert('✅ Data peserta berhasil diperbarui!')
+    // Load stats in parallel
+    await Promise.all([
+      loadGuruStats(),
+      loadVotingStats(session.id),
+      loadKandidatStats(session.id),
+      loadTokenStats(session.id),
+    ])
   } catch (error) {
-    alert('❌ Gagal update: ' + error.message)
+    console.error('Load error:', error)
+    resetStats()
   }
 }
 
-// Toggle status aktif/nonaktif
-const toggleParticipant = async (participant) => {
-  const action = participant.is_active ? 'menonaktifkan' : 'mengaktifkan'
-  if (!confirm(`${action} ${participant.nama_lengkap}?`)) return
-
-  try {
-    const { error } = await supabase
-      .from('pengguna')
-      .update({
-        is_active: !participant.is_active,
-        diperbarui_pada: new Date().toISOString(),
-      })
-      .eq('id', participant.id)
-
-    if (error) throw error
-
-    participant.is_active = !participant.is_active
-    alert(`✅ Status ${participant.nama_lengkap} berhasil diubah!`)
-  } catch (error) {
-    alert('❌ Gagal mengubah status: ' + error.message)
+const resetStats = () => {
+  stats.value = {
+    totalGuru: 0,
+    votedCount: 0,
+    totalKandidat: 0,
+    totalTokens: 0,
+    kandidatSarpras: 0,
+    kandidatKesiswaan: 0,
   }
 }
 
-// Hapus peserta
-const deleteParticipant = async (participant) => {
-  if (!confirm(`Hapus ${participant.nama_lengkap}? Data akan dihapus permanen!`)) return
+const loadGuruStats = async () => {
+  const { count } = await supabase
+    .from('pengguna')
+    .select('*', { count: 'exact', head: true })
+    .eq('peran', 'guru')
+    .eq('is_active', true)
 
-  // Cek apakah sudah voting
-  if (participant.has_voted) {
-    if (!confirm('⚠️ Peserta ini sudah voting. Yakin tetap menghapus?')) return
-  }
+  stats.value.totalGuru = count || 0
+}
 
-  try {
-    const { error } = await supabase.from('pengguna').delete().eq('id', participant.id)
+const loadVotingStats = async (sessionId) => {
+  const { data } = await supabase
+    .from('suara')
+    .select('pemilih_id', { distinct: true })
+    .eq('sesi_id', sessionId)
+    .eq('is_draft', false)
 
-    if (error) throw error
+  stats.value.votedCount = data?.length || 0
+}
 
-    await loadAllData()
-    alert('✅ Peserta berhasil dihapus!')
-  } catch (error) {
-    alert('❌ Gagal menghapus: ' + error.message)
+const loadKandidatStats = async (sessionId) => {
+  const { data } = await supabase.from('kandidat').select('jabatan').eq('sesi_id', sessionId)
+
+  if (data) {
+    const sarpras = data.filter((c) => c.jabatan === 'sarpras')
+    const kesiswaan = data.filter((c) => c.jabatan === 'kesiswaan')
+
+    stats.value.totalKandidat = sarpras.length + kesiswaan.length
+    stats.value.kandidatSarpras = sarpras.length
+    stats.value.kandidatKesiswaan = kesiswaan.length
   }
 }
 
-// ===== SESSION ACTIONS =====
+const loadTokenStats = async (sessionId) => {
+  const { count } = await supabase
+    .from('token_qr')
+    .select('*', { count: 'exact', head: true })
+    .eq('sesi_id', sessionId)
+
+  stats.value.totalTokens = count || 0
+}
+
+// Session actions
 const createSession = async () => {
   const namaSesi = prompt('Nama sesi baru:')
-  const tahunAjaran = prompt('Tahun ajaran:')
+  if (!namaSesi) return
 
-  if (!namaSesi || !tahunAjaran) return
+  const year = new Date().getFullYear()
+  const tahunAjaran = `${year}/${year + 1}`
 
   const { error } = await supabase.from('sesi_pemilihan').insert({
     nama_sesi: namaSesi,
     tahun_ajaran: tahunAjaran,
     status: 'draft',
-    dibuat_oleh: adminUser.value.id,
+    waktu_mulai_pendaftaran: new Date(),
+    waktu_selesai_pendaftaran: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    waktu_mulai_voting: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    waktu_selesai_voting: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
   })
 
   if (error) {
-    alert('❌ Gagal membuat sesi: ' + error.message)
+    alert('❌ Gagal membuat sesi')
     return
   }
 
@@ -646,31 +349,36 @@ const updateSession = async (status) => {
     .eq('id', activeSession.value.id)
 
   if (error) {
-    alert('❌ Gagal: ' + error.message)
+    alert('❌ Gagal')
     return
   }
 
-  activeSession.value.status = status
+  await loadAllData()
   alert('✅ Berhasil!')
 }
 
 const openVoting = async () => {
   if (!confirm('Buka voting dan generate token untuk semua guru?')) return
-
-  // Update status
   await updateSession('voting')
-
-  // Generate tokens
   await generateTokens()
 }
 
 const generateTokens = async () => {
   try {
-    // Generate untuk semua guru
-    const tokensToInsert = []
-    for (const guru of participants.value) {
+    const { data: activeGurus } = await supabase
+      .from('pengguna')
+      .select('id')
+      .eq('peran', 'guru')
+      .eq('is_active', true)
+
+    if (!activeGurus?.length) {
+      alert('Tidak ada guru aktif!')
+      return
+    }
+
+    for (const guru of activeGurus) {
       const token = Math.floor(100000 + Math.random() * 900000).toString()
-      tokensToInsert.push({
+      await supabase.from('token_qr').insert({
         pengguna_id: guru.id,
         sesi_id: activeSession.value.id,
         token: token,
@@ -679,15 +387,10 @@ const generateTokens = async () => {
       })
     }
 
-    // Insert semua token
-    const { error } = await supabase.from('token_qr').insert(tokensToInsert)
-
-    if (error) throw error
-
-    await loadTokens()
-    alert(`✅ ${participants.value.length} token berhasil dibuat!`)
-  } catch (error) {
-    alert('❌ Gagal generate token: ' + error.message)
+    await loadTokenStats(activeSession.value.id)
+    alert(`✅ ${activeGurus.length} token berhasil dibuat!`)
+  } catch {
+    alert('❌ Gagal generate token')
   }
 }
 
@@ -698,80 +401,19 @@ const resetSession = async () => {
     if (activeSession.value?.id) {
       await supabase.from('token_qr').delete().eq('sesi_id', activeSession.value.id)
       await supabase.from('suara').delete().eq('sesi_id', activeSession.value.id)
+      await supabase.from('kandidat').delete().eq('sesi_id', activeSession.value.id)
     }
 
     await updateSession('draft')
     alert('✅ Sesi berhasil direset!')
-  } catch (error) {
-    alert('❌ Gagal reset: ' + error.message)
+  } catch {
+    alert('❌ Gagal reset')
   }
 }
 
-// ===== CANDIDATE ACTIONS =====
-const approveCandidate = async (r) => {
-  if (!confirm(`Setujui ${r.pengguna?.nama_lengkap} sebagai calon?`)) return
-
-  try {
-    const { error } = await supabase
-      .from('pendaftaran_kandidat')
-      .update({
-        status: 'disetujui',
-        ditinjau_pada: new Date().toISOString(),
-      })
-      .eq('id', r.id)
-
-    if (error) throw error
-
-    r.status = 'disetujui'
-    candidateStats.value.pending--
-    alert('✅ Calon berhasil disetujui!')
-  } catch (error) {
-    alert('❌ Gagal: ' + error.message)
-  }
-}
-
-const rejectCandidate = async (r) => {
-  const reason = prompt('Alasan penolakan:')
-  if (!reason) return
-
-  try {
-    const { error } = await supabase
-      .from('pendaftaran_kandidat')
-      .update({
-        status: 'ditolak',
-        alasan_ditolak: reason,
-        ditinjau_pada: new Date().toISOString(),
-      })
-      .eq('id', r.id)
-
-    if (error) throw error
-
-    r.status = 'ditolak'
-    candidateStats.value.pending--
-    alert('✅ Calon berhasil ditolak!')
-  } catch (error) {
-    alert('❌ Gagal: ' + error.message)
-  }
-}
-
-// ===== HELPERS =====
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  return new Date(dateString).toLocaleDateString('id-ID')
-}
-
-const formatJabatan = (jabatan) => {
-  const map = {
-    humas: 'Waka Humas',
-    sarpras: 'Waka Sarana Prasarana',
-    kesiswaan: 'Waka Kesiswaan',
-    kurikulum: 'Waka Kurikulum',
-  }
-  return map[jabatan] || jabatan
-}
-
+// Utility
 const getInitials = (name) => {
-  if (!name) return '??'
+  if (!name) return 'AD'
   return name
     .split(' ')
     .map((w) => w[0])
@@ -780,21 +422,16 @@ const getInitials = (name) => {
     .substring(0, 2)
 }
 
-const getStatusLabel = (status) => {
-  const map = {
-    menunggu: 'MENUNGGU',
-    disetujui: 'DISETUJUI',
-    ditolak: 'DITOLAK',
+const formatPhase = (status) => {
+  const phases = {
+    draft: 'Draf',
+    pendaftaran: 'Pendaftaran',
+    voting: 'Voting',
+    selesai: 'Selesai',
   }
-  return map[status] || status
+  return phases[status] || status
 }
 
-const copyToken = (token) => {
-  navigator.clipboard.writeText(token)
-  alert('Token disalin: ' + token)
-}
-
-// Logout
 const logout = () => {
   localStorage.removeItem('smanda_admin')
   router.push('/admin-login')
@@ -802,185 +439,327 @@ const logout = () => {
 </script>
 
 <style scoped>
-/* ===== DASHBOARD STYLES ===== */
-.admin-dashboard {
+.simple-dashboard {
   padding: 1rem;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-/* Header */
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.text-black {
+  color: #000000 !important;
+  font-weight: 600;
+}
+.text-dark {
+  color: #333333 !important;
+  font-weight: 500;
+}
+
+.header {
   background: white;
   padding: 1.5rem;
   border-radius: 12px;
   margin-bottom: 1.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #1e3a8a;
 }
 
-.header-left h1 {
+.header h1 {
   margin: 0 0 0.5rem 0;
-  color: #1e3a8a;
+  color: #000000;
   font-size: 1.8rem;
+  font-weight: 800;
 }
 
-.header-left p {
-  margin: 0;
-  color: #64748b;
-  font-size: 1rem;
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
-/* Admin badge - HIGH CONTRAST */
-.admin-badge {
-  background: #1e3a8a;
+.session-label {
+  color: #333333;
+  font-weight: 600;
+}
+.session-name {
+  color: #000000;
+  font-weight: 700;
+}
+
+.session-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #000000;
+}
+
+.session-status.draft {
+  background: #f1f5f9;
+  border: 2px solid #64748b;
+}
+.session-status.pendaftaran {
+  background: #fef3c7;
+  border: 2px solid #92400e;
+}
+.session-status.voting {
+  background: #d1fae5;
+  border: 2px solid #065f46;
+}
+.session-status.selesai {
+  background: #dcfce7;
+  border: 2px solid #166534;
+}
+
+.admin-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #e5e7eb;
+}
+
+.admin-avatar {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #000000, #1e3a8a);
   color: white;
-  font-weight: bold;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1.1rem;
-  border: 2px solid white;
-  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.2rem;
+  border: 2px solid #1e3a8a;
+}
+
+.admin-details h3 {
+  margin: 0 0 0.25rem 0;
+  color: #000000;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.admin-details p {
+  margin: 0;
+  color: #333333;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .logout-btn {
+  margin-left: auto;
   background: #dc2626;
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  border: 2px solid #b91c1b;
 }
 
 .logout-btn:hover {
   background: #b91c1b;
-  transform: translateY(-1px);
 }
 
-/* Stats */
-.stats-grid {
+.quick-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 
-.stat-card {
+.stat {
   background: white;
   padding: 1.5rem;
   border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  transition: transform 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-}
-
-.stat-icon {
-  font-size: 2rem;
-  opacity: 0.8;
-}
-
-.stat-content h3 {
-  margin: 0 0 0.5rem 0;
-  color: #64748b;
-  font-size: 0.95rem;
-  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #e5e7eb;
 }
 
 .stat-number {
-  margin: 0;
   font-size: 2rem;
   font-weight: 800;
   color: #1e3a8a;
   line-height: 1;
+  margin-bottom: 0.5rem;
 }
 
-.stat-percentage {
-  margin: 0.25rem 0 0 0;
-  color: #10b981;
-  font-weight: 600;
+.stat-label {
+  color: #000000;
   font-size: 0.9rem;
+  font-weight: 700;
 }
 
-/* Session Card */
-.session-card {
+.main-menu {
   background: white;
   padding: 1.5rem;
   border-radius: 12px;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #e5e7eb;
 }
 
-.session-card h2 {
-  margin: 0 0 1rem 0;
-  color: #1e3a8a;
+.main-menu h2 {
+  margin: 0 0 1.5rem 0;
+  color: #000000;
   font-size: 1.3rem;
+  font-weight: 800;
   padding-bottom: 0.75rem;
   border-bottom: 2px solid #f1f5f9;
 }
 
-.session-status {
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.menu-card {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.5rem;
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.status-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-weight: bold;
-  font-size: 0.9rem;
+.menu-card:hover {
+  background: white;
+  border-color: #000000;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.status-badge.draft {
-  background: #f1f5f9;
-  color: #64748b;
-}
-.status-badge.pendaftaran {
-  background: #fef3c7;
-  color: #92400e;
-}
-.status-badge.voting {
-  background: #d1fae5;
-  color: #065f46;
-}
-.status-badge.selesai {
-  background: #dcfce7;
-  color: #166534;
-  border: 2px solid #22c55e;
-}
-.status-badge.menunggu {
-  background: #fef3c7;
-  color: #92400e;
-}
-.status-badge.disetujui {
-  background: #d1fae5;
-  color: #065f46;
-}
-.status-badge.ditolak {
-  background: #fee2e2;
-  color: #991b1b;
+.menu-icon {
+  font-size: 2rem;
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  color: white;
 }
 
-.session-name {
-  color: #374151;
-  font-weight: 600;
+.menu-content h3 {
+  margin: 0 0 0.25rem 0;
+  color: #000000;
   font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.menu-content p {
+  margin: 0 0 0.5rem 0;
+  color: #333333;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.menu-count {
+  background: #000000;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  display: inline-block;
+  border: 1px solid #000000;
+}
+
+.session-control {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #e5e7eb;
+}
+
+.session-control h2 {
+  margin: 0 0 1.5rem 0;
+  color: #000000;
+  font-size: 1.3rem;
+  font-weight: 800;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f1f5f9;
+}
+
+.no-session {
+  text-align: center;
+  padding: 2rem;
+  color: #000000;
+  font-weight: 600;
+}
+
+.btn-create {
+  background: #000000;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1rem;
+  border: 2px solid #000000;
+}
+
+.session-card {
+  background: #f0f9ff;
+  border: 2px solid #1e3a8a;
+  border-radius: 10px;
+  padding: 1.5rem;
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.session-header h3 {
+  margin: 0;
+  color: #000000;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.phase-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #000000;
+}
+
+.phase-badge.draft {
+  background: #f1f5f9;
+  border: 2px solid #64748b;
+}
+.phase-badge.pendaftaran {
+  background: #fef3c7;
+  border: 2px solid #92400e;
+}
+.phase-badge.voting {
+  background: #d1fae5;
+  border: 2px solid #065f46;
+}
+.phase-badge.selesai {
+  background: #dcfce7;
+  border: 2px solid #166534;
 }
 
 .session-actions {
@@ -989,687 +768,133 @@ const logout = () => {
   flex-wrap: wrap;
 }
 
-.action-btn {
+.btn-phase {
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 8px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.95rem;
   transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.action-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.btn-primary {
-  background: #1e3a8a;
-  color: white;
-}
-.btn-success {
-  background: #10b981;
-  color: white;
-}
-.btn-warning {
-  background: #f59e0b;
-  color: white;
-}
-.btn-danger {
-  background: #dc2626;
-  color: white;
-}
-
-/* Tabs */
-.tabs {
-  display: flex;
-  background: white;
-  border-radius: 12px 12px 0 0;
-  overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-  border-bottom: none;
-}
-
-.tab-btn {
   flex: 1;
-  padding: 1rem;
-  border: none;
-  background: #f8fafc;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-  color: #64748b;
-  border-bottom: 3px solid transparent;
-  transition: all 0.2s;
+  min-width: 200px;
+  color: white;
+  font-weight: 800;
+  border: 2px solid;
 }
 
-.tab-btn:hover {
-  background: #f1f5f9;
-  color: #1e3a8a;
+.btn-phase:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-.tab-btn.active {
-  background: white;
-  color: #1e3a8a;
-  border-bottom: 3px solid #1e3a8a;
+.btn-phase:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-/* Tab Content */
-.tab-content {
+.btn-phase.draft {
+  background: #1e3a8a;
+  border-color: #1e3a8a;
+}
+.btn-phase.pendaftaran {
+  background: #10b981;
+  border-color: #10b981;
+}
+.btn-phase.voting {
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+.btn-phase.selesai {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.warning {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-top: 1rem;
+  color: #000000;
+  font-size: 0.9rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.quick-actions {
   background: white;
   padding: 1.5rem;
-  border-radius: 0 0 12px 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-  border-top: none;
-  min-height: 400px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 2px solid #e5e7eb;
 }
 
-/* Pane Header */
-.pane-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+.quick-actions h2 {
+  margin: 0 0 1.5rem 0;
+  color: #000000;
+  font-size: 1.3rem;
+  font-weight: 800;
+  padding-bottom: 0.75rem;
   border-bottom: 2px solid #f1f5f9;
 }
 
-.pane-title {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.pane-header h3 {
-  margin: 0;
-  color: #1e3a8a;
-  font-size: 1.3rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.count-badge {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-/* BUTTON TAMBAH PESERTA - JELAS BANGET */
-.btn-add {
-  background: linear-gradient(135deg, #10b981, #34d399);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: bold;
-  font-size: 1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
-  transition: all 0.2s;
-  border: 2px solid white;
-}
-
-.btn-add:hover {
-  background: linear-gradient(135deg, #0da271, #10b981);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(16, 185, 129, 0.4);
-}
-
-.btn-icon {
-  font-size: 1.2rem;
-}
-
-/* ===== TABLE STYLES - FULL WIDTH ===== */
-.table-container {
-  width: 100%;
-  overflow-x: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: white;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 800px;
-}
-
-th {
-  background: #f8fafc;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #374151;
-  border-bottom: 2px solid #e5e7eb;
-  white-space: nowrap;
-  position: sticky;
-  top: 0;
-}
-
-td {
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #4b5563;
-  vertical-align: middle;
-}
-
-tr:hover {
-  background: #f9fafb;
-}
-
-/* Column widths */
-th:nth-child(1),
-td:nth-child(1) {
-  width: 60px;
-} /* No */
-th:nth-child(2),
-td:nth-child(2) {
-  width: 25%;
-} /* Nama */
-th:nth-child(3),
-td:nth-child(3) {
-  width: 20%;
-} /* NIP */
-th:nth-child(4),
-td:nth-child(4) {
-  width: 15%;
-} /* Status */
-th:nth-child(5),
-td:nth-child(5) {
-  width: 10%;
-} /* Voting */
-th:nth-child(6),
-td:nth-child(6) {
-  width: 30%;
-} /* Aksi */
-
-.text-center {
-  text-align: center;
-}
-
-/* Nama cell */
-.name-cell {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 250px;
-  font-weight: 500;
-  color: #1e3a8a;
-}
-
-/* NIP & Token */
-.nip,
-.token {
-  font-family: 'SF Mono', 'Courier New', monospace;
-  font-size: 0.9rem;
-  color: #4b5563;
-  background: #f1f5f9;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-}
-
-.token-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.copy-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  opacity: 0.7;
-  padding: 0.25rem;
-}
-
-.copy-btn:hover {
-  opacity: 1;
-}
-
-/* Status badges */
-.status-badge-small {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.status-badge-small.active {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge-small.inactive {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
-/* Vote indicator */
-.vote-indicator {
-  font-size: 1.2rem;
-  display: inline-block;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.vote-indicator.voted {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.vote-indicator.not-voted {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-/* Token status */
-.token-status {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.token-status.available {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.token-status.used {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-/* Action buttons */
 .action-buttons {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
 }
 
 .btn-action {
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.btn-action:hover {
-  transform: translateY(-1px);
-}
-
-.btn-action.edit {
-  background: #e0f2fe;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
-}
-
-.btn-action.toggle {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-
-.btn-action.delete {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-}
-
-.btn-action.approve {
-  background: #10b981;
-  color: white;
-  border: 1px solid #0da271;
-}
-
-.btn-action.reject {
-  background: #ef4444;
-  color: white;
-  border: 1px solid #dc2626;
-}
-
-/* Filter bar */
-.filter-bar {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
   background: #f8fafc;
+  border: 2px solid #000000;
   border-radius: 8px;
-}
-
-.filter-select {
-  padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  font-size: 0.95rem;
-}
-
-.filter-count {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-/* Registrations */
-.registrations-list {
+  padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.registration-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem;
-  background: white;
-  border-radius: 12px;
-  border: 2px solid #e5e7eb;
-  transition: all 0.2s;
-}
-
-.registration-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.registration-card.menunggu {
-  border-left: 4px solid #f59e0b;
-}
-
-.registration-card.disetujui {
-  border-left: 4px solid #10b981;
-}
-
-.registration-card.ditolak {
-  border-left: 4px solid #ef4444;
-}
-
-.candidate-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1;
-}
-
-.candidate-avatar {
-  width: 50px;
-  height: 50px;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.candidate-details h4 {
-  margin: 0 0 0.25rem 0;
-  color: #1e3a8a;
-  font-size: 1.1rem;
-}
-
-.candidate-nip,
-.candidate-position {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.candidate-position {
-  font-weight: 500;
-  color: #4b5563;
-}
-
-.registration-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.75rem;
-}
-
-.registration-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-/* Empty state */
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: #64748b;
-}
-
-.empty-icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.hint {
-  color: #9ca3af;
-  font-size: 0.9rem;
-  font-style: italic;
-  margin-top: 0.5rem;
-}
-
-/* Floating Add Button */
-.floating-add-btn {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: white;
-  border: none;
-  padding: 1rem 1.5rem;
-  border-radius: 50px;
-  font-weight: bold;
-  font-size: 1rem;
-  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.4);
-  z-index: 1000;
-  border: 3px solid white;
-  display: flex;
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
-  transition: all 0.3s;
-  display: none; /* Hide by default, show on mobile */
+  transition: all 0.2s;
 }
 
-.floating-add-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(30, 58, 138, 0.5);
+.btn-action:hover:not(:disabled) {
+  background: #000000;
 }
 
-/* ===== RESPONSIVE ===== */
+.btn-action:hover:not(:disabled) span {
+  color: white !important;
+}
+
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-action span:first-child {
+  font-size: 1.5rem;
+}
+.btn-action span:last-child {
+  font-weight: 700;
+  color: #000000;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .admin-dashboard {
-    padding: 0.5rem;
-  }
-
-  .dashboard-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
+  .simple-dashboard {
     padding: 1rem;
   }
-
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .stats-grid {
+  .menu-grid {
     grid-template-columns: 1fr;
   }
-
-  .stat-card {
-    padding: 1.25rem;
-  }
-
-  .pane-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-
-  .pane-title {
-    justify-content: space-between;
-  }
-
-  .btn-add {
-    width: 100%;
-    justify-content: center;
-  }
-
   .session-actions {
     flex-direction: column;
   }
-
-  .action-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .tabs {
-    flex-wrap: wrap;
-  }
-
-  .tab-btn {
-    min-width: calc(50% - 1px);
-    font-size: 0.9rem;
-    padding: 0.75rem 0.5rem;
-  }
-
-  .tab-content {
-    padding: 1rem;
-  }
-
-  /* Table responsive */
-  .table-container {
-    margin: 0 -0.5rem;
-    width: calc(100% + 1rem);
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-  }
-
-  /* Adjust column widths for mobile */
-  th:nth-child(1),
-  td:nth-child(1) {
-    width: 50px;
-  }
-  th:nth-child(2),
-  td:nth-child(2) {
-    width: 22%;
-    max-width: 150px;
-  }
-  th:nth-child(3),
-  td:nth-child(3) {
-    width: 25%;
-  }
-  th:nth-child(4),
-  td:nth-child(4) {
-    width: 18%;
-  }
-  th:nth-child(5),
-  td:nth-child(5) {
-    width: 10%;
-  }
-  th:nth-child(6),
-  td:nth-child(6) {
-    width: 25%;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .btn-action {
-    width: 100%;
-    justify-content: center;
-    padding: 0.5rem;
-  }
-
-  /* Show floating button on mobile */
-  .floating-add-btn {
-    display: flex;
-  }
-
-  /* Registration card responsive */
-  .registration-card {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-
-  .registration-right {
-    align-items: stretch;
-  }
-
-  .registration-actions {
-    justify-content: stretch;
-  }
-
-  .btn-action.approve,
-  .btn-action.reject {
-    flex: 1;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 480px) {
-  .tab-btn {
+  .btn-phase {
     min-width: 100%;
-    font-size: 0.85rem;
-    padding: 0.75rem;
   }
-
-  .admin-badge {
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
-  }
-
-  .logout-btn {
-    padding: 0.5rem 1rem;
-  }
-
-  .floating-add-btn {
-    bottom: 1rem;
-    right: 1rem;
-    padding: 0.75rem 1.25rem;
-    font-size: 0.9rem;
+  .action-buttons {
+    grid-template-columns: 1fr;
   }
 }
 </style>

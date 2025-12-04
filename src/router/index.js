@@ -11,12 +11,16 @@ const LiveResults = () => import('@/pages/LiveResults.vue')
 const AdminLogin = () => import('@/pages/AdminLogin.vue')
 const PageNotFound = () => import('@/pages/PageNotFound.vue')
 
-// ✅ FIX: Update path ke admin folder
+// ✅ Admin Components
 const AdminDashboard = () => import('@/pages/admin/AdminDashboard.vue')
+const AdminPeserta = () => import('@/pages/admin/AdminPeserta.vue')
+const AdminToken = () => import('@/pages/admin/AdminToken.vue')
+const AdminKandidat = () => import('@/pages/admin/AdminKandidat.vue')
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // ===== PUBLIC ROUTES =====
     {
       path: '/',
       name: 'home',
@@ -42,6 +46,20 @@ const router = createRouter({
       meta: { title: 'Scan QR Code' },
     },
     {
+      path: '/live-results',
+      name: 'liveResults',
+      component: LiveResults,
+      meta: { title: 'Hasil Live Voting' },
+    },
+    {
+      path: '/admin-login',
+      name: 'adminLogin',
+      component: AdminLogin,
+      meta: { title: 'Login Admin/Panitia' },
+    },
+
+    // ===== USER ROUTES =====
+    {
       path: '/dashboard-calon',
       name: 'dashboardCalon',
       component: DashboardCalon,
@@ -61,18 +79,53 @@ const router = createRouter({
         allowedRoles: ['pemilih'],
       },
     },
+
+    // ===== ADMIN ROUTES =====
+    // ✅ ROUTE UTAMA BARU
     {
-      path: '/live-results',
-      name: 'liveResults',
-      component: LiveResults,
-      meta: { title: 'Hasil Live Voting' },
+      path: '/admin',
+      name: 'admin',
+      component: AdminDashboard,
+      meta: {
+        title: 'Dashboard Admin',
+        requiresAuth: true,
+        allowedRoles: ['admin', 'panitia'],
+      },
+    },
+
+    // ✅ SUB-ROUTES ADMIN
+    {
+      path: '/admin/peserta',
+      name: 'adminPeserta',
+      component: AdminPeserta,
+      meta: {
+        title: 'Data Peserta - Admin',
+        requiresAuth: true,
+        allowedRoles: ['admin', 'panitia'],
+      },
     },
     {
-      path: '/admin-login',
-      name: 'adminLogin',
-      component: AdminLogin,
-      meta: { title: 'Login Admin/Panitia' },
+      path: '/admin/token',
+      name: 'adminToken',
+      component: AdminToken,
+      meta: {
+        title: 'Token Voting - Admin',
+        requiresAuth: true,
+        allowedRoles: ['admin', 'panitia'],
+      },
     },
+    {
+      path: '/admin/kandidat',
+      name: 'adminKandidat',
+      component: AdminKandidat,
+      meta: {
+        title: 'Data Kandidat - Admin',
+        requiresAuth: true,
+        allowedRoles: ['admin', 'panitia'],
+      },
+    },
+
+    // ✅ BACKWARD COMPATIBILITY - route lama tetap bekerja
     {
       path: '/admin-dashboard',
       name: 'adminDashboard',
@@ -83,7 +136,8 @@ const router = createRouter({
         allowedRoles: ['admin', 'panitia'],
       },
     },
-    // Fallback route untuk 404
+
+    // ===== 404 FALLBACK =====
     {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
@@ -99,7 +153,6 @@ router.beforeEach((to, from, next) => {
     from: from.name,
     to: to.name,
     requiresAuth: to.meta?.requiresAuth,
-    allowedRoles: to.meta?.allowedRoles,
   })
 
   // Set page title
@@ -123,18 +176,39 @@ router.beforeEach((to, from, next) => {
     hasVoterSession: !!voterSession,
   })
 
-  // ✅ FIX 1: Allow admin to access voting page for testing
-  if (adminSession && (to.name === 'voting' || to.name === 'scan')) {
-    console.log('👑 Admin accessing voting/scan for testing, allowing')
-    next()
-    return
+  // ✅ Admin bisa akses semua admin pages
+  if (adminSession) {
+    try {
+      const session = JSON.parse(adminSession)
+      const adminName = session.user?.nama_lengkap || 'Admin'
+      console.log(`👑 Admin session detected: ${adminName}`)
+
+      // Admin bisa akses SEMUA routes admin
+      if (to.path.startsWith('/admin')) {
+        console.log('✅ Admin accessing admin route, allowing')
+        next()
+        return
+      }
+
+      // Admin bisa test voting/scan
+      if (to.name === 'voting' || to.name === 'scan') {
+        console.log('👑 Admin testing voting/scan, allowing')
+        next()
+        return
+      }
+    } catch (error) {
+      console.error('❌ Error parsing admin session:', error)
+      localStorage.removeItem('smanda_admin')
+      next({ name: 'adminLogin' })
+      return
+    }
   }
 
-  // ✅ FIX 2: Check voter session for voting page
+  // ✅ Check voter session for voting page
   if (to.name === 'voting' && voterSession) {
     try {
-      JSON.parse(voterSession)
-      console.log('✅ Voter session valid, allowing to voting')
+      const voterData = JSON.parse(voterSession)
+      console.log('✅ Voter session valid, token:', voterData.token)
       next()
       return
     } catch {
@@ -148,7 +222,7 @@ router.beforeEach((to, from, next) => {
     console.log('❌ No session found, redirecting to login')
 
     // Redirect berdasarkan tipe route
-    if (to.meta.allowedRoles?.includes('admin') || to.meta.allowedRoles?.includes('panitia')) {
+    if (to.path.startsWith('/admin')) {
       next({ name: 'adminLogin' })
     } else if (to.meta.allowedRoles?.includes('calon')) {
       next({ name: 'loginCalon' })
@@ -160,42 +234,24 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  // Jika ada session, check role access
-  let hasAccess = false
-  let userRole = 'guest'
-
-  if (adminSession) {
-    try {
-      const session = JSON.parse(adminSession)
-      userRole = session.user?.peran || 'admin'
-      console.log('👑 Admin session detected, role:', userRole)
-
-      // Admin bisa akses admin routes
-      if (to.meta.allowedRoles?.includes('admin') || to.meta.allowedRoles?.includes('panitia')) {
-        hasAccess = true
-      }
-    } catch (error) {
-      console.error('❌ Error parsing admin session:', error)
-      localStorage.removeItem('smanda_admin')
-      next({ name: 'adminLogin' })
-      return
-    }
-  }
-
+  // Jika ada session tapi bukan admin
   if (userSession) {
     try {
       const user = JSON.parse(userSession)
-      userRole = user.peran || 'guru'
-      console.log('👤 User session detected, role:', userRole)
+      console.log('👤 User session detected, role:', user.peran)
 
       // User bisa akses calon routes
-      if (to.meta.allowedRoles?.includes('calon') && userRole === 'guru') {
-        hasAccess = true
+      if (to.meta.allowedRoles?.includes('calon') && user.peran === 'guru') {
+        console.log('✅ User accessing calon route, allowing')
+        next()
+        return
       }
 
-      // ✅ FIX 3: User dengan voter session bisa akses voting
+      // User dengan voter session bisa akses voting
       if (to.meta.allowedRoles?.includes('pemilih') && voterSession) {
-        hasAccess = true
+        console.log('✅ User with voter session accessing voting, allowing')
+        next()
+        return
       }
     } catch (error) {
       console.error('❌ Error parsing user session:', error)
@@ -206,30 +262,23 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // Check final access
-  if (hasAccess) {
-    console.log('✅ Access granted for role:', userRole)
-    next()
-  } else {
-    console.log('❌ Access denied for role:', userRole, 'needs:', to.meta.allowedRoles)
+  // Jika sampai sini berarti gak punya akses
+  console.log('❌ Access denied, redirecting based on session')
 
-    // Redirect based on current session
-    if (adminSession) {
-      next({ name: 'adminDashboard' })
-    } else if (userSession) {
-      next({ name: 'dashboardCalon' })
-    } else if (voterSession) {
-      next({ name: 'voting' })
-    } else {
-      next({ name: 'home' })
-    }
+  if (adminSession) {
+    next({ name: 'admin' })
+  } else if (userSession) {
+    next({ name: 'dashboardCalon' })
+  } else if (voterSession) {
+    next({ name: 'voting' })
+  } else {
+    next({ name: 'home' })
   }
 })
 
-// Global error handler untuk router
+// Global error handler
 router.onError((error) => {
   console.error('🚨 Router Error:', error)
-  // Redirect to home on chunk load error
   if (error.message.includes('Failed to fetch dynamically imported module')) {
     window.location.href = '/'
   }
