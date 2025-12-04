@@ -1,672 +1,834 @@
 <template>
-  <div class="voting-page">
-    <!-- Step 1: Scan QR -->
-    <div v-if="step === 'scan'" class="scan-step">
-      <div class="step-header">
-        <h1>🎫 Scan QR Code</h1>
-        <p>Scan QR Code dari kartu voting Anda</p>
+  <div class="voting-container">
+    <!-- Header -->
+    <div class="voting-header">
+      <h1 class="title">Voting Pemilihan Waka</h1>
+      <p class="subtitle">SMAN 2 Bandar Lampung</p>
+
+      <div class="session-info" v-if="activeSession">
+        <span class="session-name">{{ activeSession.nama_sesi }}</span>
+        <span class="session-status voting">VOTING BERLANGSUNG</span>
       </div>
 
-      <div class="scanner-container">
-        <div v-if="!hasCamera" class="camera-permission">
-          <p>⚠️ Membutuhkan akses kamera</p>
-          <button @click="initCamera" class="btn-enable-camera">Izinkan Kamera</button>
+      <div class="voter-info" v-if="voterData">
+        <div class="voter-avatar">
+          {{ getInitials(voterData.pengguna.nama_lengkap) }}
         </div>
-
-        <div v-else class="scanner-active">
-          <div ref="scannerElement" class="scanner-box"></div>
-          <p class="scanner-hint">Arahkan QR Code ke dalam frame</p>
-        </div>
-
-        <div class="manual-token">
-          <p>Atau masukkan token manual:</p>
-          <input
-            type="text"
-            v-model="manualToken"
-            placeholder="Masukkan token dari kartu"
-            @keyup.enter="useManualToken"
-          />
-          <button @click="useManualToken" :disabled="!manualToken.trim()">Gunakan Token</button>
+        <div class="voter-details">
+          <strong>{{ voterData.pengguna.nama_lengkap }}</strong>
+          <span class="voter-token">Token: {{ voterData.token }}</span>
         </div>
       </div>
     </div>
 
-    <!-- Step 2: Pilih Kandidat -->
-    <div v-if="step === 'vote'" class="vote-step">
-      <div class="vote-header">
-        <h1>🗳️ PEMILIHAN WAKA SMANDA</h1>
-        <div class="voter-info">
-          <p>
-            Pemilih: <strong>{{ voter.nama_lengkap }}</strong>
-          </p>
-          <p class="timer" v-if="timeLeft > 0">⏰ Waktu tersisa: {{ formatTime(timeLeft) }}</p>
-          <p v-else class="timer-expired">⏰ Waktu habis!</p>
-        </div>
+    <!-- Voting Steps -->
+    <div class="voting-steps">
+      <div class="step" :class="{ active: currentStep === 1 }">
+        <div class="step-number">1</div>
+        <div class="step-label">Waka Kurikulum</div>
       </div>
-
-      <!-- 4 Jabatan dalam tabs -->
-      <div class="position-tabs">
-        <button
-          v-for="pos in positions"
-          :key="pos.value"
-          :class="{ active: activePosition === pos.value }"
-          @click="activePosition = pos.value"
-          class="position-tab"
-        >
-          {{ pos.label }}
-        </button>
+      <div class="step" :class="{ active: currentStep === 2 }">
+        <div class="step-number">2</div>
+        <div class="step-label">Waka Kesiswaan</div>
       </div>
+      <div class="step" :class="{ active: currentStep === 3 }">
+        <div class="step-number">3</div>
+        <div class="step-label">Waka Sarpras</div>
+      </div>
+      <div class="step" :class="{ active: currentStep === 4 }">
+        <div class="step-number">4</div>
+        <div class="step-label">Waka Humas</div>
+      </div>
+    </div>
 
-      <!-- Daftar Kandidat per Jabatan -->
-      <div class="candidates-container">
-        <h3>{{ getPositionLabel(activePosition) }}</h3>
-        <p class="position-subtitle">Pilih 1 kandidat untuk posisi ini</p>
+    <!-- Main Content -->
+    <div class="voting-content">
+      <!-- Step 1: Waka Kurikulum -->
+      <div v-if="currentStep === 1" class="step-content">
+        <h2 class="step-title">Pilih Waka Kurikulum</h2>
+        <p class="step-description">
+          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Kurikulum
+        </p>
 
-        <div v-if="loadingCandidates" class="loading-candidates">
-          <p>Memuat kandidat...</p>
-        </div>
-
-        <div v-else class="candidates-grid">
+        <div class="candidates-grid">
           <div
-            v-for="candidate in candidatesByPosition"
+            v-for="candidate in kurikulumCandidates"
             :key="candidate.id"
-            :class="{ selected: selectedCandidates[activePosition] === candidate.id }"
             class="candidate-card"
-            @click="selectCandidate(activePosition, candidate.id)"
+            :class="{ selected: selectedKurikulum?.id === candidate.id }"
+            @click="selectKurikulum(candidate)"
           >
             <div class="candidate-photo">
-              <div v-if="candidate.foto_kampanye" class="photo-real">
-                <img :src="candidate.foto_kampanye" :alt="candidate.pengguna.nama_lengkap" />
-              </div>
+              <img
+                v-if="candidate.foto_kampanye"
+                :src="candidate.foto_kampanye"
+                :alt="candidate.pengguna.nama_lengkap"
+              />
               <div v-else class="photo-placeholder">
                 {{ getInitials(candidate.pengguna.nama_lengkap) }}
               </div>
             </div>
             <div class="candidate-info">
-              <div class="candidate-number">{{ candidate.nomor_urut }}</div>
-              <h4>{{ candidate.pengguna.nama_lengkap }}</h4>
-              <p class="candidate-nip">{{ candidate.pengguna.nip }}</p>
+              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
+              <div class="candidate-number">
+                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
+              </div>
               <div class="candidate-visi">
-                <p><strong>Visi & Misi:</strong></p>
-                <p class="visi-preview">{{ truncateText(candidate.visi_misi, 100) }}</p>
+                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
               </div>
             </div>
-            <div v-if="selectedCandidates[activePosition] === candidate.id" class="selected-badge">
-              ✅ TERPILIH
+          </div>
+        </div>
+
+        <div v-if="kurikulumCandidates.length === 0" class="empty-candidates">
+          <p>Belum ada calon untuk jabatan ini</p>
+        </div>
+      </div>
+
+      <!-- Step 2: Waka Kesiswaan -->
+      <div v-if="currentStep === 2" class="step-content">
+        <h2 class="step-title">Pilih Waka Kesiswaan</h2>
+        <p class="step-description">
+          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Kesiswaan
+        </p>
+
+        <div class="candidates-grid">
+          <div
+            v-for="candidate in kesiswaanCandidates"
+            :key="candidate.id"
+            class="candidate-card"
+            :class="{ selected: selectedKesiswaan?.id === candidate.id }"
+            @click="selectKesiswaan(candidate)"
+          >
+            <div class="candidate-photo">
+              <img
+                v-if="candidate.foto_kampanye"
+                :src="candidate.foto_kampanye"
+                :alt="candidate.pengguna.nama_lengkap"
+              />
+              <div v-else class="photo-placeholder">
+                {{ getInitials(candidate.pengguna.nama_lengkap) }}
+              </div>
+            </div>
+            <div class="candidate-info">
+              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
+              <div class="candidate-number">
+                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
+              </div>
+              <div class="candidate-visi">
+                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div v-if="candidatesByPosition.length === 0" class="no-candidates">
-            <p>Belum ada kandidat untuk posisi ini</p>
-          </div>
+        <div v-if="kesiswaanCandidates.length === 0" class="empty-candidates">
+          <p>Belum ada calon untuk jabatan ini</p>
         </div>
       </div>
 
-      <!-- Navigation -->
-      <div class="vote-navigation">
-        <div class="progress-indicator">
-          <div class="progress-text">
-            Langkah {{ Object.keys(selectedCandidates).length }} dari 4
-          </div>
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: (Object.keys(selectedCandidates).length / 4) * 100 + '%' }"
-            ></div>
-          </div>
-        </div>
-
-        <div class="nav-buttons">
-          <button @click="previousPosition" :disabled="positionIndex === 0" class="btn-prev">
-            ← Sebelumnya
-          </button>
-
-          <button
-            v-if="positionIndex < 3"
-            @click="nextPosition"
-            :disabled="!selectedCandidates[activePosition]"
-            class="btn-next"
-          >
-            Selanjutnya →
-          </button>
-
-          <button v-else @click="showReview" :disabled="!isAllSelected" class="btn-submit">
-            👁️ Review Pilihan
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 3: Review & Submit -->
-    <div v-if="step === 'review'" class="review-step">
-      <div class="review-header">
-        <h1>📋 REVIEW PILIHAN ANDA</h1>
-        <p>Pastikan pilihan Anda sudah benar sebelum submit</p>
-      </div>
-
-      <div class="review-choices">
-        <div v-for="pos in positions" :key="pos.value" class="review-choice">
-          <h4>{{ pos.label }}</h4>
-          <div v-if="getSelectedCandidateName(pos.value)" class="choice-detail">
-            <p>
-              <strong>{{ getSelectedCandidateName(pos.value) }}</strong>
-            </p>
-            <p>No. {{ getSelectedCandidateNumber(pos.value) }}</p>
-            <button @click="goToPosition(pos.value)" class="btn-change">Ubah Pilihan</button>
-          </div>
-          <div v-else class="choice-empty">
-            <p>Belum dipilih</p>
-            <button @click="goToPosition(pos.value)" class="btn-change">Pilih Sekarang</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="review-warning">
-        <p>⚠️ <strong>PERHATIAN:</strong> Setelah submit, pilihan tidak dapat diubah!</p>
-      </div>
-
-      <div class="review-actions">
-        <button @click="step = 'vote'" class="btn-back">← Kembali Memilih</button>
-        <button @click="submitVotes" :disabled="submitting" class="btn-confirm">
-          {{ submitting ? 'Menyimpan...' : '✅ KONFIRMASI & SUBMIT' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Step 4: Thank You -->
-    <div v-if="step === 'thanks'" class="thanks-step">
-      <div class="thanks-content">
-        <div class="thanks-icon">✅</div>
-        <h1>TERIMA KASIH!</h1>
-        <p class="thanks-message">Suara Anda telah tercatat dalam sistem</p>
-        <p class="thanks-detail">
-          Anda telah memilih untuk 4 posisi Waka. Hasil pemilihan akan diumumkan setelah sesi voting
-          berakhir.
+      <!-- Step 3: Waka Sarpras -->
+      <div v-if="currentStep === 3" class="step-content">
+        <h2 class="step-title">Pilih Waka Sarpras</h2>
+        <p class="step-description">
+          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Sarana Prasarana
         </p>
-        <div class="thanks-info">
-          <p>Waktu submit: {{ formatDate(new Date()) }}</p>
-          <p>ID Voting: {{ voteId }}</p>
+
+        <div class="candidates-grid">
+          <div
+            v-for="candidate in sarprasCandidates"
+            :key="candidate.id"
+            class="candidate-card"
+            :class="{ selected: selectedSarpras?.id === candidate.id }"
+            @click="selectSarpras(candidate)"
+          >
+            <div class="candidate-photo">
+              <img
+                v-if="candidate.foto_kampanye"
+                :src="candidate.foto_kampanye"
+                :alt="candidate.pengguna.nama_lengkap"
+              />
+              <div v-else class="photo-placeholder">
+                {{ getInitials(candidate.pengguna.nama_lengkap) }}
+              </div>
+            </div>
+            <div class="candidate-info">
+              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
+              <div class="candidate-number">
+                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
+              </div>
+              <div class="candidate-visi">
+                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <button @click="goToHome" class="btn-home">Kembali ke Halaman Utama</button>
+
+        <div v-if="sarprasCandidates.length === 0" class="empty-candidates">
+          <p>Belum ada calon untuk jabatan ini</p>
+        </div>
+      </div>
+
+      <!-- Step 4: Waka Humas -->
+      <div v-if="currentStep === 4" class="step-content">
+        <h2 class="step-title">Pilih Waka Humas</h2>
+        <p class="step-description">
+          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Hubungan Masyarakat
+        </p>
+
+        <div class="candidates-grid">
+          <div
+            v-for="candidate in humasCandidates"
+            :key="candidate.id"
+            class="candidate-card"
+            :class="{ selected: selectedHumas?.id === candidate.id }"
+            @click="selectHumas(candidate)"
+          >
+            <div class="candidate-photo">
+              <img
+                v-if="candidate.foto_kampanye"
+                :src="candidate.foto_kampanye"
+                :alt="candidate.pengguna.nama_lengkap"
+              />
+              <div v-else class="photo-placeholder">
+                {{ getInitials(candidate.pengguna.nama_lengkap) }}
+              </div>
+            </div>
+            <div class="candidate-info">
+              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
+              <div class="candidate-number">
+                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
+              </div>
+              <div class="candidate-visi">
+                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="humasCandidates.length === 0" class="empty-candidates">
+          <p>Belum ada calon untuk jabatan ini</p>
+        </div>
       </div>
     </div>
 
-    <!-- Error & Loading -->
-    <div v-if="error" class="error-message">{{ error }}</div>
-    <div v-if="loading" class="loading-overlay">Memproses...</div>
+    <!-- Navigation Buttons -->
+    <div class="navigation-buttons">
+      <button
+        v-if="currentStep > 1"
+        @click="prevStep"
+        class="nav-btn prev-btn"
+        :disabled="submitting"
+      >
+        ← Kembali
+      </button>
+
+      <button
+        v-if="currentStep < 4"
+        @click="nextStep"
+        class="nav-btn next-btn"
+        :disabled="!isCurrentStepValid || submitting"
+      >
+        Lanjut →
+      </button>
+
+      <button
+        v-if="currentStep === 4"
+        @click="submitVote"
+        class="nav-btn submit-btn"
+        :disabled="!isAllStepsValid || submitting"
+      >
+        {{ submitting ? 'Mengirim...' : 'Submit Voting' }}
+      </button>
+    </div>
+
+    <!-- Selection Summary -->
+    <div class="selection-summary">
+      <h3>Ringkasan Pilihan Anda:</h3>
+      <div class="summary-grid">
+        <div class="summary-item" :class="{ filled: selectedKurikulum }">
+          <span class="summary-label">Waka Kurikulum</span>
+          <span class="summary-value">
+            {{ selectedKurikulum ? selectedKurikulum.pengguna.nama_lengkap : 'Belum dipilih' }}
+          </span>
+        </div>
+        <div class="summary-item" :class="{ filled: selectedKesiswaan }">
+          <span class="summary-label">Waka Kesiswaan</span>
+          <span class="summary-value">
+            {{ selectedKesiswaan ? selectedKesiswaan.pengguna.nama_lengkap : 'Belum dipilih' }}
+          </span>
+        </div>
+        <div class="summary-item" :class="{ filled: selectedSarpras }">
+          <span class="summary-label">Waka Sarpras</span>
+          <span class="summary-value">
+            {{ selectedSarpras ? selectedSarpras.pengguna.nama_lengkap : 'Belum dipilih' }}
+          </span>
+        </div>
+        <div class="summary-item" :class="{ filled: selectedHumas }">
+          <span class="summary-label">Waka Humas</span>
+          <span class="summary-value">
+            {{ selectedHumas ? selectedHumas.pengguna.nama_lengkap : 'Belum dipilih' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error & Success Messages -->
+    <div v-if="error" class="error-message">❌ {{ error }}</div>
+
+    <div v-if="success" class="success-message">
+      <div class="success-content">
+        <h3>✅ Voting Berhasil!</h3>
+        <p>Terima kasih telah menggunakan hak pilih Anda.</p>
+        <p>Redirecting ke halaman utama...</p>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div v-if="showConfirmModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Konfirmasi Voting</h3>
+          <button @click="showConfirmModal = false" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <p>Anda akan mengirim pilihan Anda:</p>
+          <ul class="modal-selections">
+            <li v-if="selectedKurikulum">
+              <strong>Waka Kurikulum:</strong> {{ selectedKurikulum.pengguna.nama_lengkap }}
+            </li>
+            <li v-if="selectedKesiswaan">
+              <strong>Waka Kesiswaan:</strong> {{ selectedKesiswaan.pengguna.nama_lengkap }}
+            </li>
+            <li v-if="selectedSarpras">
+              <strong>Waka Sarpras:</strong> {{ selectedSarpras.pengguna.nama_lengkap }}
+            </li>
+            <li v-if="selectedHumas">
+              <strong>Waka Humas:</strong> {{ selectedHumas.pengguna.nama_lengkap }}
+            </li>
+          </ul>
+          <p class="modal-warning">
+            ⚠️ <strong>PERHATIAN:</strong> Voting tidak dapat diubah setelah disubmit!
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button @click="showConfirmModal = false" class="modal-btn cancel-btn">Batal</button>
+          <button @click="confirmSubmit" class="modal-btn confirm-btn">Ya, Submit Voting</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Html5QrcodeScanner } from 'html5-qrcode'
 import { supabase } from '@/utils/supabase'
 
 const router = useRouter()
 
 // State
-const step = ref('scan')
-const hasCamera = ref(false)
-const scannerElement = ref(null)
-const html5QrcodeScanner = ref(null)
-const manualToken = ref('')
-const voter = ref(null)
-const timeLeft = ref(15 * 60) // 15 menit
-const activePosition = ref('humas')
-const positions = ref([
-  { value: 'humas', label: 'Waka HUMAS' },
-  { value: 'sarpras', label: 'Waka SARPRAS' },
-  { value: 'kesiswaan', label: 'Waka KESISWAAN' },
-  { value: 'kurikulum', label: 'Waka KURIKULUM' },
-])
-const candidates = ref([])
-const selectedCandidates = ref({})
-const loading = ref(false)
-const loadingCandidates = ref(false)
+const currentStep = ref(1)
+const voterData = ref(null)
+const activeSession = ref(null)
 const submitting = ref(false)
 const error = ref('')
-const voteId = ref('')
-const timerInterval = ref(null)
+const success = ref(false)
+const showConfirmModal = ref(false)
+
+// Candidates data
+const kurikulumCandidates = ref([])
+const kesiswaanCandidates = ref([])
+const sarprasCandidates = ref([])
+const humasCandidates = ref([])
+
+// Selections
+const selectedKurikulum = ref(null)
+const selectedKesiswaan = ref(null)
+const selectedSarpras = ref(null)
+const selectedHumas = ref(null)
 
 // Computed
-const positionIndex = computed(() =>
-  positions.value.findIndex((pos) => pos.value === activePosition.value),
-)
-
-const candidatesByPosition = computed(() => {
-  return candidates.value.filter((c) => c.jabatan === activePosition.value)
+const isCurrentStepValid = computed(() => {
+  switch (currentStep.value) {
+    case 1:
+      return selectedKurikulum.value !== null
+    case 2:
+      return selectedKesiswaan.value !== null
+    case 3:
+      return selectedSarpras.value !== null
+    case 4:
+      return selectedHumas.value !== null
+    default:
+      return false
+  }
 })
 
-const isAllSelected = computed(() => {
-  return positions.value.every((pos) => selectedCandidates.value[pos.value])
+const isAllStepsValid = computed(() => {
+  return (
+    selectedKurikulum.value !== null &&
+    selectedKesiswaan.value !== null &&
+    selectedSarpras.value !== null &&
+    selectedHumas.value !== null
+  )
 })
 
 // Methods
-const initCamera = async () => {
-  try {
-    await navigator.mediaDevices.getUserMedia({ video: true })
-    hasCamera.value = true
-    initQRScanner()
-  } catch (error) {
-    error.value = 'Tidak dapat mengakses kamera'
-  }
-}
-
-const initQRScanner = () => {
-  if (!scannerElement.value || !hasCamera.value) return
-
-  html5QrcodeScanner.value = new Html5QrcodeScanner(
-    'reader',
-    { fps: 10, qrbox: { width: 250, height: 250 } },
-    false,
-  )
-
-  html5QrcodeScanner.value.render(
-    onQRCodeScanned,
-    () => {}, // error callback
-  )
-}
-
-const onQRCodeScanned = async (token) => {
-  if (loading.value) return
-  loading.value = true
-  error.value = ''
-
-  try {
-    // Validasi token
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('token_qr')
-      .select('*, pengguna(*)')
-      .eq('token', token.trim())
-      .eq('sudah_digunakan', false)
-      .single()
-
-    if (tokenError) throw new Error('Token tidak valid')
-
-    // Update token
-    await supabase
-      .from('token_qr')
-      .update({
-        sudah_digunakan: true,
-        digunakan_pada: new Date().toISOString(),
-      })
-      .eq('id', tokenData.id)
-
-    voter.value = tokenData.pengguna
-    await loadCandidates()
-    step.value = 'vote'
-    startTimer()
-  } catch (error) {
-    error.value = error.message
-  } finally {
-    loading.value = false
-  }
-}
-
-const useManualToken = () => {
-  if (!manualToken.value.trim()) return
-  onQRCodeScanned(manualToken.value.trim())
-}
-
-const loadCandidates = async () => {
-  loadingCandidates.value = true
-  try {
-    const { data, error: candidatesError } = await supabase
-      .from('kandidat')
-      .select('*, pengguna(*)')
-      .eq('status', 'disetujui')
-      .order('nomor_urut')
-
-    if (candidatesError) throw candidatesError
-    candidates.value = data || []
-  } catch (error) {
-    error.value = 'Gagal memuat kandidat'
-  } finally {
-    loadingCandidates.value = false
-  }
-}
-
-const selectCandidate = (position, candidateId) => {
-  selectedCandidates.value[position] = candidateId
-}
-
-const getPositionLabel = (value) => {
-  const pos = positions.value.find((p) => p.value === value)
-  return pos ? pos.label : value
-}
-
 const getInitials = (name) => {
+  if (!name) return '??'
   return name
     .split(' ')
-    .map((w) => w[0])
+    .map((word) => word[0])
     .join('')
     .toUpperCase()
     .substring(0, 2)
 }
 
-const truncateText = (text, length) => {
-  return text && text.length > length ? text.substring(0, length) + '...' : text
+const truncateText = (text, maxLength) => {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
 }
 
-const nextPosition = () => {
-  if (positionIndex.value < positions.value.length - 1) {
-    activePosition.value = positions.value[positionIndex.value + 1].value
+// Selection handlers
+const selectKurikulum = (candidate) => {
+  selectedKurikulum.value = candidate
+}
+
+const selectKesiswaan = (candidate) => {
+  selectedKesiswaan.value = candidate
+}
+
+const selectSarpras = (candidate) => {
+  selectedSarpras.value = candidate
+}
+
+const selectHumas = (candidate) => {
+  selectedHumas.value = candidate
+}
+
+// Navigation
+const nextStep = () => {
+  if (currentStep.value < 4 && isCurrentStepValid.value) {
+    currentStep.value++
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
-const previousPosition = () => {
-  if (positionIndex.value > 0) {
-    activePosition.value = positions.value[positionIndex.value - 1].value
+const prevStep = () => {
+  if (currentStep.value > 1) {
+    currentStep.value--
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
-const showReview = () => {
-  step.value = 'review'
-}
-
-const goToPosition = (position) => {
-  activePosition.value = position
-  step.value = 'vote'
-}
-
-const getSelectedCandidateName = (position) => {
-  const candidateId = selectedCandidates.value[position]
-  if (!candidateId) return null
-  const candidate = candidates.value.find((c) => c.id === candidateId)
-  return candidate ? candidate.pengguna.nama_lengkap : null
-}
-
-const getSelectedCandidateNumber = (position) => {
-  const candidateId = selectedCandidates.value[position]
-  if (!candidateId) return null
-  const candidate = candidates.value.find((c) => c.id === candidateId)
-  return candidate ? candidate.nomor_urut : null
-}
-
-const startTimer = () => {
-  timerInterval.value = setInterval(() => {
-    if (timeLeft.value > 0) {
-      timeLeft.value--
-    } else {
-      clearInterval(timerInterval.value)
-      if (step.value === 'vote' || step.value === 'review') {
-        alert('Waktu voting habis!')
-        router.push('/')
-      }
-    }
-  }, 1000)
-}
-
-const formatTime = (seconds) => {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-}
-
-const formatDate = (date) => {
-  return new Date(date).toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: 'numeric',
-    month: 'short',
-  })
-}
-
-const submitVotes = async () => {
-  if (!isAllSelected.value || submitting.value) return
-
-  submitting.value = true
-  error.value = ''
+// Load data
+const loadVoterData = () => {
+  const voterSession = localStorage.getItem('smanda_voter')
+  if (!voterSession) {
+    router.push('/scan')
+    return
+  }
 
   try {
-    // Get session ID
-    const { data: sessionData, error: sessionError } = await supabase
+    voterData.value = JSON.parse(voterSession)
+  } catch (err) {
+    console.error('Error parsing voter session:', err)
+    router.push('/scan')
+  }
+}
+
+const loadActiveSession = async () => {
+  try {
+    const { data, error: sessionError } = await supabase
       .from('sesi_pemilihan')
-      .select('id')
-      .eq('status', 'voting')
-      .single()
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
 
-    if (sessionError) throw new Error('Tidak ada sesi voting aktif')
+    if (sessionError) throw sessionError
+    activeSession.value = data?.[0] || null
 
-    const sessionId = sessionData.id
+    // Check if session is voting
+    if (!activeSession.value || activeSession.value.status !== 'voting') {
+      error.value = 'Sesi voting tidak aktif'
+    }
+  } catch (err) {
+    console.error('Error loading session:', err)
+    error.value = 'Gagal memuat data sesi'
+  }
+}
 
-    // Prepare votes
-    const votesToInsert = positions.value.map((pos) => ({
-      sesi_id: sessionId,
-      pemilih_id: voter.value.id,
-      kandidat_id: selectedCandidates.value[pos.value],
-      jabatan: pos.value,
-      is_draft: false,
-      is_valid: true,
-      submitted_at: new Date().toISOString(),
-    }))
+const loadCandidates = async () => {
+  try {
+    if (!activeSession.value?.id) return
+
+    // Load all candidates for current session
+    const { data: candidates, error: candidatesError } = await supabase
+      .from('kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id (
+          id,
+          nama_lengkap
+        )
+      `,
+      )
+      .eq('sesi_id', activeSession.value.id)
+      .order('jabatan', { ascending: true })
+      .order('nomor_urut', { ascending: true })
+
+    if (candidatesError) throw candidatesError
+
+    // Filter by position
+    kurikulumCandidates.value = candidates?.filter((c) => c.jabatan === 'kurikulum') || []
+    kesiswaanCandidates.value = candidates?.filter((c) => c.jabatan === 'kesiswaan') || []
+    sarprasCandidates.value = candidates?.filter((c) => c.jabatan === 'sarpras') || []
+    humasCandidates.value = candidates?.filter((c) => c.jabatan === 'humas') || []
+  } catch (err) {
+    console.error('Error loading candidates:', err)
+    error.value = 'Gagal memuat data calon'
+  }
+}
+
+// Voting submission
+const submitVote = () => {
+  if (!isAllStepsValid.value) {
+    error.value = 'Harap pilih semua calon terlebih dahulu'
+    return
+  }
+  showConfirmModal.value = true
+}
+
+const confirmSubmit = async () => {
+  showConfirmModal.value = false
+  submitting.value = true
+  error.value = ''
+  success.value = false
+
+  try {
+    // Validate session and voter
+    if (!activeSession.value || !voterData.value) {
+      throw new Error('Data sesi atau pemilih tidak valid')
+    }
+
+    // Prepare votes data
+    const votes = []
+
+    if (selectedKurikulum.value) {
+      votes.push({
+        sesi_id: activeSession.value.id,
+        pemilih_id: voterData.value.pengguna.id,
+        kandidat_id: selectedKurikulum.value.id,
+        jabatan: 'kurikulum',
+        is_draft: false,
+        is_valid: true,
+        disubmit_pada: new Date().toISOString(),
+        info_perangkat: navigator.userAgent,
+      })
+    }
+
+    if (selectedKesiswaan.value) {
+      votes.push({
+        sesi_id: activeSession.value.id,
+        pemilih_id: voterData.value.pengguna.id,
+        kandidat_id: selectedKesiswaan.value.id,
+        jabatan: 'kesiswaan',
+        is_draft: false,
+        is_valid: true,
+        disubmit_pada: new Date().toISOString(),
+        info_perangkat: navigator.userAgent,
+      })
+    }
+
+    if (selectedSarpras.value) {
+      votes.push({
+        sesi_id: activeSession.value.id,
+        pemilih_id: voterData.value.pengguna.id,
+        kandidat_id: selectedSarpras.value.id,
+        jabatan: 'sarpras',
+        is_draft: false,
+        is_valid: true,
+        disubmit_pada: new Date().toISOString(),
+        info_perangkat: navigator.userAgent,
+      })
+    }
+
+    if (selectedHumas.value) {
+      votes.push({
+        sesi_id: activeSession.value.id,
+        pemilih_id: voterData.value.pengguna.id,
+        kandidat_id: selectedHumas.value.id,
+        jabatan: 'humas',
+        is_draft: false,
+        is_valid: true,
+        disubmit_pada: new Date().toISOString(),
+        info_perangkat: navigator.userAgent,
+      })
+    }
 
     // Insert votes
-    const { error: votesError } = await supabase.from('suara').insert(votesToInsert)
+    const { error: insertError } = await supabase.from('suara').insert(votes)
 
-    if (votesError) throw votesError
+    if (insertError) throw insertError
 
-    // Generate vote ID
-    voteId.value = 'VOTE-' + Date.now().toString(36).toUpperCase()
+    // Success
+    success.value = true
 
-    // Show success
-    step.value = 'thanks'
-  } catch (error) {
-    error.value = 'Gagal menyimpan pilihan: ' + error.message
+    // Clear voter session
+    localStorage.removeItem('smanda_voter')
+
+    // Redirect after delay
+    setTimeout(() => {
+      router.push('/')
+    }, 3000)
+  } catch (err) {
+    console.error('Error submitting vote:', err)
+    error.value = err.message || 'Gagal mengirim voting'
   } finally {
     submitting.value = false
   }
 }
 
-const goToHome = () => {
-  router.push('/')
+// Remove unused saveDraft function
+// const saveDraft = async () => {
+//   // Optional: implement draft saving if needed
+// }
+
+// Prevent accidental page leave
+const beforeUnloadHandler = (event) => {
+  if (!success.value && !submitting.value) {
+    event.preventDefault()
+    event.returnValue = 'Voting Anda belum disimpan. Yakin ingin keluar?'
+  }
 }
 
 // Lifecycle
-onMounted(() => {
-  // Check camera
-  navigator.mediaDevices
-    ?.enumerateDevices()
-    .then((devices) => {
-      hasCamera.value = devices.some((d) => d.kind === 'videoinput')
-    })
-    .catch(() => {
-      hasCamera.value = false
-    })
+onMounted(async () => {
+  loadVoterData()
+  await loadActiveSession()
+  await loadCandidates()
+
+  // Add beforeunload listener
+  window.addEventListener('beforeunload', beforeUnloadHandler)
 })
 
 onUnmounted(() => {
-  if (html5QrcodeScanner.value) {
-    html5QrcodeScanner.value.clear()
-  }
-  if (timerInterval.value) {
-    clearInterval(timerInterval.value)
-  }
-})
-
-// Watch
-watch(activePosition, () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  window.removeEventListener('beforeunload', beforeUnloadHandler)
 })
 </script>
 
 <style scoped>
-/* CSS SEDERHANA - PAKAI YANG LAMA ATAU BASIC STYLE */
-.voting-page {
+.voting-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
   min-height: 100vh;
-  background: #f8fafc;
+  background: #f8f9fa;
 }
 
-.step-header,
-.vote-header,
-.review-header {
+/* Header */
+.voting-header {
   background: white;
-  padding: 2rem;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   text-align: center;
-  border-bottom: 1px solid #e2e8f0;
 }
-.step-header h1,
-.vote-header h1,
-.review-header h1 {
+
+.title {
   color: #1e3a8a;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 1.8rem;
 }
 
-.scan-step {
-  max-width: 500px;
-  margin: 0 auto;
-  padding: 2rem;
+.subtitle {
+  color: #6b7280;
+  margin-bottom: 1rem;
 }
-.scanner-container {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  margin-top: 2rem;
+
+.session-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
-.camera-permission {
-  text-align: center;
-  padding: 3rem 2rem;
-}
-.btn-enable-camera {
-  background: #1e3a8a;
-  color: white;
-  border: none;
-  padding: 1rem 2rem;
-  border-radius: 8px;
+
+.session-name {
   font-weight: 600;
-  cursor: pointer;
-  margin-top: 1rem;
-}
-.scanner-box {
-  width: 300px;
-  height: 300px;
-  margin: 0 auto;
-  border: 2px solid #ddd;
+  color: #1e40af;
+  background: #e0f2fe;
+  padding: 0.5rem 1rem;
   border-radius: 8px;
-  overflow: hidden;
 }
-.scanner-hint {
-  margin-top: 1rem;
-  color: #666;
-}
-.manual-token {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid #e2e8f0;
-  text-align: center;
-}
-.manual-token input {
-  width: 100%;
-  max-width: 300px;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  margin: 1rem 0;
-  font-size: 1rem;
-}
-.manual-token button {
-  background: #1e3a8a;
+
+.session-status.voting {
+  background: linear-gradient(135deg, #059669, #10b981);
   color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.manual-token button:disabled {
-  background: #94a3b8;
-  cursor: not-allowed;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.9rem;
 }
 
 .voter-info {
-  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
   padding: 1rem;
   background: #f0f7ff;
-  border-radius: 8px;
-  display: inline-block;
-}
-.timer {
-  color: #dc2626;
-  font-weight: 600;
-  margin-top: 0.5rem;
-}
-.timer-expired {
-  color: #ef4444;
-  font-weight: 600;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
 }
 
-.position-tabs {
+.voter-avatar {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+  border-radius: 50%;
   display: flex;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  overflow-x: auto;
-}
-.position-tab {
-  flex: 1;
-  padding: 1rem;
-  background: none;
-  border: none;
-  border-bottom: 3px solid transparent;
-  cursor: pointer;
-  font-weight: 600;
-  color: #64748b;
-  white-space: nowrap;
-  min-width: 120px;
-}
-.position-tab.active {
-  color: #1e3a8a;
-  border-bottom-color: #1e3a8a;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
 }
 
-.candidates-container {
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
+.voter-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
 }
-.position-subtitle {
-  color: #666;
+
+.voter-token {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-family: monospace;
+  margin-top: 0.25rem;
+}
+
+/* Voting Steps */
+.voting-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
   margin-bottom: 2rem;
+}
+
+.step {
+  text-align: center;
+  padding: 1rem;
+  background: white;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s;
+}
+
+.step.active {
+  border-color: #1e3a8a;
+  background: #f0f7ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  background: #e5e7eb;
+  color: #6b7280;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin: 0 auto 0.5rem;
+}
+
+.step.active .step-number {
+  background: #1e3a8a;
+  color: white;
+}
+
+.step-label {
+  font-weight: 600;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.step.active .step-label {
+  color: #1e3a8a;
+}
+
+/* Step Content */
+.step-content {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.step-title {
+  color: #1e3a8a;
+  margin-bottom: 0.5rem;
   text-align: center;
 }
 
+.step-description {
+  color: #6b7280;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+/* Candidates Grid */
 .candidates-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
+
 .candidate-card {
-  background: white;
-  border: 2px solid #e2e8f0;
+  border: 2px solid #e5e7eb;
   border-radius: 12px;
   padding: 1.5rem;
   cursor: pointer;
   transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
+  background: white;
 }
+
 .candidate-card:hover {
   border-color: #93c5fd;
   transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
+
 .candidate-card.selected {
   border-color: #1e3a8a;
   background: #f0f7ff;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
 }
 
 .candidate-photo {
-  width: 80px;
-  height: 80px;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 1rem;
   border-radius: 50%;
   overflow: hidden;
-  margin: 0 auto 1rem;
+  border: 3px solid #e5e7eb;
 }
-.photo-real img {
+
+.candidate-photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+
 .photo-placeholder {
   width: 100%;
   height: 100%;
@@ -675,300 +837,362 @@ watch(activePosition, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   font-weight: bold;
 }
 
 .candidate-info {
   text-align: center;
 }
-.candidate-number {
-  display: inline-block;
-  background: #1e3a8a;
-  color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin: 0 auto 1rem;
-}
-.candidate-card h4 {
-  color: #1e3a8a;
+
+.candidate-name {
+  color: #1e293b;
   margin-bottom: 0.5rem;
+  font-size: 1.1rem;
 }
-.candidate-nip {
-  color: #64748b;
-  font-size: 0.9rem;
+
+.candidate-number {
   margin-bottom: 1rem;
 }
-.candidate-visi {
-  background: #f8fafc;
-  padding: 0.75rem;
-  border-radius: 6px;
-  text-align: left;
+
+.number-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: #1e3a8a;
+  color: white;
+  border-radius: 20px;
   font-size: 0.9rem;
-  color: #4b5563;
+  font-weight: 700;
 }
-.visi-preview {
-  margin-top: 0.5rem;
+
+.candidate-visi {
+  color: #4b5563;
+  font-size: 0.9rem;
   line-height: 1.4;
 }
 
-.selected-badge {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: #10b981;
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.no-candidates {
-  grid-column: 1 / -1;
+.empty-candidates {
   text-align: center;
   padding: 3rem;
   color: #9ca3af;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 2px dashed #d1d5db;
 }
 
-.vote-navigation {
-  background: white;
-  padding: 1.5rem 2rem;
-  border-top: 1px solid #e2e8f0;
-  position: sticky;
-  bottom: 0;
-}
-.progress-indicator {
-  margin-bottom: 1rem;
-}
-.progress-text {
-  text-align: center;
-  color: #64748b;
-  margin-bottom: 0.5rem;
-}
-.progress-bar {
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #1e3a8a, #3b82f6);
-  transition: width 0.3s ease;
-}
-
-.nav-buttons {
+/* Navigation Buttons */
+.navigation-buttons {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
 }
-.btn-prev,
-.btn-next,
-.btn-submit {
-  padding: 0.75rem 1.5rem;
+
+.nav-btn {
+  padding: 1rem 2rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 10px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-}
-.btn-prev {
-  background: #6b7280;
-  color: white;
-}
-.btn-prev:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-.btn-next,
-.btn-submit {
-  background: #1e3a8a;
-  color: white;
-}
-.btn-next:disabled,
-.btn-submit:disabled {
-  background: #94a3b8;
-  cursor: not-allowed;
-}
-
-.review-step {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-.review-choices {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  margin: 2rem 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-.review-choice {
-  padding: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.review-choice:last-child {
-  border-bottom: none;
-}
-.review-choice h4 {
-  color: #1e3a8a;
+  transition: all 0.3s;
   min-width: 150px;
 }
-.btn-change {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-top: 0.5rem;
-}
 
-.review-warning {
-  background: #fef3c7;
-  border: 1px solid #f59e0b;
-  border-radius: 8px;
-  padding: 1rem;
-  margin: 2rem 0;
-  text-align: center;
-  color: #92400e;
-}
-
-.review-actions {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2rem;
-}
-.btn-back {
+.prev-btn {
   background: #6b7280;
   color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.btn-confirm {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 0.75rem 2rem;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 1.1rem;
-}
-.btn-confirm:disabled {
-  background: #a7f3d0;
-  cursor: not-allowed;
 }
 
-.thanks-step {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
+.prev-btn:hover:not(:disabled) {
+  background: #4b5563;
 }
-.thanks-content {
-  background: white;
-  border-radius: 16px;
-  padding: 3rem;
-  text-align: center;
-  max-width: 600px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-}
-.thanks-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-.thanks-message {
-  font-size: 1.5rem;
-  color: #1e3a8a;
-  margin-bottom: 1rem;
-}
-.thanks-detail {
-  color: #666;
-  line-height: 1.6;
-  margin-bottom: 2rem;
-}
-.thanks-info {
-  background: #f8fafc;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-  text-align: left;
-}
-.thanks-info p {
-  margin: 0.5rem 0;
-  font-family: monospace;
-  font-size: 0.9rem;
-}
-.btn-home {
+
+.next-btn {
   background: #1e3a8a;
   color: white;
-  border: none;
-  padding: 1rem 2rem;
+  margin-left: auto;
+}
+
+.next-btn:hover:not(:disabled) {
+  background: #1e40af;
+}
+
+.submit-btn {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: white;
+  margin-left: auto;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #047857, #0d9c6d);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.3);
+}
+
+.nav-btn:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Selection Summary */
+.selection-summary {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.selection-summary h3 {
+  color: #1e3a8a;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.summary-item {
+  padding: 1rem;
   border-radius: 8px;
-  font-size: 1.1rem;
+  border: 2px solid #e5e7eb;
+  transition: all 0.3s;
+}
+
+.summary-item.filled {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.summary-label {
+  display: block;
   font-weight: 600;
-  cursor: pointer;
+  color: #4b5563;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.summary-item.filled .summary-label {
+  color: #065f46;
+}
+
+.summary-value {
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+.summary-item.filled .summary-value {
+  color: #065f46;
+  font-weight: 600;
+}
+
+/* Messages */
+.error-message,
+.success-message {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  border-radius: 12px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .error-message {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  background: #fee;
-  color: #c00;
-  padding: 1rem;
-  border-radius: 6px;
-  border: 1px solid #fcc;
-  z-index: 1000;
-  max-width: 300px;
+  background: linear-gradient(135deg, #fee, #fecaca);
+  color: #dc2626;
+  border: 2px solid #fca5a5;
+  text-align: center;
 }
 
-.loading-overlay {
+.success-message {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  color: #065f46;
+  border: 2px solid #6ee7b7;
+  text-align: center;
+}
+
+.success-content h3 {
+  margin-bottom: 0.5rem;
+}
+
+/* Modal */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 1rem;
 }
 
-.loading-candidates {
-  text-align: center;
-  padding: 3rem;
-  color: #64748b;
+.modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  animation: modalSlideIn 0.3s ease;
 }
 
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #1e3a8a;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-selections {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+  color: #4b5563;
+}
+
+.modal-selections li {
+  margin-bottom: 0.5rem;
+}
+
+.modal-warning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  color: #856404;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.modal-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancel-btn {
+  background: #6b7280;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #4b5563;
+}
+
+.confirm-btn {
+  background: #1e3a8a;
+  color: white;
+}
+
+.confirm-btn:hover {
+  background: #1e40af;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
+  .voting-steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .candidates-grid {
     grid-template-columns: 1fr;
   }
-  .position-tab {
-    min-width: 100px;
-    padding: 0.75rem 0.5rem;
-    font-size: 0.9rem;
+
+  .summary-grid {
+    grid-template-columns: 1fr;
   }
-  .review-choice {
+
+  .navigation-buttons {
     flex-direction: column;
-    align-items: flex-start;
   }
-  .review-choice h4 {
-    margin-bottom: 0.5rem;
+
+  .nav-btn {
+    width: 100%;
+  }
+
+  .session-info {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .voting-container {
+    padding: 0.5rem;
+  }
+
+  .step-content {
+    padding: 1rem;
+  }
+
+  .candidate-card {
+    padding: 1rem;
   }
 }
 </style>

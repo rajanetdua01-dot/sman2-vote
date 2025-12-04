@@ -427,13 +427,32 @@
           </div>
         </div>
 
-        <!-- TAB 4: Calon Kandidat -->
+        <!-- TAB 4: Calon Kandidat (UPDATED) -->
         <div v-else-if="activeTab === 'candidates'" class="tab-pane">
           <div class="section-header">
             <h2>👥 Verifikasi Calon Kandidat</h2>
-            <p>Kelola pendaftaran calon Waka</p>
+            <p>Kelola pendaftaran calon Waka untuk sesi: {{ activeSession?.nama_sesi }}</p>
           </div>
 
+          <!-- Filter Controls -->
+          <div class="filter-controls">
+            <select v-model="candidateFilter" @change="filterRegistrations">
+              <option value="all">Semua Status</option>
+              <option value="menunggu">Menunggu ({{ candidateStats.pending || 0 }})</option>
+              <option value="disetujui">Disetujui ({{ candidateStats.approved || 0 }})</option>
+              <option value="ditolak">Ditolak ({{ candidateStats.rejected || 0 }})</option>
+            </select>
+
+            <button
+              @click="refreshRegistrations"
+              class="btn-refresh"
+              :disabled="loadingRegistrations"
+            >
+              {{ loadingRegistrations ? '🔄 Loading...' : '🔄 Refresh' }}
+            </button>
+          </div>
+
+          <!-- Stats -->
           <div class="candidates-stats">
             <div class="candidate-stat pending">
               <h4>Menunggu</h4>
@@ -447,13 +466,130 @@
               <h4>Ditolak</h4>
               <p>{{ candidateStats.rejected || 0 }}</p>
             </div>
+            <div class="candidate-stat total">
+              <h4>Total</h4>
+              <p>{{ candidateStats.total || 0 }}</p>
+            </div>
           </div>
 
-          <div class="empty-state">
-            <p>Fitur verifikasi calon akan segera tersedia</p>
+          <!-- Registration List -->
+          <div v-if="filteredRegistrations.length > 0" class="registrations-list">
+            <div class="registrations-count">
+              <p>
+                Menampilkan {{ filteredRegistrations.length }} dari
+                {{ registrations.length }} pendaftaran
+              </p>
+            </div>
+
+            <div
+              v-for="registration in filteredRegistrations"
+              :key="registration.id"
+              class="registration-card"
+            >
+              <div class="registration-header">
+                <div class="candidate-info">
+                  <div class="candidate-avatar">
+                    {{ getInitials(registration.pengguna?.nama_lengkap) }}
+                  </div>
+                  <div class="candidate-details">
+                    <h4>{{ registration.pengguna?.nama_lengkap }}</h4>
+                    <p><strong>NIP:</strong> {{ registration.pengguna?.nip }}</p>
+                    <p>
+                      <strong>Jabatan Diajukan:</strong>
+                      {{ formatJabatan(registration.jabatan_diajukan) }}
+                    </p>
+                    <p>
+                      <strong>Tanggal Daftar:</strong>
+                      {{ formatDateTime(registration.dibuat_pada) }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="registration-status">
+                  <span class="status-badge" :class="registration.status">
+                    {{ getRegistrationStatusLabel(registration.status) }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="registration-content">
+                <div class="visi-misi">
+                  <h5>Visi & Misi:</h5>
+                  <p>{{ registration.visi_misi }}</p>
+                </div>
+
+                <div v-if="registration.foto_kampanye" class="foto-preview">
+                  <h5>Foto Kampanye:</h5>
+                  <img
+                    :src="registration.foto_kampanye"
+                    :alt="registration.pengguna?.nama_lengkap"
+                    class="foto-kampanye"
+                    @click="previewFoto(registration.foto_kampanye)"
+                  />
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="registration-actions" v-if="registration.status === 'menunggu'">
+                <button
+                  @click="approveRegistration(registration)"
+                  class="btn-approve"
+                  :disabled="processingRegistration"
+                >
+                  ✅ Setujui & Jadikan Kandidat
+                </button>
+                <button
+                  @click="rejectRegistration(registration)"
+                  class="btn-reject"
+                  :disabled="processingRegistration"
+                >
+                  ❌ Tolak
+                </button>
+                <button @click="viewDetails(registration)" class="btn-details">
+                  🔍 Lihat Detail
+                </button>
+              </div>
+
+              <div v-else-if="registration.status === 'ditolak'" class="rejection-info">
+                <p>
+                  <strong>Alasan ditolak:</strong>
+                  {{ registration.alasan_ditolak || 'Tidak ada alasan spesifik' }}
+                </p>
+                <p><strong>Ditinjau oleh:</strong> {{ registration.disetujui_oleh || 'Admin' }}</p>
+                <p>
+                  <strong>Tanggal ditinjau:</strong>
+                  {{ formatDateTime(registration.ditinjau_pada) }}
+                </p>
+              </div>
+
+              <div v-else-if="registration.status === 'disetujui'" class="approval-info">
+                <p><strong>✅ Disetujui dan sudah menjadi kandidat</strong></p>
+                <p>
+                  <strong>Nomor Urut:</strong> #{{
+                    getCandidateNumber(registration.id) || 'Belum diatur'
+                  }}
+                </p>
+                <p>
+                  <strong>Ditambah ke tabel kandidat pada:</strong>
+                  {{ formatDateTime(registration.ditinjau_pada) }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else class="empty-state">
+            <div class="empty-icon">📋</div>
+            <h3>Tidak Ada Pendaftaran</h3>
+            <p v-if="candidateFilter === 'menunggu'">
+              Tidak ada pendaftaran yang menunggu verifikasi.
+            </p>
+            <p v-else-if="candidateFilter === 'disetujui'">Belum ada pendaftaran yang disetujui.</p>
+            <p v-else-if="candidateFilter === 'ditolak'">Tidak ada pendaftaran yang ditolak.</p>
+            <p v-else>Belum ada pendaftaran calon kandidat untuk sesi ini.</p>
             <p class="hint">
-              Saat ini guru bisa langsung daftar di Dashboard Calon ketika status
-              <strong>PENDAFTARAN</strong> aktif
+              Guru dapat mendaftar melalui Dashboard Calon ketika status sesi adalah
+              <strong>PENDAFTARAN</strong>
             </p>
           </div>
         </div>
@@ -534,6 +670,87 @@
       </div>
     </div>
 
+    <!-- Approve/Reject Modal -->
+    <div v-if="showRegistrationModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>{{ modalMode === 'approve' ? '✅ Setujui Pendaftaran' : '❌ Tolak Pendaftaran' }}</h3>
+          <button @click="showRegistrationModal = false" class="btn-close">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div v-if="selectedRegistration" class="registration-summary">
+            <h4>Data Calon:</h4>
+            <p><strong>Nama:</strong> {{ selectedRegistration.pengguna?.nama_lengkap }}</p>
+            <p>
+              <strong>Jabatan:</strong> {{ formatJabatan(selectedRegistration.jabatan_diajukan) }}
+            </p>
+            <p>
+              <strong>Visi & Misi:</strong>
+              {{ selectedRegistration.visi_misi.substring(0, 100) }}...
+            </p>
+          </div>
+
+          <div v-if="modalMode === 'approve'" class="approve-options">
+            <div class="form-group">
+              <label>Nomor Urut *</label>
+              <input
+                v-model="candidateNumber"
+                type="number"
+                min="1"
+                max="99"
+                placeholder="Contoh: 1"
+                required
+              />
+              <small>Nomor urut untuk kandidat ini</small>
+            </div>
+          </div>
+
+          <div v-if="modalMode === 'reject'" class="reject-options">
+            <div class="form-group">
+              <label>Alasan Penolakan (Opsional)</label>
+              <textarea
+                v-model="rejectionReason"
+                rows="3"
+                placeholder="Berikan alasan penolakan (akan dikirim ke calon)..."
+              ></textarea>
+              <small>Alasan ini akan muncul di dashboard calon</small>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="showRegistrationModal = false" class="btn-cancel">Batal</button>
+            <button
+              @click="confirmRegistrationAction"
+              class="btn-save"
+              :disabled="processingRegistration"
+            >
+              {{
+                processingRegistration
+                  ? 'Memproses...'
+                  : modalMode === 'approve'
+                    ? 'Setujui'
+                    : 'Tolak'
+              }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Foto Preview Modal -->
+    <div v-if="showFotoPreview" class="modal-overlay" @click="showFotoPreview = false">
+      <div class="modal foto-preview-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Foto Kampanye</h3>
+          <button @click="showFotoPreview = false" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <img :src="previewFotoUrl" alt="Foto Kampanye" class="full-foto" />
+        </div>
+      </div>
+    </div>
+
     <!-- Error Toast -->
     <div v-if="toastMessage" class="toast" :class="toastType">
       {{ toastMessage }}
@@ -573,8 +790,21 @@ const stats = ref({
 })
 const tokens = ref([])
 const activeSession = ref(null)
-const candidateStats = ref({})
-const generatingTokens = ref(false)
+
+// Candidate/Registration State
+const registrations = ref([])
+const candidateStats = ref({
+  total: 0,
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+})
+const candidateFilter = ref('menunggu')
+const filteredRegistrations = ref([])
+const loadingRegistrations = ref(false)
+
+// Candidate numbers mapping
+const candidateNumbers = ref({})
 
 // Modal State
 const showCreateModal = ref(false)
@@ -583,6 +813,18 @@ const showConfirmModal = ref(false)
 const confirmMessage = ref('')
 const pendingAction = ref(null)
 const executingAction = ref(false)
+
+// Registration Modal State
+const showRegistrationModal = ref(false)
+const modalMode = ref('approve') // 'approve' or 'reject'
+const selectedRegistration = ref(null)
+const candidateNumber = ref(1)
+const rejectionReason = ref('')
+const processingRegistration = ref(false)
+
+// Foto Preview
+const showFotoPreview = ref(false)
+const previewFotoUrl = ref('')
 
 // Form State
 const newSessionForm = ref({
@@ -676,7 +918,7 @@ const loadDashboardData = async () => {
     await loadActiveSession()
 
     // Load lainnya
-    await Promise.all([loadStats(), loadTokens(), loadCandidateStats()])
+    await Promise.all([loadStats(), loadTokens(), loadCandidateStats(), loadRegistrations()])
   } catch (error) {
     console.error('Error loading dashboard data:', error)
     showToast('Gagal memuat data dashboard', 'error')
@@ -811,6 +1053,7 @@ const loadCandidateStats = async () => {
     let pending = 0
     let approved = 0
     let rejected = 0
+    let total = 0
 
     if (activeSession.value?.id) {
       // Count pending registrations
@@ -832,20 +1075,130 @@ const loadCandidateStats = async () => {
         .eq('status', 'ditolak')
         .eq('sesi_id', activeSession.value.id)
 
+      const { count: totalCount } = await supabase
+        .from('pendaftaran_kandidat')
+        .select('*', { count: 'exact', head: true })
+        .eq('sesi_id', activeSession.value.id)
+
       pending = pendingCount || 0
       approved = approvedCount || 0
       rejected = rejectedCount || 0
+      total = totalCount || 0
     }
 
     candidateStats.value = {
       pending,
       approved,
       rejected,
+      total,
     }
   } catch (error) {
     console.error('Error loading candidate stats:', error)
-    candidateStats.value = { pending: 0, approved: 0, rejected: 0 }
+    candidateStats.value = { pending: 0, approved: 0, rejected: 0, total: 0 }
   }
+}
+
+const loadRegistrations = async () => {
+  try {
+    loadingRegistrations.value = true
+
+    if (!activeSession.value?.id) {
+      registrations.value = []
+      filteredRegistrations.value = []
+      return
+    }
+
+    // Load all registrations for current session with user data
+    const { data, error } = await supabase
+      .from('pendaftaran_kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id (
+          id,
+          nip,
+          nama_lengkap,
+          peran
+        )
+      `,
+      )
+      .eq('sesi_id', activeSession.value.id)
+      .order('dibuat_pada', { ascending: false })
+
+    if (error) {
+      console.error('Error loading registrations:', error)
+      showToast('Gagal memuat data pendaftaran', 'error')
+      return
+    }
+
+    registrations.value = data || []
+
+    // Also load existing candidates to get their numbers
+    await loadCandidateNumbers()
+
+    // Apply filter
+    filterRegistrations()
+
+    // Update stats
+    updateCandidateStats(data || [])
+  } catch (error) {
+    console.error('Error in loadRegistrations:', error)
+    showToast('Error memuat data pendaftaran', 'error')
+  } finally {
+    loadingRegistrations.value = false
+  }
+}
+
+const loadCandidateNumbers = async () => {
+  try {
+    if (!activeSession.value?.id) return
+
+    const { data, error } = await supabase
+      .from('kandidat')
+      .select('id, pendaftaran_id, nomor_urut')
+      .eq('sesi_id', activeSession.value.id)
+
+    if (error) {
+      console.error('Error loading candidate numbers:', error)
+      return
+    }
+
+    // Create mapping: registration_id -> candidate_number
+    candidateNumbers.value = {}
+    data?.forEach((candidate) => {
+      if (candidate.pendaftaran_id) {
+        candidateNumbers.value[candidate.pendaftaran_id] = candidate.nomor_urut
+      }
+    })
+  } catch (error) {
+    console.error('Error loading candidate numbers:', error)
+  }
+}
+
+const filterRegistrations = () => {
+  if (!registrations.value.length) {
+    filteredRegistrations.value = []
+    return
+  }
+
+  if (candidateFilter.value === 'all') {
+    filteredRegistrations.value = registrations.value
+  } else {
+    filteredRegistrations.value = registrations.value.filter(
+      (reg) => reg.status === candidateFilter.value,
+    )
+  }
+}
+
+const updateCandidateStats = (data) => {
+  const stats = {
+    total: data.length,
+    pending: data.filter((r) => r.status === 'menunggu').length,
+    approved: data.filter((r) => r.status === 'disetujui').length,
+    rejected: data.filter((r) => r.status === 'ditolak').length,
+  }
+
+  candidateStats.value = stats
 }
 
 // Session Management
@@ -985,7 +1338,7 @@ const generateTokensForAllGuru = async () => {
     return
   }
 
-  generatingTokens.value = true
+  //generatingTokens.value = true
 
   try {
     // Get all teachers
@@ -1057,7 +1410,7 @@ const generateTokensForAllGuru = async () => {
     showToast('Gagal generate token: ' + error.message, 'error')
     throw error
   } finally {
-    generatingTokens.value = false
+    // generatingTokens.value = false
   }
 }
 
@@ -1106,6 +1459,180 @@ const resetSessionData = async () => {
     console.error('Error resetting session data:', error)
     throw error
   }
+}
+
+// Registration Management
+const approveRegistration = (registration) => {
+  if (!registration) return
+
+  selectedRegistration.value = registration
+  modalMode.value = 'approve'
+
+  // Set default candidate number (next available)
+  candidateNumber.value = getNextCandidateNumber(registration.jabatan_diajukan)
+
+  showRegistrationModal.value = true
+}
+
+const rejectRegistration = (registration) => {
+  if (!registration) return
+
+  selectedRegistration.value = registration
+  modalMode.value = 'reject'
+  rejectionReason.value = ''
+
+  showRegistrationModal.value = true
+}
+
+const confirmRegistrationAction = async () => {
+  if (!selectedRegistration.value) return
+
+  processingRegistration.value = true
+
+  try {
+    const now = new Date().toISOString()
+
+    if (modalMode.value === 'approve') {
+      // Validate candidate number
+      if (!candidateNumber.value || candidateNumber.value < 1) {
+        throw new Error('Nomor urut harus diisi dan minimal 1')
+      }
+
+      // 1. Update registration status
+      const { error: updateError } = await supabase
+        .from('pendaftaran_kandidat')
+        .update({
+          status: 'disetujui',
+          alasan_ditolak: null,
+          disetujui_oleh: adminUser.value.id,
+          ditinjau_pada: now,
+          diperbarui_pada: now,
+        })
+        .eq('id', selectedRegistration.value.id)
+
+      if (updateError) throw updateError
+
+      // 2. Check if candidate already exists for this registration
+      const { data: existingCandidate } = await supabase
+        .from('kandidat')
+        .select('id')
+        .eq('pendaftaran_id', selectedRegistration.value.id)
+        .single()
+
+      if (existingCandidate) {
+        // Update existing candidate
+        const { error: updateCandidateError } = await supabase
+          .from('kandidat')
+          .update({
+            nomor_urut: candidateNumber.value,
+            visi_misi: selectedRegistration.value.visi_misi,
+            foto_kampanye: selectedRegistration.value.foto_kampanye,
+            diperbarui_pada: now,
+          })
+          .eq('id', existingCandidate.id)
+
+        if (updateCandidateError) throw updateCandidateError
+      } else {
+        // Create new candidate
+        const { error: insertCandidateError } = await supabase.from('kandidat').insert({
+          pendaftaran_id: selectedRegistration.value.id,
+          pengguna_id: selectedRegistration.value.pengguna_id,
+          sesi_id: activeSession.value.id,
+          jabatan: selectedRegistration.value.jabatan_diajukan,
+          nomor_urut: candidateNumber.value,
+          visi_misi: selectedRegistration.value.visi_misi,
+          foto_kampanye: selectedRegistration.value.foto_kampanye,
+          total_suara: 0,
+          dibuat_pada: now,
+        })
+
+        if (insertCandidateError) throw insertCandidateError
+      }
+
+      showToast(
+        `Pendaftaran ${selectedRegistration.value.pengguna?.nama_lengkap} disetujui!`,
+        'success',
+      )
+    } else if (modalMode.value === 'reject') {
+      // Update registration status to rejected
+      const { error: updateError } = await supabase
+        .from('pendaftaran_kandidat')
+        .update({
+          status: 'ditolak',
+          alasan_ditolak: rejectionReason.value || 'Ditolak oleh admin',
+          disetujui_oleh: adminUser.value.id,
+          ditinjau_pada: now,
+          diperbarui_pada: now,
+        })
+        .eq('id', selectedRegistration.value.id)
+
+      if (updateError) throw updateError
+
+      showToast(
+        `Pendaftaran ${selectedRegistration.value.pengguna?.nama_lengkap} ditolak.`,
+        'warning',
+      )
+    }
+
+    // Refresh data
+    await loadRegistrations()
+    await loadCandidateStats()
+
+    // Close modal
+    showRegistrationModal.value = false
+    selectedRegistration.value = null
+  } catch (error) {
+    console.error('Error processing registration action:', error)
+    showToast('Gagal: ' + error.message, 'error')
+  } finally {
+    processingRegistration.value = false
+  }
+}
+
+const getNextCandidateNumber = (jabatan) => {
+  // Find the highest candidate number for this position
+  const candidatesForPosition = registrations.value.filter(
+    (r) => r.status === 'disetujui' && r.jabatan_diajukan === jabatan,
+  )
+
+  if (candidatesForPosition.length === 0) {
+    return 1
+  }
+
+  // Get candidate numbers for this position
+  const numbers = candidatesForPosition
+    .map((reg) => candidateNumbers.value[reg.id] || 0)
+    .filter((num) => num > 0)
+
+  if (numbers.length === 0) {
+    return 1
+  }
+
+  return Math.max(...numbers) + 1
+}
+
+const getCandidateNumber = (registrationId) => {
+  return candidateNumbers.value[registrationId] || null
+}
+
+const viewDetails = (registration) => {
+  // In future, could show more detailed modal
+  console.log('View details:', registration)
+  // For now, just show a toast
+  showToast(
+    `Detail: ${registration.pengguna?.nama_lengkap} - ${formatJabatan(registration.jabatan_diajukan)}`,
+    'info',
+  )
+}
+
+const previewFoto = (fotoUrl) => {
+  previewFotoUrl.value = fotoUrl
+  showFotoPreview.value = true
+}
+
+const refreshRegistrations = async () => {
+  await loadRegistrations()
+  showToast('Data pendaftaran diperbarui', 'success')
 }
 
 // Token Management
@@ -1212,8 +1739,27 @@ const getStatusLabel = (status) => {
   return map[status] || status
 }
 
+const getRegistrationStatusLabel = (status) => {
+  const map = {
+    menunggu: 'MENUNGGU',
+    disetujui: 'DISETUJUI',
+    ditolak: 'DITOLAK',
+  }
+  return map[status] || status
+}
+
+const formatJabatan = (jabatan) => {
+  const map = {
+    humas: 'Waka Humas',
+    sarpras: 'Waka Sarana Prasarana',
+    kesiswaan: 'Waka Kesiswaan',
+    kurikulum: 'Waka Kurikulum',
+  }
+  return map[jabatan] || jabatan
+}
+
 const getInitials = (name) => {
-  if (!name) return 'AD'
+  if (!name) return '??'
   return name
     .split(' ')
     .map((w) => w[0])

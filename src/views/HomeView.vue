@@ -3,16 +3,16 @@
     <!-- ... -->
     <div class="actions">
       <div class="card">
-        <h3>👤 Calon Kandidat</h3>
-        <p>Daftar sebagai calon Waka</p>
+        <h3>👤 Pendaftaran Calon Kandidat</h3>
+        <p>Daftar sebagai calon Wakil Kepala Sekolah</p>
         <!-- PAKAI #/ bukan /#/ -->
-        <a href="/login-calon" class="btn">Login Calon</a>
+        <a href="/login-calon" class="btn">Daftar</a>
       </div>
 
       <div class="card">
-        <h3>🗳️ Pemilih (Guru/Staff)</h3>
-        <p>Gunakan QR Code untuk voting</p>
-        <a href="/scan" class="btn">Scan QR</a>
+        <h3>🗳️ Pilih Kandidat</h3>
+        <p>Voting oleh Guru dan Staff</p>
+        <a href="/scan" class="btn">Vote</a>
       </div>
 
       <div class="card">

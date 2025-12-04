@@ -4,13 +4,11 @@
     <header>
       <h1>🗳️ SMANDA VOTE</h1>
       <nav>
-        <!-- HAPUS /#/ dari semua links, pakai #/ saja -->
         <a href="/">Home</a>
-        <a href="/test">Test</a>
-        <a href="/login-calon">Login Calon</a>
-        <a href="/admin-login">Admin</a>
-        <a href="/scan">Scan QR</a>
+        <a href="/login-calon">Pendaftaran Calon</a>
+        <a href="/scan">Pemilih</a>
         <a href="/live-results">Hasil</a>
+        <a href="/admin-login">Admin</a>
       </nav>
     </header>
 

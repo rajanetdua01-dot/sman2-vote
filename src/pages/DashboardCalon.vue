@@ -3,10 +3,11 @@
     <div class="header">
       <h1>Dashboard Calon Kandidat</h1>
       <div class="user-info">
-        <p>
+        <p v-if="user">
           Selamat datang, <strong>{{ user.nama_lengkap }}</strong>
         </p>
-        <p>NIP: {{ user.nip }}</p>
+        <p v-if="user">NIP: {{ user.nip }}</p>
+        <p v-if="user">Masa Kerja: {{ masaKerjaTahun }} tahun</p>
       </div>
     </div>
 
@@ -23,14 +24,7 @@
           <p>Tahun Ajaran: {{ activeSession.tahun_ajaran }}</p>
           <p>
             Status:
-            <span
-              :class="{
-                'status-draft': activeSession.status === 'draft',
-                'status-pendaftaran': activeSession.status === 'pendaftaran',
-                'status-voting': activeSession.status === 'voting',
-                'status-selesai': activeSession.status === 'selesai',
-              }"
-            >
+            <span :class="'status-' + activeSession.status">
               {{ activeSession.status.toUpperCase() }}
             </span>
           </p>
@@ -44,7 +38,7 @@
         </div>
       </div>
 
-      <!-- STATUS PENDAFTARAN USER -->
+      <!-- STATUS PENDAFTARAN -->
       <div class="registration-status card">
         <h3>Status Pendaftaran Anda</h3>
 
@@ -55,14 +49,7 @@
         <div v-else-if="userRegistration">
           <!-- SUDAH DAFTAR -->
           <div class="already-registered">
-            <div
-              class="status-badge"
-              :class="{
-                pending: userRegistration.status === 'menunggu',
-                approved: userRegistration.status === 'disetujui',
-                rejected: userRegistration.status === 'ditolak',
-              }"
-            >
+            <div class="status-badge" :class="userRegistration.status">
               {{ userRegistration.status.toUpperCase() }}
             </div>
 
@@ -74,7 +61,7 @@
               <p><strong>Waktu Daftar:</strong> {{ formatDate(userRegistration.dibuat_pada) }}</p>
 
               <div v-if="userRegistration.status === 'menunggu'">
-                <p>⏳ Menunggu verifikasi panitia</p>
+                <p>⏳ Menunggu verifikasi panitia (masa kerja kurang dari 3 tahun)</p>
               </div>
 
               <div v-else-if="userRegistration.status === 'disetujui'">
@@ -97,6 +84,16 @@
           <!-- BELUM DAFTAR -->
           <div class="not-registered">
             <p>Anda belum mendaftar sebagai calon kandidat</p>
+
+            <div class="approve-info" v-if="user">
+              <p v-if="isAutoApprove(user.nip)" class="auto-approve">
+                ✅ <strong>AUTO-APPROVE</strong> (Masa kerja minimal 3 tahun)
+              </p>
+              <p v-else class="manual-approve">
+                ⏳ <strong>MENUNGGU VERIFIKASI</strong> (Masa kerja kurang dari 3 tahun)
+              </p>
+            </div>
+
             <button @click="showRegistrationForm = true" class="btn-register">
               Daftar Sekarang
             </button>
@@ -104,7 +101,7 @@
         </div>
       </div>
 
-      <!-- FORM PENDAFTARAN (Modal) -->
+      <!-- FORM PENDAFTARAN -->
       <div v-if="showRegistrationForm" class="modal-overlay">
         <div class="modal">
           <div class="modal-header">
@@ -113,6 +110,17 @@
           </div>
 
           <div class="modal-body">
+            <div class="approve-notice" v-if="user">
+              <p v-if="isAutoApprove(user.nip)" class="auto-approve-notice">
+                ✅ <strong>PENDAFTARAN ANDA AKAN OTOMATIS DISETUJUI</strong><br />
+                Karena masa kerja Anda {{ masaKerjaTahun }} tahun (minimal 3 tahun)
+              </p>
+              <p v-else class="manual-approve-notice">
+                ⏳ <strong>PENDAFTARAN ANDA AKAN DITINJAU MANUAL</strong><br />
+                Karena masa kerja Anda {{ masaKerjaTahun }} tahun (kurang dari 3 tahun)
+              </p>
+            </div>
+
             <form @submit.prevent="submitRegistration">
               <div class="form-group">
                 <label>Pilih Jabatan *</label>
@@ -134,12 +142,7 @@
                   required
                 ></textarea>
                 <small>Minimal 100 karakter</small>
-              </div>
-
-              <div class="form-group">
-                <label>Foto Kampanye (Opsional)</label>
-                <input type="file" @change="handleFileUpload" accept="image/*" />
-                <small>Format: JPG/PNG, maks 2MB</small>
+                <p class="char-count">{{ formData.visi_misi.length }}/100 karakter</p>
               </div>
 
               <div class="form-actions">
@@ -155,9 +158,8 @@
         </div>
       </div>
 
-      <!-- EDIT FORM (Modal) -->
+      <!-- EDIT FORM -->
       <div v-if="showEditForm" class="modal-overlay">
-        <!-- Similar to registration form but for editing -->
         <div class="modal">
           <div class="modal-header">
             <h3>Edit Pendaftaran</h3>
@@ -174,14 +176,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/utils/supabase'
 
+const router = useRouter()
 const authStore = useAuthStore()
-const user = authStore.user
 
-// State
+// State - semua harus pake ref()
 const loading = ref(true)
 const activeSession = ref(null)
 const userRegistration = ref(null)
@@ -193,18 +196,38 @@ const submitting = ref(false)
 const formData = ref({
   jabatan: '',
   visi_misi: '',
-  foto: null,
+})
+
+// Computed properties
+const user = computed(() => {
+  return authStore.user || null
+})
+
+const masaKerjaTahun = computed(() => {
+  return user.value ? hitungMasaKerja(user.value.nip) : 0
 })
 
 // Load data saat component mounted
 onMounted(async () => {
+  // Cek apakah user ada
+  if (!user.value) {
+    console.log('User not authenticated, redirecting to login...')
+    router.push('/login-calon')
+    return
+  }
+
   await loadData()
 })
 
 const loadData = async () => {
+  if (!user.value) {
+    loading.value = false
+    return
+  }
+
   loading.value = true
   try {
-    // 1. Get active session (pendaftaran)
+    // Get active session
     const { data: sessions } = await supabase
       .from('sesi_pemilihan')
       .select('*')
@@ -215,11 +238,11 @@ const loadData = async () => {
     if (sessions && sessions.length > 0) {
       activeSession.value = sessions[0]
 
-      // 2. Check user registration for this session
+      // Check user registration
       const { data: registration } = await supabase
         .from('pendaftaran_kandidat')
         .select('*')
-        .eq('pengguna_id', user.id)
+        .eq('pengguna_id', user.value.id)
         .eq('sesi_id', activeSession.value.id)
         .single()
 
@@ -234,6 +257,31 @@ const loadData = async () => {
   }
 }
 
+// AUTO-APPROVE FUNCTIONS
+const hitungMasaKerja = (nip) => {
+  if (!nip) return 0
+
+  try {
+    // Clean NIP (remove spaces)
+    const cleanNIP = nip.replace(/\s/g, '')
+
+    if (cleanNIP.length < 12) return 0
+
+    // Ambil tahun pengangkatan (karakter 9-12)
+    const tahunPengangkatan = parseInt(cleanNIP.substring(8, 12))
+    const tahunSekarang = new Date().getFullYear()
+
+    return tahunSekarang - tahunPengangkatan
+  } catch {
+    return 0
+  }
+}
+
+const isAutoApprove = (nip) => {
+  return hitungMasaKerja(nip) >= 3
+}
+
+// Helper functions
 const formatJabatan = (jabatan) => {
   const map = {
     humas: 'Waka Humas',
@@ -245,6 +293,7 @@ const formatJabatan = (jabatan) => {
 }
 
 const formatDate = (dateString) => {
+  if (!dateString) return '-'
   return new Date(dateString).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -254,20 +303,14 @@ const formatDate = (dateString) => {
   })
 }
 
-const handleFileUpload = (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    // Validate file size (2MB max)
-    if (file.size > 2 * 1024 * 1024) {
-      alert('File terlalu besar. Maksimal 2MB')
-      event.target.value = ''
-      return
-    }
-    formData.value.foto = file
-  }
-}
-
+// Main registration function
 const submitRegistration = async () => {
+  if (!user.value) {
+    alert('User tidak terautentikasi. Silahkan login ulang.')
+    router.push('/login-calon')
+    return
+  }
+
   if (!formData.value.jabatan || !formData.value.visi_misi) {
     alert('Harap isi semua field yang wajib')
     return
@@ -278,38 +321,91 @@ const submitRegistration = async () => {
     return
   }
 
+  if (!activeSession.value) {
+    alert('Tidak ada sesi pemilihan aktif')
+    return
+  }
+
   submitting.value = true
 
   try {
-    let fotoUrl = null
+    // Check auto-approve
+    const autoApprove = isAutoApprove(user.value.nip)
+    const status = autoApprove ? 'disetujui' : 'menunggu'
 
-    // Upload foto jika ada
-    if (formData.value.foto) {
-      // TODO: Implement file upload to Supabase Storage
-      console.log('Upload foto:', formData.value.foto.name)
-      // For now, we'll skip actual upload
-    }
+    console.log(`Status: ${status}, Masa kerja: ${hitungMasaKerja(user.value.nip)} tahun`)
 
-    // Insert registration to database
+    // Insert registration
     const { data, error } = await supabase
       .from('pendaftaran_kandidat')
       .insert({
-        pengguna_id: user.id,
+        pengguna_id: user.value.id,
         sesi_id: activeSession.value.id,
         jabatan_diajukan: formData.value.jabatan,
         visi_misi: formData.value.visi_misi,
-        foto_kampanye: fotoUrl,
-        status: 'menunggu',
+        status: status,
+        dibuat_pada: new Date().toISOString(),
+        diperbarui_pada: new Date().toISOString(),
       })
       .select()
       .single()
 
     if (error) throw error
 
-    // Update local state
+    // If auto-approve, create candidate automatically
+    if (autoApprove) {
+      try {
+        // Generate nomor urut
+        const { data: lastCandidate } = await supabase
+          .from('kandidat')
+          .select('nomor_urut')
+          .eq('jabatan', formData.value.jabatan)
+          .eq('sesi_id', activeSession.value.id)
+          .order('nomor_urut', { ascending: false })
+          .limit(1)
+
+        const nomorUrut = lastCandidate?.length > 0 ? lastCandidate[0].nomor_urut + 1 : 1
+
+        // Create candidate
+        await supabase.from('kandidat').insert({
+          pendaftaran_id: data.id,
+          pengguna_id: user.value.id,
+          sesi_id: activeSession.value.id,
+          jabatan: formData.value.jabatan,
+          nomor_urut: nomorUrut,
+          visi_misi: formData.value.visi_misi,
+          total_suara: 0,
+          dibuat_pada: new Date().toISOString(),
+        })
+      } catch (candidateError) {
+        console.error('Error creating candidate:', candidateError)
+        // Continue anyway
+      }
+    }
+
+    // Update UI
     userRegistration.value = data
     showRegistrationForm.value = false
-    alert('Pendaftaran berhasil dikirim! Menunggu verifikasi panitia.')
+
+    // Reset form
+    formData.value = {
+      jabatan: '',
+      visi_misi: '',
+    }
+
+    // Show success message
+    if (autoApprove) {
+      alert(
+        '✅ Pendaftaran berhasil! Status: DISETUJUI OTOMATIS\n\nAnda sudah menjadi kandidat resmi.',
+      )
+    } else {
+      alert(
+        '📝 Pendaftaran berhasil dikirim! Status: MENUNGGU VERIFIKASI\n\nPanitia akan meninjau pendaftaran Anda.',
+      )
+    }
+
+    // Refresh data
+    await loadData()
   } catch (error) {
     console.error('Error submitting registration:', error)
     alert('Gagal mengirim pendaftaran: ' + error.message)
@@ -321,94 +417,123 @@ const submitRegistration = async () => {
 
 <style scoped>
 .dashboard-calon {
-  max-width: 1000px;
+  max-width: 800px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 20px;
 }
 
 .header {
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 30px;
+  text-align: center;
 }
 
 .header h1 {
   color: #1e3a8a;
-  margin-bottom: 1rem;
+  margin-bottom: 10px;
 }
 
 .user-info {
   background: #f8f9fa;
-  padding: 1rem;
+  padding: 15px;
   border-radius: 8px;
   display: inline-block;
+  text-align: left;
 }
 
 .card {
   background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
 .card h3 {
   color: #333;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 15px;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 10px;
 }
 
-.status-draft {
-  color: #6b7280;
-}
 .status-pendaftaran {
   color: #3b82f6;
+  font-weight: bold;
 }
 .status-voting {
   color: #10b981;
+  font-weight: bold;
 }
 .status-selesai {
   color: #ef4444;
+  font-weight: bold;
+}
+
+.not-open {
+  text-align: center;
+  padding: 30px;
+  color: #666;
+}
+
+.already-registered {
+  padding: 20px 0;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 0.25rem 0.75rem;
+  padding: 5px 15px;
   border-radius: 20px;
   font-weight: bold;
-  font-size: 0.85rem;
-  margin-bottom: 1rem;
+  margin-bottom: 15px;
 }
 
-.status-badge.pending {
+.status-badge.menunggu {
   background: #fef3c7;
   color: #92400e;
 }
 
-.status-badge.approved {
+.status-badge.disetujui {
   background: #d1fae5;
   color: #065f46;
 }
 
-.status-badge.rejected {
+.status-badge.ditolak {
   background: #fee2e2;
   color: #991b1b;
 }
 
-.registration-details {
-  margin-top: 1rem;
-}
-
 .registration-details h4 {
-  margin-bottom: 0.5rem;
-  color: #4b5563;
+  color: #555;
+  margin-bottom: 10px;
 }
 
-.not-registered,
-.not-open {
+.registration-details p {
+  margin: 5px 0;
+  color: #666;
+}
+
+.not-registered {
   text-align: center;
-  padding: 2rem;
+  padding: 30px;
+}
+
+.approve-info {
+  margin: 20px 0;
+}
+
+.auto-approve {
+  color: #065f46;
+  background: #d1fae5;
+  padding: 10px;
+  border-radius: 5px;
+  display: inline-block;
+}
+
+.manual-approve {
+  color: #92400e;
+  background: #fef3c7;
+  padding: 10px;
+  border-radius: 5px;
+  display: inline-block;
 }
 
 .btn-register,
@@ -416,11 +541,11 @@ const submitRegistration = async () => {
   background: #1e3a8a;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 5px;
+  font-weight: bold;
   cursor: pointer;
-  margin-top: 1rem;
+  margin-top: 10px;
 }
 
 .btn-register:hover,
@@ -428,7 +553,7 @@ const submitRegistration = async () => {
   background: #1e40af;
 }
 
-/* Modal Styles */
+/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -444,7 +569,7 @@ const submitRegistration = async () => {
 
 .modal {
   background: white;
-  border-radius: 12px;
+  border-radius: 10px;
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
@@ -455,8 +580,8 @@ const submitRegistration = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
 }
 
 .modal-header h3 {
@@ -467,59 +592,78 @@ const submitRegistration = async () => {
 .btn-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 24px;
   cursor: pointer;
-  color: #6b7280;
+  color: #666;
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 20px;
+}
+
+.approve-notice {
+  margin-bottom: 20px;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.auto-approve-notice {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.manual-approve-notice {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
 }
 
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #374151;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #333;
 }
 
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 1rem;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
 }
 
 .form-group textarea {
+  min-height: 150px;
   resize: vertical;
 }
 
-.form-group small {
-  display: block;
-  margin-top: 0.25rem;
-  color: #6b7280;
-  font-size: 0.85rem;
+.char-count {
+  text-align: right;
+  color: #666;
+  font-size: 14px;
+  margin-top: 5px;
 }
 
 .form-actions {
   display: flex;
-  gap: 1rem;
+  gap: 10px;
   justify-content: flex-end;
-  margin-top: 2rem;
+  margin-top: 30px;
 }
 
 .btn-cancel {
   background: #6b7280;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
+  padding: 12px 24px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -527,9 +671,9 @@ const submitRegistration = async () => {
   background: #1e3a8a;
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 5px;
+  font-weight: bold;
   cursor: pointer;
 }
 
@@ -540,7 +684,8 @@ const submitRegistration = async () => {
 
 .loading {
   text-align: center;
-  padding: 3rem;
-  color: #6b7280;
+  padding: 50px;
+  color: #666;
+  font-size: 18px;
 }
 </style>
