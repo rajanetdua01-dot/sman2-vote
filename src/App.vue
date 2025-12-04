@@ -3,6 +3,7 @@
     <!-- Simple Header -->
     <header>
       <h1>🗳️ SMANDA VOTE</h1>
+      <p class="subtitle">Sistem E-Voting SMAN 2 Bandar Lampung</p>
       <nav>
         <a href="/">Home</a>
         <a href="/login-calon">Pendaftaran Calon</a>
