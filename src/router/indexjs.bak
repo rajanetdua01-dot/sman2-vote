@@ -9,10 +9,8 @@ const DashboardCalon = () => import('@/pages/DashboardCalon.vue')
 const VotingPage = () => import('@/pages/VotingPage.vue')
 const LiveResults = () => import('@/pages/LiveResults.vue')
 const AdminLogin = () => import('@/pages/AdminLogin.vue')
+const AdminDashboard = () => import('@/pages/AdminDashboard.vue')
 const PageNotFound = () => import('@/pages/PageNotFound.vue')
-
-// ✅ FIX: Update path ke admin folder
-const AdminDashboard = () => import('@/pages/admin/AdminDashboard.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -115,40 +113,18 @@ router.beforeEach((to, from, next) => {
   // Check authentication
   const adminSession = localStorage.getItem('smanda_admin')
   const userSession = localStorage.getItem('smanda_user')
-  const voterSession = localStorage.getItem('smanda_voter')
 
   console.log('🔐 Auth Check:', {
     hasAdminSession: !!adminSession,
     hasUserSession: !!userSession,
-    hasVoterSession: !!voterSession,
   })
 
-  // ✅ FIX 1: Allow admin to access voting page for testing
-  if (adminSession && (to.name === 'voting' || to.name === 'scan')) {
-    console.log('👑 Admin accessing voting/scan for testing, allowing')
-    next()
-    return
-  }
-
-  // ✅ FIX 2: Check voter session for voting page
-  if (to.name === 'voting' && voterSession) {
-    try {
-      JSON.parse(voterSession)
-      console.log('✅ Voter session valid, allowing to voting')
-      next()
-      return
-    } catch {
-      console.log('❌ Invalid voter session, clearing')
-      localStorage.removeItem('smanda_voter')
-    }
-  }
-
   // Jika tidak ada session sama sekali
-  if (!adminSession && !userSession && !voterSession) {
+  if (!adminSession && !userSession) {
     console.log('❌ No session found, redirecting to login')
 
     // Redirect berdasarkan tipe route
-    if (to.meta.allowedRoles?.includes('admin') || to.meta.allowedRoles?.includes('panitia')) {
+    if (to.meta.allowedRoles?.includes('admin')) {
       next({ name: 'adminLogin' })
     } else if (to.meta.allowedRoles?.includes('calon')) {
       next({ name: 'loginCalon' })
@@ -175,7 +151,7 @@ router.beforeEach((to, from, next) => {
         hasAccess = true
       }
     } catch (error) {
-      console.error('❌ Error parsing admin session:', error)
+      console.error('Error parsing admin session:', error)
       localStorage.removeItem('smanda_admin')
       next({ name: 'adminLogin' })
       return
@@ -188,17 +164,15 @@ router.beforeEach((to, from, next) => {
       userRole = user.peran || 'guru'
       console.log('👤 User session detected, role:', userRole)
 
-      // User bisa akses calon routes
+      // User bisa akses calon atau pemilih routes
       if (to.meta.allowedRoles?.includes('calon') && userRole === 'guru') {
         hasAccess = true
       }
-
-      // ✅ FIX 3: User dengan voter session bisa akses voting
-      if (to.meta.allowedRoles?.includes('pemilih') && voterSession) {
+      if (to.meta.allowedRoles?.includes('pemilih') && userRole === 'guru') {
         hasAccess = true
       }
     } catch (error) {
-      console.error('❌ Error parsing user session:', error)
+      console.error('Error parsing user session:', error)
       localStorage.removeItem('smanda_user')
       localStorage.removeItem('smanda_session')
       next({ name: 'loginCalon' })
@@ -218,8 +192,6 @@ router.beforeEach((to, from, next) => {
       next({ name: 'adminDashboard' })
     } else if (userSession) {
       next({ name: 'dashboardCalon' })
-    } else if (voterSession) {
-      next({ name: 'voting' })
     } else {
       next({ name: 'home' })
     }
@@ -229,10 +201,6 @@ router.beforeEach((to, from, next) => {
 // Global error handler untuk router
 router.onError((error) => {
   console.error('🚨 Router Error:', error)
-  // Redirect to home on chunk load error
-  if (error.message.includes('Failed to fetch dynamically imported module')) {
-    window.location.href = '/'
-  }
 })
 
 export default router
