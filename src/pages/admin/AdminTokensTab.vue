@@ -1,1073 +1,762 @@
 <template>
-  <div class="monitor-tab">
+  <div class="tokens-tab">
     <!-- Section Header -->
     <div class="section-header">
-      <h2>📊 Monitoring Real-time</h2>
-      <p>Pantau aktivitas voting secara live - Auto refresh setiap 30 detik</p>
-      <div class="connection-status">
-        <span class="status-dot" :class="{ connected: isConnected }"></span>
-        <span class="status-text">{{ isConnected ? '● CONNECTED' : '○ DISCONNECTED' }}</span>
-        <button @click="toggleAutoRefresh" class="refresh-toggle">
-          {{ autoRefresh ? '⏸️ Pause Auto-refresh' : '▶️ Resume Auto-refresh' }}
-        </button>
-        <button @click="refreshData" class="btn-refresh" :disabled="refreshing">
-          {{ refreshing ? '🔄 Refreshing...' : '🔄 Refresh Now' }}
-        </button>
-      </div>
+      <h2>🎫 Token Voting</h2>
+      <p>Kelola token 6 digit untuk sesi: {{ activeSession?.nama_sesi || 'Tidak ada sesi' }}</p>
     </div>
 
-    <!-- Live Stats Banner -->
-    <div class="live-stats-banner">
-      <div class="stat-card">
-        <div class="stat-icon">🎯</div>
-        <div class="stat-content">
-          <h4>Total Votes</h4>
-          <p class="stat-number">{{ stats.totalVotes || 0 }}</p>
-          <p class="stat-trend">
-            <span :class="stats.votesTrend >= 0 ? 'up' : 'down'">
-              {{ stats.votesTrend >= 0 ? '↗' : '↘' }}
-              {{ Math.abs(stats.votesTrend) }}
-            </span>
-            in last 5 min
-          </p>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">👥</div>
-        <div class="stat-content">
-          <h4>Active Voters</h4>
-          <p class="stat-number">{{ stats.activeVoters || 0 }}</p>
-          <p class="stat-sub">of {{ stats.totalGuru || 0 }} total</p>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">📊</div>
-        <div class="stat-content">
-          <h4>Completion</h4>
-          <p class="stat-number">{{ stats.completionRate || 0 }}%</p>
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: stats.completionRate + '%' }"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon">⚡</div>
-        <div class="stat-content">
-          <h4>Voting Speed</h4>
-          <p class="stat-number">{{ stats.votesPerMinute || 0 }}/min</p>
-          <p class="speed-indicator" :class="getSpeedClass(stats.votesPerMinute)">
-            {{ getSpeedLabel(stats.votesPerMinute) }}
-          </p>
-        </div>
-      </div>
+    <!-- Empty State - No Active Session -->
+    <div v-if="!activeSession" class="empty-state">
+      <div class="empty-icon">🔒</div>
+      <h3>Belum ada sesi aktif</h3>
+      <p>Aktifkan sesi pemilihan terlebih dahulu untuk mengelola token</p>
     </div>
 
-    <!-- Main Dashboard -->
-    <div class="dashboard-grid">
-      <!-- Left Column -->
-      <div class="dashboard-left">
-        <!-- Votes Over Time Chart -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h4>📈 Votes Over Time</h4>
-            <select v-model="timeRange" class="time-select">
-              <option value="1h">Last 1 Hour</option>
-              <option value="6h">Last 6 Hours</option>
-              <option value="24h">Last 24 Hours</option>
-              <option value="all">All Time</option>
-            </select>
-          </div>
-          <div class="chart-container">
-            <div v-if="votesOverTime.length === 0" class="chart-placeholder">
-              <p>No voting data yet</p>
-            </div>
-            <div v-else class="votes-chart">
-              <div class="chart-y-axis">
-                <span>{{ maxVotes }}</span>
-                <span>{{ Math.floor(maxVotes / 2) }}</span>
-                <span>0</span>
-              </div>
-              <div class="chart-bars">
-                <div
-                  v-for="(data, index) in votesOverTime"
-                  :key="index"
-                  class="chart-bar-container"
-                >
-                  <div
-                    class="chart-bar"
-                    :style="{ height: getBarHeight(data.votes) + '%' }"
-                    :title="`${data.time}: ${data.votes} votes`"
-                  ></div>
-                  <div class="chart-label">{{ data.label }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Activity Feed -->
-        <div class="activity-card">
-          <div class="card-header">
-            <h4>🔄 Recent Activity</h4>
-            <button @click="clearActivity" class="btn-clear">Clear</button>
-          </div>
-          <div class="activity-feed">
-            <div v-if="recentActivity.length === 0" class="empty-activity">
-              <p>No recent activity</p>
-            </div>
-            <div v-else>
-              <div
-                v-for="activity in recentActivity"
-                :key="activity.id"
-                class="activity-item"
-                :class="activity.type"
-              >
-                <div class="activity-icon">
-                  <span v-if="activity.type === 'vote'">🗳️</span>
-                  <span v-if="activity.type === 'token_used'">🎫</span>
-                  <span v-if="activity.type === 'alert'">⚠️</span>
-                  <span v-if="activity.type === 'info'">ℹ️</span>
-                </div>
-                <div class="activity-content">
-                  <p class="activity-message">{{ activity.message }}</p>
-                  <span class="activity-time">{{ formatTimeAgo(activity.timestamp) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Column -->
-      <div class="dashboard-right">
-        <!-- Candidate Leaderboard -->
-        <div class="leaderboard-card">
-          <div class="card-header">
-            <h4>🏆 Candidate Leaderboard</h4>
-            <span class="update-time">Updated {{ lastUpdated }}</span>
-          </div>
-          <div class="leaderboard-list">
-            <div v-if="candidateLeaderboard.length === 0" class="empty-leaderboard">
-              <p>No candidates yet</p>
-            </div>
-            <div v-else>
-              <div
-                v-for="(candidate, index) in candidateLeaderboard"
-                :key="candidate.id"
-                class="leaderboard-item"
-              >
-                <div class="rank">{{ index + 1 }}</div>
-                <div class="candidate-info">
-                  <div class="candidate-name">
-                    {{ candidate.pengguna?.nama_lengkap || 'Unknown' }}
-                  </div>
-                  <div class="candidate-position">{{ formatJabatan(candidate.jabatan) }}</div>
-                </div>
-                <div class="vote-count">
-                  <span class="votes">{{ candidate.total_suara || 0 }}</span>
-                  <span class="votes-label">votes</span>
-                </div>
-                <div class="vote-bar">
-                  <div
-                    class="bar-fill"
-                    :style="{ width: getVotePercentage(candidate.total_suara || 0) + '%' }"
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Alerts & Warnings -->
-        <div class="alerts-card">
-          <div class="card-header">
-            <h4>⚠️ Alerts & Warnings</h4>
-            <span class="alert-count" v-if="alerts.length > 0">{{ alerts.length }}</span>
-          </div>
-          <div class="alerts-list">
-            <div v-if="alerts.length === 0" class="no-alerts">
-              <p>No alerts - System normal</p>
-            </div>
-            <div v-else>
-              <div
-                v-for="alert in alerts"
-                :key="alert.id"
-                class="alert-item"
-                :class="alert.severity"
-              >
-                <div class="alert-icon">
-                  <span v-if="alert.severity === 'high'">🚨</span>
-                  <span v-if="alert.severity === 'medium'">⚠️</span>
-                  <span v-if="alert.severity === 'low'">ℹ️</span>
-                </div>
-                <div class="alert-content">
-                  <p class="alert-message">{{ alert.message }}</p>
-                  <span class="alert-time">{{ formatTime(alert.timestamp) }}</span>
-                </div>
-                <button @click="dismissAlert(alert.id)" class="alert-dismiss">×</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Quick Stats -->
-        <div class="quick-stats-card">
-          <h4>📋 Quick Stats</h4>
-          <div class="stats-grid">
-            <div class="quick-stat">
-              <span class="stat-label">Avg. Vote Time</span>
-              <span class="stat-value">{{ quickStats.avgVoteTime || '0s' }}</span>
-            </div>
-            <div class="quick-stat">
-              <span class="stat-label">Peak Hour</span>
-              <span class="stat-value">{{ quickStats.peakHour || 'N/A' }}</span>
-            </div>
-            <div class="quick-stat">
-              <span class="stat-label">Unique Devices</span>
-              <span class="stat-value">{{ quickStats.uniqueDevices || 0 }}</span>
-            </div>
-            <div class="quick-stat">
-              <span class="stat-label">Failed Attempts</span>
-              <span class="stat-value">{{ quickStats.failedAttempts || 0 }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- Empty State - Tokens not generated -->
+    <div
+      v-else-if="activeSession.status !== 'voting' && activeSession.status !== 'selesai'"
+      class="empty-state"
+    >
+      <div class="empty-icon">⏳</div>
+      <h3>Token Belum Tersedia</h3>
+      <p>Token akan otomatis dibuat saat status sesi berubah ke <strong>VOTING</strong></p>
+      <p class="hint">Admin dapat membuka voting melalui tab "Kelola Sesi"</p>
     </div>
 
-    <!-- Device Distribution -->
-    <div class="device-distribution">
-      <div class="section-header-small">
-        <h4>📱 Device Distribution</h4>
-        <span class="total-devices">{{ deviceStats.totalDevices || 0 }} devices detected</span>
-      </div>
-      <div class="device-grid">
-        <div class="device-item" v-for="device in deviceStats.distribution" :key="device.type">
-          <div class="device-icon">
-            <span v-if="device.type === 'mobile'">📱</span>
-            <span v-if="device.type === 'desktop'">💻</span>
-            <span v-if="device.type === 'tablet'">📟</span>
-            <span v-if="device.type === 'unknown'">❓</span>
+    <!-- Tokens Management -->
+    <div v-else>
+      <!-- Overview Stats -->
+      <div class="tokens-stats">
+        <div class="stat-card">
+          <div class="stat-icon">🔢</div>
+          <div class="stat-content">
+            <h3>Total Token</h3>
+            <p class="stat-number">{{ stats.totalTokens || 0 }}</p>
           </div>
-          <div class="device-info">
-            <span class="device-type">{{ formatDeviceType(device.type) }}</span>
-            <span class="device-count">{{ device.count }} ({{ device.percentage }}%)</span>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">✅</div>
+          <div class="stat-content">
+            <h3>Sudah Digunakan</h3>
+            <p class="stat-number">{{ stats.usedTokens || 0 }}</p>
+            <p class="stat-percentage">{{ stats.usedPercentage || 0 }}%</p>
           </div>
-          <div class="device-bar">
-            <div class="bar-fill" :style="{ width: device.percentage + '%' }"></div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">🆕</div>
+          <div class="stat-content">
+            <h3>Tersedia</h3>
+            <p class="stat-number">{{ stats.availableTokens || 0 }}</p>
+            <p class="stat-percentage">{{ stats.availablePercentage || 0 }}%</p>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <h3>Total Guru</h3>
+            <p class="stat-number">{{ stats.totalGuru || 0 }}</p>
+            <p class="stat-sub">Aktif</p>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Export & Actions -->
-    <div class="export-actions">
-      <h4>📤 Export & Reports</h4>
+      <!-- Action Buttons -->
       <div class="action-buttons">
-        <button @click="exportVotingReport" class="export-btn">📊 Export Voting Report</button>
-        <button @click="exportActivityLog" class="export-btn">📝 Export Activity Log</button>
-        <button @click="generateAnalytics" class="export-btn">📈 Generate Analytics</button>
-        <button @click="sendStatusReport" class="export-btn">📧 Send Status Report</button>
+        <button @click="refreshTokens" class="btn-refresh" :disabled="loading">
+          <span class="btn-icon">🔄</span>
+          {{ loading ? 'Memuat...' : 'Refresh Data' }}
+        </button>
+
+        <button @click="exportToCSV" class="btn-export">
+          <span class="btn-icon">📥</span>
+          Export CSV
+        </button>
+
+        <button @click="printTokens" class="btn-print" v-if="tokens.length > 0">
+          <span class="btn-icon">🖨️</span>
+          Cetak Token
+        </button>
+
+        <button
+          @click="showGenerateModal = true"
+          class="btn-generate"
+          v-if="stats.totalGuru > stats.totalTokens"
+        >
+          <span class="btn-icon">✨</span>
+          Generate Token Baru
+        </button>
+      </div>
+
+      <!-- Search & Filter -->
+      <div class="search-filter">
+        <div class="search-box">
+          <input
+            type="text"
+            v-model="searchQuery"
+            placeholder="Cari nama guru, NIP, atau token..."
+            class="search-input"
+          />
+          <span class="search-icon">🔍</span>
+        </div>
+
+        <select v-model="filterStatus" class="filter-select">
+          <option value="all">Semua Status</option>
+          <option value="available">Tersedia ({{ availableCount }})</option>
+          <option value="used">Sudah Digunakan ({{ usedCount }})</option>
+          <option value="expired">Kadaluarsa ({{ expiredCount }})</option>
+        </select>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-state">
+        <div class="loader"></div>
+        <p>Memuat data token...</p>
+      </div>
+
+      <!-- Tokens Table -->
+      <div v-else class="tokens-table-container">
+        <div class="table-wrapper">
+          <table class="tokens-table">
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Guru</th>
+                <th>NIP</th>
+                <th>Token</th>
+                <th>Status</th>
+                <th>Digunakan Pada</th>
+                <th>Kadaluarsa</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(token, index) in paginatedTokens" :key="token.id">
+                <td class="text-center">{{ (currentPage - 1) * perPage + index + 1 }}</td>
+                <td>
+                  <div class="user-cell">
+                    <div class="user-avatar">
+                      {{ getInitials(token.pengguna?.nama_lengkap) }}
+                    </div>
+                    <div class="user-info">
+                      <strong>{{ token.pengguna?.nama_lengkap }}</strong>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ token.pengguna?.nip || '-' }}</td>
+                <td>
+                  <div class="token-cell">
+                    <code class="token-code">{{ token.token }}</code>
+                    <button @click="copyToken(token.token)" class="copy-btn" title="Salin token">
+                      📋
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <span class="status-badge" :class="getTokenStatus(token)">
+                    {{ getTokenStatusLabel(token) }}
+                  </span>
+                </td>
+                <td>
+                  {{ token.digunakan_pada ? formatDate(token.digunakan_pada) : '-' }}
+                  <small v-if="token.info_perangkat" class="device-info">
+                    {{ token.info_perangkat }}
+                  </small>
+                </td>
+                <td :class="{ 'expired-soon': isExpiringSoon(token) }">
+                  {{ formatDate(token.kadaluarsa_pada) }}
+                  <small v-if="isExpiringSoon(token)" class="expiry-warning">
+                    (Segera kadaluarsa)
+                  </small>
+                </td>
+                <td>
+                  <div class="action-buttons-cell">
+                    <button
+                      @click="viewTokenDetails(token)"
+                      class="btn-action view"
+                      title="Detail token"
+                    >
+                      👁️
+                    </button>
+
+                    <button
+                      @click="resetToken(token)"
+                      v-if="token.sudah_digunakan && !isExpired(token)"
+                      class="btn-action reset"
+                      title="Reset token"
+                    >
+                      🔄
+                    </button>
+
+                    <button
+                      @click="revokeToken(token)"
+                      v-if="!token.sudah_digunakan"
+                      class="btn-action revoke"
+                      title="Batalkan token"
+                    >
+                      🚫
+                    </button>
+
+                    <button
+                      @click="extendToken(token)"
+                      v-if="!isExpired(token)"
+                      class="btn-action extend"
+                      title="Perpanjang masa aktif"
+                    >
+                      ⏳
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty Table State -->
+        <div v-if="filteredTokens.length === 0" class="empty-table">
+          <div class="empty-icon">🔍</div>
+          <h4>Tidak ada token ditemukan</h4>
+          <p v-if="searchQuery">Tidak ada token yang cocok dengan pencarian "{{ searchQuery }}"</p>
+          <p v-else>Belum ada token yang dibuat untuk sesi ini</p>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="filteredTokens.length > 0" class="pagination">
+          <div class="pagination-info">
+            Menampilkan {{ startIndex + 1 }}-{{ endIndex }} dari {{ filteredTokens.length }} token
+          </div>
+          <div class="pagination-controls">
+            <button @click="prevPage" :disabled="currentPage === 1" class="pagination-btn">
+              ◀️ Sebelumnya
+            </button>
+
+            <div class="page-numbers">
+              <span
+                v-for="page in pageNumbers"
+                :key="page"
+                @click="goToPage(page)"
+                :class="{ active: page === currentPage }"
+                class="page-number"
+              >
+                {{ page }}
+              </span>
+            </div>
+
+            <button @click="nextPage" :disabled="currentPage === totalPages" class="pagination-btn">
+              Selanjutnya ▶️
+            </button>
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- Modals will be added later -->
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps({
   activeSession: Object,
+  stats: {
+    type: Object,
+    default: () => ({
+      totalGuru: 0,
+      totalTokens: 0,
+      usedTokens: 0,
+      availableTokens: 0,
+    }),
+  },
 })
+
+const emit = defineEmits(['refresh'])
 
 // State
 const loading = ref(true)
-const refreshing = ref(false)
-const isConnected = ref(true)
-const autoRefresh = ref(true)
-const timeRange = ref('6h')
+const tokens = ref([])
+const searchQuery = ref('')
+const filterStatus = ref('all')
+const currentPage = ref(1)
+const perPage = 20
 
-// Data
-const stats = ref({
-  totalVotes: 0,
-  activeVoters: 0,
-  totalGuru: 0,
-  completionRate: 0,
-  votesPerMinute: 0,
-  votesTrend: 0,
-})
+const showGenerateModal = ref(false)
 
-const votesOverTime = ref([])
-const recentActivity = ref([])
-const candidateLeaderboard = ref([])
-const alerts = ref([])
-const quickStats = ref({})
-const deviceStats = ref({})
-
-// Auto-refresh interval
-let refreshInterval = null
-
-// Load all monitoring data
-const loadMonitoringData = async () => {
+// Load tokens
+const loadTokens = async () => {
   if (!props.activeSession?.id) {
-    console.log('No active session for monitoring')
+    tokens.value = []
+    loading.value = false
     return
   }
 
   try {
-    refreshing.value = true
-
-    // Load stats in parallel
-    await Promise.all([
-      loadVotingStats(),
-      loadVotesOverTime(),
-      loadRecentActivity(),
-      loadCandidateLeaderboard(),
-      loadAlerts(),
-      loadQuickStats(),
-      loadDeviceStats(),
-    ])
-
-    // Add info activity
-    addActivity({
-      type: 'info',
-      message: 'Monitoring data refreshed',
-      timestamp: new Date(),
-    })
-  } catch (error) {
-    console.error('Error loading monitoring data:', error)
-    addActivity({
-      type: 'alert',
-      message: `Failed to load data: ${error.message}`,
-      timestamp: new Date(),
-    })
-  } finally {
-    loading.value = false
-    refreshing.value = false
-  }
-}
-
-// Load voting statistics
-const loadVotingStats = async () => {
-  try {
-    // Total votes
-    const { count: totalVotes, error: votesError } = await supabase
-      .from('suara')
-      .select('*', { count: 'exact', head: true })
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-
-    if (votesError) throw votesError
-
-    // Distinct voters
-    const { data: voters, error: votersError } = await supabase
-      .from('suara')
-      .select('pemilih_id', { distinct: true })
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-
-    if (votersError) throw votersError
-
-    // Total teachers
-    const { count: totalGuru, error: guruError } = await supabase
-      .from('pengguna')
-      .select('*', { count: 'exact', head: true })
-      .eq('peran', 'guru')
-      .eq('is_active', true)
-
-    if (guruError) throw guruError
-
-    // Votes in last 5 minutes for trend
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
-    const { count: recentVotes, error: recentError } = await supabase
-      .from('suara')
-      .select('*', { count: 'exact', head: true })
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-      .gte('dibuat_pada', fiveMinutesAgo.toISOString())
-
-    if (recentError) throw recentError
-
-    // Calculate votes per minute (last hour)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const { count: hourVotes, error: hourError } = await supabase
-      .from('suara')
-      .select('*', { count: 'exact', head: true })
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-      .gte('dibuat_pada', oneHourAgo.toISOString())
-
-    if (hourError) throw hourError
-
-    const votesPerMinute = Math.round((hourVotes || 0) / 60)
-    const completionRate = totalGuru ? Math.round(((voters?.length || 0) / totalGuru) * 100) : 0
-
-    stats.value = {
-      totalVotes: totalVotes || 0,
-      activeVoters: voters?.length || 0,
-      totalGuru: totalGuru || 0,
-      completionRate,
-      votesPerMinute,
-      votesTrend: recentVotes || 0,
-    }
-  } catch (error) {
-    console.error('Error loading voting stats:', error)
-    throw error
-  }
-}
-
-// Load votes over time for chart
-const loadVotesOverTime = async () => {
-  try {
-    // Based on timeRange selection
-    let hours = 6 // default 6h
-    if (timeRange.value === '1h') hours = 1
-    if (timeRange.value === '24h') hours = 24
-    if (timeRange.value === 'all') hours = 168 // 7 days
-
-    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000)
-
-    // Get votes grouped by hour
-    const { data: votes, error } = await supabase
-      .from('suara')
-      .select('dibuat_pada')
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-      .gte('dibuat_pada', startTime.toISOString())
-
-    if (error) throw error
-
-    // Group votes by hour
-    const groupedVotes = {}
-    votes?.forEach((vote) => {
-      const date = new Date(vote.dibuat_pada)
-      const hourKey = `${date.getHours()}:00`
-      groupedVotes[hourKey] = (groupedVotes[hourKey] || 0) + 1
-    })
-
-    // Format for chart
-    const chartData = []
-    for (let i = 0; i < hours; i++) {
-      const hour = new Date(Date.now() - (hours - i - 1) * 60 * 60 * 1000)
-      const hourKey = `${hour.getHours()}:00`
-      const label =
-        hour.getHours() === 0
-          ? '12AM'
-          : hour.getHours() < 12
-            ? `${hour.getHours()}AM`
-            : hour.getHours() === 12
-              ? '12PM'
-              : `${hour.getHours() - 12}PM`
-
-      chartData.push({
-        time: hourKey,
-        label,
-        votes: groupedVotes[hourKey] || 0,
-      })
-    }
-
-    votesOverTime.value = chartData
-  } catch (error) {
-    console.error('Error loading votes over time:', error)
-    votesOverTime.value = []
-  }
-}
-
-// Load recent activity - FIXED VERSION
-const loadRecentActivity = async () => {
-  try {
-    // Get recent votes with CORRECT JOIN
-    const { data: recentVotes, error: votesError } = await supabase
-      .from('suara')
+    const { data, error } = await supabase
+      .from('token_qr')
       .select(
         `
         *,
-        pengguna:pemilih_id(nama_lengkap),
-        kandidat:kandidat_id(
+        pengguna:pengguna_id (
           id,
-          pengguna_id,
-          pengguna:kandidat.pengguna_id(nama_lengkap)
+          nip,
+          nama_lengkap,
+          peran,
+          is_active
         )
       `,
       )
       .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
       .order('dibuat_pada', { ascending: false })
-      .limit(10)
-
-    if (votesError) {
-      console.error('Votes error:', votesError)
-      throw votesError
-    }
-
-    console.log('Recent votes loaded:', recentVotes?.length || 0)
-
-    // Format activity items
-    const activities =
-      recentVotes?.map((vote) => {
-        // Get candidate name through nested relationship
-        const candidateName = vote.kandidat?.pengguna?.nama_lengkap || 'a candidate'
-        const voterName = vote.pengguna?.nama_lengkap || 'Someone'
-
-        return {
-          id: vote.id,
-          type: 'vote',
-          message: `${voterName} voted for ${candidateName}`,
-          timestamp: new Date(vote.dibuat_pada),
-        }
-      }) || []
-
-    // Get recent token usage
-    const { data: recentTokens, error: tokensError } = await supabase
-      .from('token_qr')
-      .select(
-        `
-        *,
-        pengguna:pengguna_id(nama_lengkap)
-      `,
-      )
-      .eq('sesi_id', props.activeSession.id)
-      .eq('sudah_digunakan', true)
-      .order('digunakan_pada', { ascending: false })
-      .limit(5)
-
-    if (!tokensError && recentTokens) {
-      recentTokens.forEach((token) => {
-        activities.push({
-          id: token.id,
-          type: 'token_used',
-          message: `${token.pengguna?.nama_lengkap || 'User'} used token ${token.token}`,
-          timestamp: new Date(token.digunakan_pada),
-        })
-      })
-    }
-
-    // Sort by timestamp and limit
-    recentActivity.value = activities.sort((a, b) => b.timestamp - a.timestamp).slice(0, 15)
-
-    console.log('Activities loaded:', recentActivity.value.length)
-  } catch (error) {
-    console.error('Error loading recent activity:', error)
-    // Fallback: use simple activity if complex query fails
-    loadSimpleRecentActivity()
-  }
-}
-
-// Fallback simple activity loader
-const loadSimpleRecentActivity = async () => {
-  try {
-    // Simple query without complex joins
-    const { data: recentVotes, error } = await supabase
-      .from('suara')
-      .select('id, dibuat_pada')
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-      .order('dibuat_pada', { ascending: false })
-      .limit(10)
 
     if (error) throw error
 
-    const activities =
-      recentVotes?.map((vote) => ({
-        id: vote.id,
-        type: 'vote',
-        message: `Someone voted`,
-        timestamp: new Date(vote.dibuat_pada),
-      })) || []
-
-    recentActivity.value = activities
+    tokens.value = data || []
   } catch (error) {
-    console.error('Error loading simple activity:', error)
-    recentActivity.value = []
+    console.error('Error loading tokens:', error)
+    alert('Gagal memuat data token: ' + error.message)
+  } finally {
+    loading.value = false
   }
 }
 
-// Load candidate leaderboard - FIXED VERSION
-const loadCandidateLeaderboard = async () => {
-  try {
-    const { data: candidates, error } = await supabase
-      .from('kandidat')
-      .select(
-        `
-        *,
-        pengguna:pengguna_id(nama_lengkap)
-      `,
-      )
-      .eq('sesi_id', props.activeSession.id)
-      .order('total_suara', { ascending: false })
-      .limit(10)
+// Computed stats
+const stats = computed(() => {
+  const totalTokens = tokens.value.length
+  const usedTokens = tokens.value.filter((t) => t.sudah_digunakan).length
+  const availableTokens = totalTokens - usedTokens
+  const usedPercentage = totalTokens ? Math.round((usedTokens / totalTokens) * 100) : 0
+  const availablePercentage = 100 - usedPercentage
 
-    if (error) {
-      console.error('Candidate leaderboard error:', error)
-      throw error
-    }
-
-    candidateLeaderboard.value = candidates || []
-    console.log('Leaderboard loaded:', candidateLeaderboard.value.length, 'candidates')
-  } catch (error) {
-    console.error('Error loading candidate leaderboard:', error)
-    candidateLeaderboard.value = []
+  return {
+    totalTokens,
+    usedTokens,
+    availableTokens,
+    usedPercentage,
+    availablePercentage,
+    totalGuru: props.stats.totalGuru || 0,
   }
-}
+})
 
-// Load alerts
-const loadAlerts = async () => {
-  try {
-    // Check for suspicious activity
-    const currentAlerts = []
+// Filtered tokens
+const filteredTokens = computed(() => {
+  let result = tokens.value
 
-    // Check for multiple votes from same IP in last hour
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const { data: recentVotes, error: votesError } = await supabase
-      .from('suara')
-      .select('alamat_ip, dibuat_pada')
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-      .gte('dibuat_pada', oneHourAgo.toISOString())
-
-    if (!votesError && recentVotes) {
-      const ipCounts = {}
-      recentVotes.forEach((vote) => {
-        if (vote.alamat_ip) {
-          ipCounts[vote.alamat_ip] = (ipCounts[vote.alamat_ip] || 0) + 1
-        }
-      })
-
-      // Check for IPs with > 5 votes (suspicious)
-      Object.entries(ipCounts).forEach(([ip, count]) => {
-        if (count > 5) {
-          currentAlerts.push({
-            id: `ip-alert-${ip}`,
-            severity: 'medium',
-            message: `IP ${ip} has ${count} votes in last hour`,
-            timestamp: new Date(),
-          })
-        }
-      })
-    }
-
-    // Check for failed token attempts (if we had a failed attempts table)
-    // This is placeholder for future implementation
-
-    alerts.value = currentAlerts
-  } catch (error) {
-    console.error('Error loading alerts:', error)
-    alerts.value = []
-  }
-}
-
-// Load quick stats
-const loadQuickStats = async () => {
-  try {
-    // Calculate average vote time (placeholder)
-    const avgVoteTime = '2m 15s'
-
-    // Find peak voting hour
-    const peakHour = await findPeakHour()
-
-    // Count unique devices
-    const { data: tokens, error } = await supabase
-      .from('token_qr')
-      .select('info_perangkat')
-      .eq('sesi_id', props.activeSession.id)
-      .not('info_perangkat', 'is', null)
-
-    if (error) throw error
-
-    const uniqueDevices = new Set(tokens?.map((t) => t.info_perangkat) || []).size
-
-    quickStats.value = {
-      avgVoteTime,
-      peakHour,
-      uniqueDevices,
-      failedAttempts: 0, // Placeholder
-    }
-  } catch (error) {
-    console.error('Error loading quick stats:', error)
-    quickStats.value = {}
-  }
-}
-
-// Load device statistics
-const loadDeviceStats = async () => {
-  try {
-    const { data: tokens, error } = await supabase
-      .from('token_qr')
-      .select('info_perangkat')
-      .eq('sesi_id', props.activeSession.id)
-      .not('info_perangkat', 'is', null)
-
-    if (error) throw error
-
-    // Simple device detection from user agent
-    const deviceTypes = {
-      mobile: 0,
-      desktop: 0,
-      tablet: 0,
-      unknown: 0,
-    }
-
-    tokens?.forEach((token) => {
-      const ua = token.info_perangkat?.toLowerCase() || ''
-      if (ua.includes('mobile') && !ua.includes('tablet')) {
-        deviceTypes.mobile++
-      } else if (ua.includes('tablet') || ua.includes('ipad')) {
-        deviceTypes.tablet++
-      } else if (
-        ua.includes('windows') ||
-        ua.includes('mac') ||
-        ua.includes('linux') ||
-        ua.includes('x11')
-      ) {
-        deviceTypes.desktop++
-      } else {
-        deviceTypes.unknown++
+  // Filter by status
+  if (filterStatus.value !== 'all') {
+    result = result.filter((token) => {
+      if (filterStatus.value === 'available') {
+        return !token.sudah_digunakan && !isExpired(token)
+      } else if (filterStatus.value === 'used') {
+        return token.sudah_digunakan
+      } else if (filterStatus.value === 'expired') {
+        return isExpired(token)
       }
+      return true
     })
-
-    const total = Object.values(deviceTypes).reduce((a, b) => a + b, 0)
-    const distribution = Object.entries(deviceTypes).map(([type, count]) => ({
-      type,
-      count,
-      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
-    }))
-
-    deviceStats.value = {
-      totalDevices: total,
-      distribution,
-    }
-  } catch (error) {
-    console.error('Error loading device stats:', error)
-    deviceStats.value = {}
   }
-}
+
+  // Search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(
+      (token) =>
+        token.pengguna?.nama_lengkap?.toLowerCase().includes(query) ||
+        token.pengguna?.nip?.toLowerCase().includes(query) ||
+        token.token?.toLowerCase().includes(query),
+    )
+  }
+
+  return result
+})
+
+// Pagination
+const totalPages = computed(() => Math.ceil(filteredTokens.value.length / perPage))
+const paginatedTokens = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  const end = start + perPage
+  return filteredTokens.value.slice(start, end)
+})
+const startIndex = computed(() => (currentPage.value - 1) * perPage)
+const endIndex = computed(() => Math.min(currentPage.value * perPage, filteredTokens.value.length))
+const pageNumbers = computed(() => {
+  const pages = []
+  const maxVisible = 5
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+
+  if (end - start + 1 < maxVisible) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  return pages
+})
+
+// Counts for filter dropdown
+const availableCount = computed(
+  () => tokens.value.filter((t) => !t.sudah_digunakan && !isExpired(t)).length,
+)
+const usedCount = computed(() => tokens.value.filter((t) => t.sudah_digunakan).length)
+const expiredCount = computed(() => tokens.value.filter((t) => isExpired(t)).length)
 
 // Helper functions
-const findPeakHour = async () => {
-  try {
-    const { data: votes, error } = await supabase
-      .from('suara')
-      .select('dibuat_pada')
-      .eq('sesi_id', props.activeSession.id)
-      .eq('is_draft', false)
-
-    if (error || !votes || votes.length === 0) return 'N/A'
-
-    const hourCounts = {}
-    votes.forEach((vote) => {
-      const hour = new Date(vote.dibuat_pada).getHours()
-      hourCounts[hour] = (hourCounts[hour] || 0) + 1
-    })
-
-    const peakHour = Object.entries(hourCounts).reduce((a, b) => (a[1] > b[1] ? a : b))[0]
-
-    return `${peakHour}:00 - ${parseInt(peakHour) + 1}:00`
-  } catch (error) {
-    console.error('Error finding peak hour:', error)
-    return 'N/A'
-  }
+const getInitials = (name) => {
+  if (!name) return '??'
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
 }
 
-const addActivity = (activity) => {
-  recentActivity.value.unshift({
-    id: Date.now(),
-    ...activity,
-  })
-
-  // Keep only last 20 activities
-  if (recentActivity.value.length > 20) {
-    recentActivity.value = recentActivity.value.slice(0, 20)
-  }
-}
-
-// Computed properties
-const maxVotes = computed(() => {
-  if (votesOverTime.value.length === 0) return 10
-  return Math.max(...votesOverTime.value.map((d) => d.votes), 10)
-})
-
-const lastUpdated = computed(() => {
-  return new Date().toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-})
-
-// Methods
-const getBarHeight = (votes) => {
-  if (maxVotes.value === 0) return 0
-  return (votes / maxVotes.value) * 100
-}
-
-const getVotePercentage = (votes) => {
-  if (stats.value.totalVotes === 0) return 0
-  return (votes / stats.value.totalVotes) * 100
-}
-
-const getSpeedClass = (speed) => {
-  if (speed >= 10) return 'high'
-  if (speed >= 5) return 'medium'
-  return 'low'
-}
-
-const getSpeedLabel = (speed) => {
-  if (speed >= 10) return 'Very Fast'
-  if (speed >= 5) return 'Fast'
-  if (speed >= 2) return 'Normal'
-  return 'Slow'
-}
-
-const formatJabatan = (jabatan) => {
-  const map = {
-    humas: 'Waka Humas',
-    sarpras: 'Waka Sarpras',
-    kesiswaan: 'Waka Kesiswaan',
-    kurikulum: 'Waka Kurikulum',
-  }
-  return map[jabatan] || jabatan
-}
-
-const formatDeviceType = (type) => {
-  const map = {
-    mobile: 'Mobile',
-    desktop: 'Desktop',
-    tablet: 'Tablet',
-    unknown: 'Unknown',
-  }
-  return map[type] || type
-}
-
-const formatTime = (date) => {
-  return new Date(date).toLocaleTimeString('id-ID', {
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  return new Date(dateString).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   })
 }
 
-const formatTimeAgo = (date) => {
+const isExpired = (token) => {
+  if (!token.kadaluarsa_pada) return false
+  return new Date(token.kadaluarsa_pada) < new Date()
+}
+
+const isExpiringSoon = (token) => {
+  if (!token.kadaluarsa_pada || token.sudah_digunakan) return false
+  const expiryDate = new Date(token.kadaluarsa_pada)
   const now = new Date()
-  const diffMs = now - new Date(date)
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  return `${Math.floor(diffHours / 24)}d ago`
+  const hoursLeft = (expiryDate - now) / (1000 * 60 * 60)
+  return hoursLeft > 0 && hoursLeft <= 24 // 24 jam ke depan
 }
 
-const toggleAutoRefresh = () => {
-  autoRefresh.value = !autoRefresh.value
-  if (autoRefresh.value) {
-    startAutoRefresh()
-    addActivity({
-      type: 'info',
-      message: 'Auto-refresh enabled',
-      timestamp: new Date(),
-    })
-  } else {
-    stopAutoRefresh()
-    addActivity({
-      type: 'info',
-      message: 'Auto-refresh paused',
-      timestamp: new Date(),
-    })
+const getTokenStatus = (token) => {
+  if (token.sudah_digunakan) return 'used'
+  if (isExpired(token)) return 'expired'
+  return 'available'
+}
+
+const getTokenStatusLabel = (token) => {
+  const status = getTokenStatus(token)
+  const labels = {
+    available: 'TERSEDIA',
+    used: 'DIGUNAKAN',
+    expired: 'KADALUARSA',
   }
+  return labels[status] || status
 }
 
-const refreshData = async () => {
-  await loadMonitoringData()
+// Action functions
+const refreshTokens = async () => {
+  loading.value = true
+  await loadTokens()
+  emit('refresh')
 }
 
-const clearActivity = () => {
-  recentActivity.value = []
-  addActivity({
-    type: 'info',
-    message: 'Activity log cleared',
-    timestamp: new Date(),
+const copyToken = (token) => {
+  navigator.clipboard.writeText(token)
+  // Bisa tambahin toast notification nanti
+  alert('Token berhasil disalin: ' + token)
+}
+
+const exportToCSV = () => {
+  const headers = [
+    'Nama Guru',
+    'NIP',
+    'Token',
+    'Status',
+    'Digunakan Pada',
+    'Kadaluarsa Pada',
+    'Info Perangkat',
+  ]
+  const csvData = tokens.value.map((token) => [
+    token.pengguna?.nama_lengkap || '',
+    token.pengguna?.nip || '',
+    token.token,
+    getTokenStatusLabel(token),
+    token.digunakan_pada ? formatDate(token.digunakan_pada) : '',
+    token.kadaluarsa_pada ? formatDate(token.kadaluarsa_pada) : '',
+    token.info_perangkat || '',
+  ])
+
+  let csvContent = headers.join(',') + '\n'
+  csvData.forEach((row) => {
+    csvContent += row.map((cell) => `"${cell}"`).join(',') + '\n'
   })
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute(
+    'download',
+    `tokens_${props.activeSession?.nama_sesi || 'session'}_${new Date().toISOString().split('T')[0]}.csv`,
+  )
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
-const dismissAlert = (alertId) => {
-  alerts.value = alerts.value.filter((alert) => alert.id !== alertId)
+const printTokens = () => {
+  const printWindow = window.open('', '_blank')
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Cetak Token - ${props.activeSession?.nama_sesi || 'Sesi Pemilihan'}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          h1 { color: #1e3a8a; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+          th { background: #f1f5f9; }
+          .token { font-family: monospace; font-size: 1.2em; font-weight: bold; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .footer { margin-top: 30px; text-align: center; color: #666; font-size: 0.9em; }
+          @media print {
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Token Voting SMANDA</h1>
+          <h3>Sesi: ${props.activeSession?.nama_sesi || '-'}</h3>
+          <p>Tanggal cetak: ${new Date().toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}</p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama Guru</th>
+              <th>NIP</th>
+              <th>Token</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tokens.value
+              .map(
+                (token, index) => `
+              <tr>
+                <td>${index + 1}</td>
+                <td>${token.pengguna?.nama_lengkap || '-'}</td>
+                <td>${token.pengguna?.nip || '-'}</td>
+                <td class="token">${token.token}</td>
+                <td>${getTokenStatusLabel(token)}</td>
+              </tr>
+            `,
+              )
+              .join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>Total Token: ${tokens.value.length} | Sudah digunakan: ${stats.value.usedTokens} | Tersedia: ${stats.value.availableTokens}</p>
+          <p class="no-print">
+            <button onclick="window.print()">🖨️ Cetak Halaman Ini</button>
+            <button onclick="window.close()">❌ Tutup</button>
+          </p>
+        </div>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
 }
 
-const exportVotingReport = () => {
-  alert('Export Voting Report feature coming soon!')
+const viewTokenDetails = (token) => {
+  const details = `
+    Nama Guru: ${token.pengguna?.nama_lengkap || '-'}
+    NIP: ${token.pengguna?.nip || '-'}
+    Token: ${token.token}
+    Status: ${getTokenStatusLabel(token)}
+    Dibuat: ${formatDate(token.dibuat_pada)}
+    Kadaluarsa: ${formatDate(token.kadaluarsa_pada)}
+    ${token.digunakan_pada ? `Digunakan: ${formatDate(token.digunakan_pada)}` : 'Belum digunakan'}
+    ${token.info_perangkat ? `Perangkat: ${token.info_perangkat}` : ''}
+    ${token.alamat_ip ? `IP Address: ${token.alamat_ip}` : ''}
+  `
+  alert(details)
 }
 
-const exportActivityLog = () => {
-  alert('Export Activity Log feature coming soon!')
-}
+const resetToken = async (token) => {
+  if (
+    !confirm(
+      `Reset token ${token.token} untuk ${token.pengguna?.nama_lengkap}? Token bisa digunakan kembali.`,
+    )
+  )
+    return
 
-const generateAnalytics = () => {
-  alert('Generate Analytics feature coming soon!')
-}
+  try {
+    const { error } = await supabase
+      .from('token_qr')
+      .update({
+        sudah_digunakan: false,
+        digunakan_pada: null,
+        info_perangkat: null,
+        alamat_ip: null,
+      })
+      .eq('id', token.id)
 
-const sendStatusReport = () => {
-  alert('Send Status Report feature coming soon!')
-}
+    if (error) throw error
 
-// Auto-refresh functions
-const startAutoRefresh = () => {
-  if (refreshInterval) clearInterval(refreshInterval)
-  refreshInterval = setInterval(async () => {
-    if (autoRefresh.value && props.activeSession?.id) {
-      try {
-        // Refresh only essential data
-        await loadVotingStats()
-        await loadRecentActivity()
-      } catch (error) {
-        console.warn('Auto-refresh failed:', error)
-      }
-    }
-  }, 30000) // 30 seconds
-}
-
-const stopAutoRefresh = () => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-    refreshInterval = null
+    await refreshTokens()
+    alert('Token berhasil direset!')
+  } catch (error) {
+    console.error('Error resetting token:', error)
+    alert('Gagal mereset token: ' + error.message)
   }
 }
 
-// Watch for timeRange changes
-watch(timeRange, () => {
-  loadVotesOverTime()
-})
+const revokeToken = async (token) => {
+  if (!confirm(`Batalkan token ${token.token}? Token tidak bisa digunakan lagi.`)) return
 
-// Watch for active session changes
-watch(
-  () => props.activeSession,
-  () => {
-    if (props.activeSession?.id) {
-      loadMonitoringData()
-      startAutoRefresh()
-    } else {
-      stopAutoRefresh()
-    }
-  },
-  { immediate: true },
-)
+  try {
+    const { error } = await supabase
+      .from('token_qr')
+      .update({
+        kadaluarsa_pada: new Date().toISOString(), // Expire now
+      })
+      .eq('id', token.id)
+
+    if (error) throw error
+
+    await refreshTokens()
+    alert('Token berhasil dibatalkan!')
+  } catch (error) {
+    console.error('Error revoking token:', error)
+    alert('Gagal membatalkan token: ' + error.message)
+  }
+}
+
+const extendToken = async (token) => {
+  const newExpiry = new Date()
+  newExpiry.setDate(newExpiry.getDate() + 7) // Tambah 7 hari
+
+  if (!confirm(`Perpanjang token ${token.token} sampai ${newExpiry.toLocaleDateString('id-ID')}?`))
+    return
+
+  try {
+    const { error } = await supabase
+      .from('token_qr')
+      .update({
+        kadaluarsa_pada: newExpiry.toISOString(),
+      })
+      .eq('id', token.id)
+
+    if (error) throw error
+
+    await refreshTokens()
+    alert('Token berhasil diperpanjang!')
+  } catch (error) {
+    console.error('Error extending token:', error)
+    alert('Gagal memperpanjang token: ' + error.message)
+  }
+}
+
+// Pagination controls
+const prevPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+const goToPage = (page) => {
+  currentPage.value = page
+}
 
 // Lifecycle
-onMounted(async () => {
-  if (props.activeSession?.id) {
-    await loadMonitoringData()
-    startAutoRefresh()
-  }
-})
-
-onUnmounted(() => {
-  stopAutoRefresh()
+onMounted(() => {
+  loadTokens()
 })
 </script>
 
 <style scoped>
-/* ALL CSS SAMA SEPERTI SEBELUMNYA - TIDAK ADA PERUBAHAN */
-.monitor-tab {
+.tokens-tab {
   animation: fadeIn 0.3s ease;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-/* Section Header */
 .section-header {
   margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
 }
 
 .section-header h2 {
   color: #1e3a8a;
-  font-size: 1.5rem;
   margin-bottom: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  font-size: 1.5rem;
 }
 
 .section-header p {
-  color: #6b7280;
+  color: #666;
   font-size: 0.95rem;
-  margin-bottom: 1rem;
 }
 
-.connection-status {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ef4444;
-}
-
-.status-dot.connected {
-  background: #10b981;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.status-text {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #6b7280;
-}
-
-.refresh-toggle,
-.btn-refresh {
-  padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+/* Empty States */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
   background: white;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 1.5rem;
 }
 
-.refresh-toggle:hover,
-.btn-refresh:hover:not(:disabled) {
-  background: #f3f4f6;
-  transform: translateY(-1px);
-}
-
-.btn-refresh:disabled {
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
   opacity: 0.5;
-  cursor: not-allowed;
 }
 
-/* Live Stats Banner */
-.live-stats-banner {
+.empty-state h3 {
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.hint {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 1rem;
+}
+
+/* Stats Overview */
+.tokens-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
   margin-bottom: 2rem;
 }
@@ -1093,7 +782,7 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
-.stat-content h4 {
+.stat-content h3 {
   font-size: 0.9rem;
   color: #64748b;
   margin-bottom: 0.25rem;
@@ -1105,589 +794,498 @@ onUnmounted(() => {
   font-weight: 800;
   color: #1e3a8a;
   line-height: 1;
-  margin-bottom: 0.25rem;
 }
 
-.stat-trend,
-.stat-sub {
-  font-size: 0.85rem;
-  color: #6b7280;
-}
-
-.stat-trend .up {
+.stat-percentage {
   color: #10b981;
   font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
 }
 
-.stat-trend .down {
-  color: #ef4444;
-  font-weight: 600;
-}
-
-.progress-bar {
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 3px;
-  margin-top: 0.5rem;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #10b981, #3b82f6);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.speed-indicator {
+.stat-sub {
+  color: #64748b;
   font-size: 0.8rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 12px;
-  font-weight: 600;
+  margin-top: 0.125rem;
 }
 
-.speed-indicator.high {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.speed-indicator.medium {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.speed-indicator.low {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-/* Dashboard Grid */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 1.5rem;
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 1rem;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
 }
 
-@media (max-width: 1024px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+.btn-refresh,
+.btn-export,
+.btn-print,
+.btn-generate {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-refresh {
+  background: #f1f5f9;
+  color: #1e3a8a;
+}
+
+.btn-refresh:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-export {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: white;
+}
+
+.btn-export:hover {
+  background: linear-gradient(135deg, #047857, #0da271);
+}
+
+.btn-print {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: white;
+}
+
+.btn-print:hover {
+  background: linear-gradient(135deg, #b45309, #d97706);
+}
+
+.btn-generate {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+}
+
+.btn-generate:hover {
+  background: linear-gradient(135deg, #1e40af, #2563eb);
+}
+
+.btn-icon {
+  font-size: 1.1rem;
+}
+
+/* Search & Filter */
+.search-filter {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 300px;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  font-size: 1.1rem;
+}
+
+.filter-select {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  min-width: 200px;
+}
+
+/* Loading State */
+.loading-state {
+  text-align: center;
+  padding: 3rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.loader {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #1e3a8a;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
   }
 }
 
-/* Chart Card */
-.chart-card,
-.activity-card,
-.leaderboard-card,
-.alerts-card,
-.quick-stats-card {
+/* Tokens Table */
+.tokens-table-container {
   background: white;
   border-radius: 12px;
-  padding: 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  margin-bottom: 1.5rem;
+  overflow: hidden;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
+.table-wrapper {
+  overflow-x: auto;
 }
 
-.card-header h4 {
-  color: #1e3a8a;
-  font-size: 1.1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.time-select {
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.85rem;
-}
-
-.chart-container {
-  height: 200px;
-}
-
-.chart-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #9ca3af;
-  font-style: italic;
-}
-
-.votes-chart {
-  display: flex;
-  height: 100%;
-  gap: 1rem;
-}
-
-.chart-y-axis {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  font-size: 0.8rem;
-  color: #6b7280;
-  padding-bottom: 1.5rem;
-}
-
-.chart-bars {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  padding-bottom: 1.5rem;
-}
-
-.chart-bar-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 100%;
-}
-
-.chart-bar {
+.tokens-table {
   width: 100%;
-  background: linear-gradient(to top, #3b82f6, #60a5fa);
-  border-radius: 4px 4px 0 0;
-  transition: height 0.3s ease;
-  min-height: 1px;
+  border-collapse: collapse;
+  min-width: 1000px;
 }
 
-.chart-label {
-  font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 0.5rem;
-  text-align: center;
-}
-
-/* Activity Feed */
-.activity-feed {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.empty-activity {
-  text-align: center;
-  padding: 2rem;
-  color: #9ca3af;
-}
-
-.activity-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.activity-item:last-child {
-  border-bottom: none;
-}
-
-.activity-item.vote {
-  background: #f0f9ff;
-}
-
-.activity-item.token_used {
-  background: #f0fdf4;
-}
-
-.activity-item.alert {
-  background: #fef2f2;
-}
-
-.activity-item.info {
+.tokens-table th {
   background: #f8fafc;
-}
-
-.activity-icon {
-  font-size: 1.2rem;
-}
-
-.activity-content {
-  flex: 1;
-}
-
-.activity-message {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
   color: #374151;
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
-}
-
-.activity-time {
-  font-size: 0.75rem;
-  color: #9ca3af;
-}
-
-.btn-clear {
-  padding: 0.25rem 0.75rem;
-  background: #f3f4f6;
-  border: none;
-  border-radius: 4px;
+  border-bottom: 2px solid #e5e7eb;
   font-size: 0.85rem;
-  color: #6b7280;
-  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.btn-clear:hover {
-  background: #e5e7eb;
+.tokens-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
 }
 
-/* Leaderboard */
-.update-time {
-  font-size: 0.8rem;
-  color: #9ca3af;
+.tokens-table tr:hover {
+  background: #f9fafb;
 }
 
-.leaderboard-list {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.empty-leaderboard {
+/* Table Cells */
+.text-center {
   text-align: center;
-  padding: 2rem;
-  color: #9ca3af;
 }
 
-.leaderboard-item {
+.user-cell {
   display: flex;
   align-items: center;
-  padding: 0.75rem;
-  border-bottom: 1px solid #f3f4f6;
+  gap: 0.75rem;
 }
 
-.leaderboard-item:last-child {
-  border-bottom: none;
-}
-
-.rank {
-  width: 30px;
-  height: 30px;
-  background: #f3f4f6;
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: #1e3a8a;
-  margin-right: 1rem;
+  font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
-.leaderboard-item:nth-child(1) .rank {
-  background: gold;
-  color: #92400e;
-}
-
-.leaderboard-item:nth-child(2) .rank {
-  background: silver;
-  color: #374151;
-}
-
-.leaderboard-item:nth-child(3) .rank {
-  background: #cd7f32;
-  color: white;
-}
-
-.candidate-info {
-  flex: 1;
-}
-
-.candidate-name {
-  font-weight: 600;
-  color: #1e3a8a;
-}
-
-.candidate-position {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
-
-.vote-count {
-  text-align: right;
-  margin-right: 1rem;
-}
-
-.votes {
-  font-size: 1.2rem;
-  font-weight: bold;
+.user-info strong {
   color: #1e3a8a;
   display: block;
-}
-
-.votes-label {
-  font-size: 0.75rem;
-  color: #9ca3af;
-}
-
-.vote-bar {
-  width: 100px;
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  border-radius: 3px;
-}
-
-/* Alerts */
-.alert-count {
-  background: #ef4444;
-  color: white;
-  font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 10px;
-}
-
-.no-alerts {
-  text-align: center;
-  padding: 2rem;
-  color: #9ca3af;
-}
-
-.alert-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 0.75rem;
-  border-radius: 8px;
-  margin-bottom: 0.5rem;
-}
-
-.alert-item.high {
-  background: #fee2e2;
-  border-left: 4px solid #dc2626;
-}
-
-.alert-item.medium {
-  background: #fef3c7;
-  border-left: 4px solid #d97706;
-}
-
-.alert-item.low {
-  background: #dbeafe;
-  border-left: 4px solid #3b82f6;
-}
-
-.alert-content {
-  flex: 1;
-}
-
-.alert-message {
-  color: #374151;
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
-}
-
-.alert-time {
-  font-size: 0.75rem;
-  color: #6b7280;
-}
-
-.alert-dismiss {
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 0.25rem;
-}
-
-.alert-dismiss:hover {
-  color: #374151;
-}
-
-/* Quick Stats */
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.quick-stat {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-label {
-  font-size: 0.85rem;
-  color: #6b7280;
-  margin-bottom: 0.25rem;
-}
-
-.stat-value {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #1e3a8a;
-}
-
-/* Device Distribution */
-.device-distribution {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  margin-bottom: 2rem;
-}
-
-.section-header-small {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.section-header-small h4 {
-  color: #1e3a8a;
-  font-size: 1.1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.total-devices {
-  font-size: 0.9rem;
-  color: #6b7280;
-}
-
-.device-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.device-item {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.device-icon {
-  font-size: 1.5rem;
-}
-
-.device-info {
-  flex: 1;
-}
-
-.device-type {
-  display: block;
-  font-weight: 600;
-  color: #374151;
   margin-bottom: 0.125rem;
 }
 
-.device-count {
-  font-size: 0.85rem;
-  color: #6b7280;
-}
-
-.device-bar {
-  width: 60px;
-  height: 6px;
-  background: #e5e7eb;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-/* Export Actions */
-.export-actions {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.export-actions h4 {
-  color: #1e3a8a;
-  margin-bottom: 1rem;
+.token-cell {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.action-buttons {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+.token-code {
+  background: #f1f5f9;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: bold;
+  color: #1e3a8a;
+  font-size: 1rem;
 }
 
-.export-btn {
-  flex: 1;
-  min-width: 200px;
-  padding: 1rem 1.5rem;
-  background: #f1f5f9;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+.copy-btn {
+  background: none;
+  border: none;
   cursor: pointer;
+  font-size: 1rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0.25rem;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #374151;
-  transition: all 0.2s;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.status-badge.available {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.used {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.expired {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Expiry Warning */
+.expired-soon {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.expiry-warning {
+  display: block;
+  font-size: 0.75rem;
+  color: #d97706;
+  margin-top: 0.25rem;
+}
+
+.device-info {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action Buttons in Table */
+.action-buttons-cell {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-action {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  transition: all 0.2s;
 }
 
-.export-btn:hover {
+.btn-action.view {
+  background: #f1f5f9;
+  color: #4b5563;
+}
+
+.btn-action.view:hover {
   background: #e5e7eb;
-  border-color: #d1d5db;
-  transform: translateY(-1px);
+}
+
+.btn-action.reset {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.btn-action.reset:hover {
+  background: #fde68a;
+}
+
+.btn-action.revoke {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-action.revoke:hover {
+  background: #fecaca;
+}
+
+.btn-action.extend {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.btn-action.extend:hover {
+  background: #bae6fd;
+}
+
+/* Empty Table State */
+.empty-table {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
+}
+
+.empty-table .empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.empty-table h4 {
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.pagination-info {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.pagination-btn {
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #4b5563;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #9ca3af;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.page-number {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  color: #4b5563;
+}
+
+.page-number:hover {
+  background: #f1f5f9;
+}
+
+.page-number.active {
+  background: #1e3a8a;
+  color: white;
+  font-weight: 600;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .live-stats-banner {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .connection-status {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-  }
-
-  .refresh-toggle,
-  .btn-refresh {
-    width: 100%;
+  .tokens-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .action-buttons {
     flex-direction: column;
   }
 
-  .export-btn {
+  .btn-refresh,
+  .btn-export,
+  .btn-print,
+  .btn-generate {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .search-box {
     min-width: 100%;
+  }
+
+  .filter-select {
+    width: 100%;
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .pagination-controls {
+    justify-content: center;
   }
 }
 
 @media (max-width: 480px) {
-  .live-stats-banner {
+  .tokens-stats {
     grid-template-columns: 1fr;
   }
 
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .action-buttons-cell {
+    flex-direction: column;
   }
 
-  .device-grid {
-    grid-template-columns: 1fr;
+  .btn-action {
+    width: 100%;
   }
 }
 </style>
