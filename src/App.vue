@@ -33,7 +33,7 @@
         <div class="footer-links">
           <a href="/live-results" class="footer-link">📊 Live Results</a>
           <span class="separator">•</span>
-          <a href="/scan" class="footer-link">🎫 Scan Token</a>
+          <a href="/scan" class="footer-link">🎫 Voting</a>
           <span class="separator">•</span>
           <a href="/login-calon" class="footer-link">👥 Daftar Calon</a>
         </div>
