@@ -25,7 +25,11 @@
     <!-- Search & Add -->
     <div class="actions">
       <div class="search">
-        <input v-model="searchQuery" placeholder="Cari nama atau NIP..." class="search-input" />
+        <input
+          v-model="searchQuery"
+          placeholder="Cari nama, NIP, atau TTL..."
+          class="search-input"
+        />
         🔍
       </div>
       <button @click="addPeserta" class="btn-add">+ Tambah Guru</button>
@@ -38,7 +42,7 @@
           <tr>
             <th>No</th>
             <th>Nama</th>
-            <th>NIP</th>
+            <th>NIP & TTL</th>
             <th>Status</th>
             <th>Voting</th>
             <th>Aksi</th>
@@ -54,7 +58,12 @@
               </div>
             </td>
             <td>
-              <code class="nip text-bold">{{ guru.nip }}</code>
+              <div class="nip-ttl">
+                <code class="nip text-bold">{{ guru.nip }}</code>
+                <div class="ttl text-medium">
+                  {{ formatDate(guru.tanggal_lahir) }}
+                </div>
+              </div>
             </td>
             <td>
               <span :class="['status', guru.is_active ? 'active' : 'inactive']">
@@ -96,11 +105,12 @@
         <div class="form">
           <input
             v-model="form.nama_lengkap"
-            placeholder="Nama lengkap"
+            placeholder="Nama lengkap *"
             required
             class="form-input"
           />
-          <input v-model="form.nip" placeholder="NIP" required class="form-input" />
+          <input v-model="form.nip" placeholder="NIP *" required class="form-input" />
+          <input v-model="form.tanggal_lahir" type="date" required class="form-input" />
           <input
             v-model="form.email"
             placeholder="Email (opsional)"
@@ -128,26 +138,36 @@
 </template>
 
 <script setup>
-/* Script tetap sama seperti sebelumnya */
 import { ref, computed, onMounted } from 'vue'
-// REMOVED: import { useRouter } from 'vue-router'  // ← Tidak perlu ini
 import { supabase } from '@/utils/supabase'
-
-// REMOVED: const router = useRouter()  // ← Tidak perlu ini
 
 // Data
 const guruList = ref([])
 const searchQuery = ref('')
 const showModal = ref(false)
 const editing = ref(false)
+const activeSession = ref(null)
 
 // Form
 const form = ref({
   nama_lengkap: '',
   nip: '',
+  tanggal_lahir: '',
   email: '',
   is_active: true,
 })
+
+// Load active session
+const loadActiveSession = async () => {
+  const { data } = await supabase
+    .from('sesi_pemilihan')
+    .select('*')
+    .order('dibuat_pada', { ascending: false })
+    .limit(1)
+    .single()
+
+  activeSession.value = data
+}
 
 // Computed
 const filteredGuru = computed(() => {
@@ -156,15 +176,16 @@ const filteredGuru = computed(() => {
   const query = searchQuery.value.toLowerCase()
   return guruList.value.filter(
     (guru) =>
-      guru.nama_lengkap.toLowerCase().includes(query) || guru.nip.toLowerCase().includes(query),
+      guru.nama_lengkap.toLowerCase().includes(query) ||
+      guru.nip.toLowerCase().includes(query) ||
+      formatDate(guru.tanggal_lahir).toLowerCase().includes(query),
   )
 })
 
 const totalGuru = computed(() => guruList.value.length)
 const activeGuru = computed(() => guruList.value.filter((g) => g.is_active).length)
 const sudahVoting = computed(() => {
-  // This would need actual vote data
-  return 0
+  return guruList.value.filter((g) => hasVoted(g.id)).length
 })
 
 // Methods
@@ -178,9 +199,23 @@ const loadGuru = async () => {
   guruList.value = data || []
 }
 
-const hasVoted = () => {
-  // Check if this guru has voted in active session
-  return false
+const hasVoted = async (guruId) => {
+  if (!activeSession.value?.id) return false
+
+  try {
+    const { data } = await supabase
+      .from('suara')
+      .select('id')
+      .eq('pemilih_id', guruId)
+      .eq('sesi_id', activeSession.value.id)
+      .eq('is_draft', false)
+      .limit(1)
+
+    return (data?.length || 0) > 0
+  } catch (error) {
+    console.error('Error checking vote:', error)
+    return false
+  }
 }
 
 const getInitials = (name) => {
@@ -193,25 +228,63 @@ const getInitials = (name) => {
     .substring(0, 2)
 }
 
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 const addPeserta = () => {
   editing.value = false
-  form.value = { nama_lengkap: '', nip: '', email: '', is_active: true }
+  form.value = {
+    nama_lengkap: '',
+    nip: '',
+    tanggal_lahir: '',
+    email: '',
+    is_active: true,
+  }
   showModal.value = true
 }
 
 const editPeserta = (guru) => {
   editing.value = true
-  form.value = { ...guru }
+  // Format tanggal untuk input type="date"
+  const formattedDate = guru.tanggal_lahir
+    ? new Date(guru.tanggal_lahir).toISOString().split('T')[0]
+    : ''
+
+  form.value = {
+    ...guru,
+    tanggal_lahir: formattedDate,
+  }
   showModal.value = true
 }
 
 const savePeserta = async () => {
-  if (!form.value.nama_lengkap || !form.value.nip) {
-    alert('Nama dan NIP wajib diisi!')
+  if (!form.value.nama_lengkap || !form.value.nip || !form.value.tanggal_lahir) {
+    alert('Nama, NIP, dan Tanggal Lahir wajib diisi!')
     return
   }
 
   try {
+    // Check duplicate NIP (kecuali untuk edit)
+    if (!editing.value) {
+      const { data: existing } = await supabase
+        .from('pengguna')
+        .select('id')
+        .eq('nip', form.value.nip)
+        .single()
+
+      if (existing) {
+        alert('NIP sudah terdaftar!')
+        return
+      }
+    }
+
     if (editing.value) {
       await supabase.from('pengguna').update(form.value).eq('id', form.value.id)
     } else {
@@ -250,6 +323,7 @@ const closeModal = () => {
 
 // Lifecycle
 onMounted(async () => {
+  await loadActiveSession()
   await loadGuru()
 })
 </script>
@@ -264,22 +338,18 @@ onMounted(async () => {
   padding: 1rem;
   max-width: 1000px;
   margin: 0 auto;
-  background: #ffffff; /* Background PUTIH BERSIH */
+  background: #ffffff;
   min-height: 100vh;
 }
 
 /* TEXT CONTRAST UTILITY CLASSES */
 .text-bold {
   font-weight: 700 !important;
-  color: #000000 !important; /* HITAM PEKAT */
-}
-
-.text-dark {
-  color: #111827 !important; /* Dark gray - ALMOST BLACK */
+  color: #000000 !important;
 }
 
 .text-medium {
-  color: #374151 !important; /* Medium gray - DARK ENOUGH */
+  color: #374151 !important;
 }
 
 /* === HEADER === */
@@ -292,11 +362,11 @@ onMounted(async () => {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 2px solid #1e3a8a; /* Border biru tegas */
+  border: 2px solid #1e3a8a;
 }
 
 .page-header h1 {
-  color: #000000; /* HITAM */
+  color: #000000;
   margin: 0;
   font-size: 1.5rem;
   font-weight: 800;
@@ -305,7 +375,7 @@ onMounted(async () => {
 .back-btn {
   background: #1e3a8a;
   border: 2px solid #1e3a8a;
-  color: #ffffff; /* PUTIH di background biru */
+  color: #ffffff;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
@@ -332,12 +402,12 @@ onMounted(async () => {
 .stat-number {
   font-size: 2.5rem;
   font-weight: 900;
-  color: #000000; /* HITAM */
+  color: #000000;
   margin-bottom: 0.25rem;
 }
 
 .stat-label {
-  color: #374151; /* DARK GRAY */
+  color: #374151;
   font-size: 0.9rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -368,18 +438,18 @@ onMounted(async () => {
   border: none;
   outline: none;
   font-size: 1rem;
-  color: #000000; /* HITAM */
+  color: #000000;
   font-weight: 500;
 }
 
 .search-input::placeholder {
-  color: #6b7280; /* Gray untuk placeholder */
+  color: #6b7280;
   font-weight: 400;
 }
 
 .btn-add {
-  background: #000000; /* HITAM */
-  color: #ffffff; /* PUTIH */
+  background: #000000;
+  color: #ffffff;
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
@@ -409,14 +479,14 @@ table {
 }
 
 thead {
-  background: #1e3a8a; /* Background biru untuk header */
+  background: #1e3a8a;
 }
 
 th {
   padding: 1rem;
   text-align: left;
   border-bottom: 3px solid #1e40af;
-  color: #ffffff; /* PUTIH di background biru */
+  color: #ffffff;
   font-weight: 800;
   font-size: 1rem;
   text-transform: uppercase;
@@ -427,7 +497,7 @@ td {
   padding: 1rem;
   border-bottom: 2px solid #f3f4f6;
   vertical-align: middle;
-  color: #000000; /* HITAM untuk semua text di table */
+  color: #000000;
   font-weight: 500;
 }
 
@@ -439,7 +509,7 @@ td {
 }
 
 .nama-text {
-  color: #000000; /* HITAM */
+  color: #000000;
   font-weight: 600;
   font-size: 1rem;
 }
@@ -447,7 +517,7 @@ td {
 .avatar {
   width: 40px;
   height: 40px;
-  background: linear-gradient(135deg, #000000, #374151); /* Gradient hitam */
+  background: linear-gradient(135deg, #000000, #374151);
   color: white;
   border-radius: 50%;
   display: flex;
@@ -459,19 +529,33 @@ td {
   border: 2px solid #1e3a8a;
 }
 
-/* NIP COLUMN */
+/* NIP & TTL COLUMN */
+.nip-ttl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .nip {
   background: #f3f4f6;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-family: 'SF Mono', 'Courier New', monospace;
   font-size: 0.9rem;
-  color: #000000; /* HITAM */
+  color: #000000;
   font-weight: 600;
   border: 1px solid #d1d5db;
+  display: inline-block;
+  width: fit-content;
 }
 
-/* STATUS BADGES - EXTREME CONTRAST */
+.ttl {
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+  padding-left: 0.25rem;
+}
+
+/* STATUS BADGES */
 .status {
   padding: 0.5rem 1rem;
   border-radius: 20px;
@@ -486,15 +570,15 @@ td {
 }
 
 .status.active {
-  background: #10b981; /* HIJAU TERANG */
-  color: #000000; /* HITAM text di hijau */
+  background: #10b981;
+  color: #000000;
   border-color: #047857;
   box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
 }
 
 .status.inactive {
-  background: #dc2626; /* MERAH TERANG */
-  color: #ffffff; /* PUTIH text di merah */
+  background: #dc2626;
+  color: #ffffff;
   border-color: #b91c1c;
   box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
 }
@@ -508,17 +592,17 @@ td {
 }
 
 .vote-text {
-  color: #000000; /* HITAM */
+  color: #000000;
   font-size: 0.9rem;
   font-weight: 700;
 }
 
 .vote.voted .vote-text {
-  color: #059669; /* HIJAU GELAP */
+  color: #059669;
 }
 
 .vote.pending .vote-text {
-  color: #d97706; /* ORANGE GELAP */
+  color: #d97706;
 }
 
 /* ACTION BUTTONS */
@@ -550,7 +634,7 @@ td {
 }
 
 .empty-text {
-  color: #000000; /* HITAM */
+  color: #000000;
   margin-bottom: 1.5rem;
   font-size: 1.2rem;
   font-weight: 700;
@@ -563,7 +647,7 @@ td {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8); /* DARK OVERLAY */
+  background: rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -584,14 +668,14 @@ td {
 .modal-content h3 {
   margin-top: 0;
   margin-bottom: 1.5rem;
-  color: #000000; /* HITAM */
+  color: #000000;
   font-size: 1.5rem;
   font-weight: 800;
   border-bottom: 3px solid #1e3a8a;
   padding-bottom: 0.5rem;
 }
 
-/* FORM INPUTS - HIGH CONTRAST */
+/* FORM INPUTS */
 .form {
   display: flex;
   flex-direction: column;
@@ -604,19 +688,19 @@ td {
   border: 2px solid #374151;
   border-radius: 8px;
   font-size: 1rem;
-  color: #000000; /* HITAM */
+  color: #000000;
   background: white;
   font-weight: 500;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #000000; /* HITAM saat focus */
+  border-color: #000000;
   box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
 }
 
 .form-input::placeholder {
-  color: #6b7280; /* Gray untuk placeholder */
+  color: #6b7280;
   font-weight: 400;
 }
 
@@ -625,7 +709,7 @@ td {
   align-items: center;
   gap: 0.75rem;
   cursor: pointer;
-  color: #000000; /* HITAM */
+  color: #000000;
   font-weight: 600;
 }
 
@@ -654,7 +738,7 @@ td {
 .btn-cancel {
   background: #ffffff;
   border: 2px solid #dc2626;
-  color: #dc2626; /* MERAH */
+  color: #dc2626;
   padding: 0.75rem 2rem;
   border-radius: 8px;
   cursor: pointer;
@@ -668,7 +752,7 @@ td {
 }
 
 .btn-save {
-  background: #000000; /* HITAM */
+  background: #000000;
   color: white;
   border: none;
   padding: 0.75rem 2rem;
