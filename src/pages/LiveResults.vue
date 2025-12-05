@@ -1,250 +1,348 @@
 <template>
-  <div class="live-results">
-    <!-- Status Bar -->
-    <div class="status-bar">
-      <div class="status-left">
-        <span class="live-indicator" :class="{ connected: isConnected }"></span>
-        <span class="status-text">{{ isConnected ? '🔴 LIVE' : '🟡 CONNECTING...' }}</span>
-        <span class="update-rate" v-if="updatesPerSecond > 0">
-          ⚡ {{ updatesPerSecond }}/detik
-        </span>
+  <div class="live-results" :class="{ 'fullscreen-mode': isFullscreen }">
+    <!-- Top Status Bar -->
+    <div class="top-bar">
+      <div class="connection-status">
+        <div class="status-indicator" :class="{ connected: isConnected }"></div>
+        <span class="status-text">{{ isConnected ? '🔴 LIVE' : '🟡 MENYAMBUNG' }}</span>
+        <span class="updates-counter" v-if="updatesCount > 0">⚡ {{ updatesCount }} update</span>
       </div>
-      <div class="status-center">
-        <span class="round-badge">🔄 PUTARAN {{ votingRound }}</span>
-        <span class="vote-count">🗳️ {{ totalVotesAllPositions }} suara</span>
-        <span class="winners-count">🏆 {{ winners.length }}/2 pemenang</span>
+
+      <div class="center-info">
+        <div class="round-info">
+          <span class="round-icon">🔄</span>
+          <span class="round-text">PUTARAN {{ votingRound }}</span>
+        </div>
+        <div class="votes-info">
+          <span class="votes-icon">🗳️</span>
+          <span class="votes-text">{{ totalVotes }} SUARA</span>
+        </div>
+        <div class="winners-info">
+          <span class="winners-icon">🏆</span>
+          <span class="winners-text">{{ winners.length }}/2 PEMENANG</span>
+        </div>
       </div>
-      <div class="status-right">
-        <span class="time">⏰ {{ currentTime }}</span>
-        <span class="participation">📊 {{ stats.participationRate }}% partisipasi</span>
-        <button class="sound-btn" @click="toggleSound">
-          {{ soundEnabled ? '🔊' : '🔇' }}
+
+      <div class="right-info">
+        <div class="time-display">
+          <span class="time-icon">⏰</span>
+          <span class="time-text">{{ currentTime }}</span>
+        </div>
+        <div class="participation-display">
+          <span class="participation-icon">📊</span>
+          <span class="participation-text">{{ participationRate }}% PARTISIPASI</span>
+        </div>
+        <button class="sound-toggle" @click="toggleSound" :class="{ muted: !soundEnabled }">
+          {{ soundEnabled ? '🔊 ON' : '🔇 OFF' }}
+        </button>
+        <button class="fullscreen-toggle" @click="toggleFullscreen">
+          {{ isFullscreen ? '📱 EXIT' : '🖥️ FULL' }}
         </button>
       </div>
     </div>
 
-    <!-- Live Vote Alert -->
-    <div v-if="showLiveAlert" class="live-alert" :class="alertType">
-      <div class="alert-content">
-        <span class="alert-icon">🎉</span>
-        <div class="alert-text">
-          <strong>VOTE BARU!</strong>
-          <p>{{ liveAlertData.pemilih }} memilih {{ liveAlertData.kandidat }}</p>
-          <small>untuk {{ formatJabatan(liveAlertData.jabatan) }}</small>
+    <!-- Live Vote Notification -->
+    <transition name="slide-down">
+      <div v-if="showVoteAlert" class="vote-notification" :class="notificationType">
+        <div class="notification-content">
+          <div class="notification-icon">🎉</div>
+          <div class="notification-text">
+            <div class="notification-title">{{ notificationTitle }}</div>
+            <div class="notification-details">
+              <span class="voter">{{ lastVoter }}</span> {{ notificationAction }}
+              <span class="candidate">{{ lastCandidate }}</span>
+            </div>
+            <div class="notification-position">{{ notificationPosition }}</div>
+          </div>
+          <div class="notification-time">{{ lastVoteTime }}</div>
         </div>
-        <span class="alert-time">{{ liveAlertData.time }}</span>
       </div>
-    </div>
+    </transition>
 
     <!-- Main Dashboard -->
-    <div class="dashboard">
+    <div class="main-dashboard">
       <!-- Winners Section -->
-      <div class="winners-section" v-if="winners.length > 0">
-        <h2 class="section-title">
-          <span class="icon">🏆</span>
-          PEMENANG ({{ winners.length }}/2)
-        </h2>
+      <div v-if="winners.length > 0" class="winners-section">
+        <div class="winners-header">
+          <h2 class="section-title">
+            <span class="title-icon">🏆</span>
+            PEMENANG PUTARAN {{ votingRound }}
+            <span class="title-count">({{ winners.length }}/2)</span>
+          </h2>
+        </div>
         <div class="winners-grid">
-          <div v-for="winner in winners" :key="winner.jabatan" class="winner-card">
+          <div
+            v-for="winner in winners"
+            :key="winner.jabatan"
+            class="winner-card"
+            :class="{ supermajority: winner.percentage > 50 }"
+          >
             <div class="winner-position">{{ formatJabatan(winner.jabatan) }}</div>
-            <div class="winner-name">{{ winner.kandidat.nama_lengkap }}</div>
+            <div class="winner-name">{{ winner.name }}</div>
             <div class="winner-stats">
-              <span class="votes">{{ winner.kandidat.total_suara }} suara</span>
-              <span class="percentage" :class="{ supermajority: winner.percentage > 50 }">
-                {{ winner.percentage }}%
-              </span>
+              <div class="stat-votes">{{ winner.votes }} SUARA</div>
+              <div class="stat-percentage">{{ winner.percentage }}%</div>
             </div>
-            <div class="winner-badge" v-if="winner.percentage > 50">✅ MENANG</div>
+            <div class="winner-badge" :class="{ supermajority: winner.percentage > 50 }">
+              {{ winner.percentage > 50 ? '✅ MENANG LURUS' : '📊 LEADING' }}
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Run-off Alert -->
-      <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-alert">
-        <div class="alert-content">
-          <span class="icon">🔄</span>
-          <div class="alert-text">
-            <strong>{{ runoffs.length }} POSISI PERLU RUN-OFF</strong>
-            <p>Belum ada yang mencapai >50% suara</p>
+      <transition name="fade">
+        <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-section">
+          <div class="runoff-alert">
+            <div class="runoff-icon">🔄</div>
+            <div class="runoff-content">
+              <h3 class="runoff-title">{{ runoffs.length }} POSISI PERLU RUN-OFF</h3>
+              <p class="runoff-description">Belum ada kandidat yang mencapai >50% suara</p>
+              <div class="runoff-positions">
+                <span v-for="position in runoffs" :key="position" class="position-tag">
+                  {{ formatJabatan(position) }}
+                </span>
+              </div>
+            </div>
+            <button v-if="isAdmin" @click="startRunoff" class="runoff-button">
+              MULAI PUTARAN 2
+            </button>
           </div>
-          <button v-if="isAdmin" @click="startNextRound" class="runoff-btn">Mulai Putaran 2</button>
         </div>
-      </div>
+      </transition>
 
-      <!-- Position Tabs -->
-      <div class="position-tabs">
-        <button
-          v-for="jabatan in ['kesiswaan', 'sarpras']"
-          :key="jabatan"
-          class="tab"
-          :class="{
-            active: activeJabatan === jabatan,
-            winner: winners.some((w) => w.jabatan === jabatan),
-            'has-vote-animation': recentVotes.some((v) => v.jabatan === jabatan),
-          }"
-          @click="activeJabatan = jabatan"
-        >
-          <span class="tab-icon">
-            {{ winners.some((w) => w.jabatan === jabatan) ? '✅' : '📊' }}
-          </span>
-          {{ formatJabatan(jabatan) }}
-          <span class="tab-count">{{ getPositionStats(jabatan).totalVotes }}</span>
-          <span v-if="recentVotes.some((v) => v.jabatan === jabatan)" class="pulse-dot"></span>
-        </button>
-      </div>
+      <!-- Voting Positions -->
+      <div class="positions-container">
+        <div class="position-tabs">
+          <button
+            v-for="position in positions"
+            :key="position.id"
+            class="position-tab"
+            :class="{
+              active: activePosition === position.id,
+              'has-update': recentUpdates.includes(position.id),
+              'has-winner': winners.some((w) => w.jabatan === position.id),
+            }"
+            @click="activePosition = position.id"
+          >
+            <span class="tab-icon">{{ getTabIcon(position.id) }}</span>
+            <span class="tab-name">{{ position.name }}</span>
+            <span class="tab-count">{{ getPositionVotes(position.id) }}</span>
+            <span v-if="recentUpdates.includes(position.id)" class="update-dot"></span>
+          </button>
+        </div>
 
-      <!-- Charts Section -->
-      <div class="charts-section">
-        <!-- Left: Candidate Rankings -->
-        <div class="rankings">
-          <div class="rankings-header">
-            <h3 class="chart-title">
-              {{ formatJabatan(activeJabatan) }}
-              <span class="position-status">
-                {{
-                  getPositionStats(activeJabatan).hasWinner
-                    ? '✅'
-                    : getPositionStats(activeJabatan).needsRunoff
-                      ? '🔄'
-                      : '📊'
-                }}
+        <!-- Position Dashboard -->
+        <div class="position-dashboard">
+          <div class="dashboard-header">
+            <h3 class="dashboard-title">
+              {{ getPositionName(activePosition) }}
+              <span class="dashboard-status">
+                {{ getPositionStatus(activePosition) }}
               </span>
             </h3>
-            <div class="position-stats">
-              <span class="stat">{{ getPositionStats(activeJabatan).totalVotes }} suara</span>
-              <span class="stat"
-                >{{ getPositionStats(activeJabatan).candidateCount }} kandidat</span
-              >
+            <div class="dashboard-stats">
+              <div class="stat-item">
+                <span class="stat-label">Total Suara:</span>
+                <span class="stat-value">{{ getPositionVotes(activePosition) }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Kandidat:</span>
+                <span class="stat-value">{{ getCandidates(activePosition).length }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">Partisipasi:</span>
+                <span class="stat-value">{{ getPositionParticipation(activePosition) }}%</span>
+              </div>
             </div>
           </div>
 
-          <div class="candidates-list">
+          <!-- Candidates Ranking -->
+          <div class="candidates-ranking">
             <div
-              v-for="(candidate, index) in getCurrentRoundCandidates(activeJabatan)"
+              v-for="(candidate, index) in getCandidates(activePosition)"
               :key="candidate.id"
-              class="candidate-row"
+              class="candidate-item"
               :class="{
-                'vote-animation': recentVotes.some((v) => v.candidateId === candidate.id),
-                winner: winners.some(
-                  (w) => w.jabatan === activeJabatan && w.kandidat.id === candidate.id,
-                ),
-                runoff: votingRound === 2 && index < 2,
+                'rank-1': index === 0,
+                'rank-2': index === 1,
+                'rank-3': index === 2,
+                'vote-update': candidate.hasUpdate,
+                'is-winner': isWinner(candidate.id, activePosition),
+                'in-runoff': votingRound === 2 && index < 2,
                 eliminated: votingRound === 2 && index >= 2,
               }"
             >
-              <div class="rank">
-                <span v-if="votingRound === 2 && index < 2" class="round-badge">R2</span>
-                <span v-else>#{{ index + 1 }}</span>
+              <div class="candidate-rank">
+                <span v-if="votingRound === 2 && index < 2" class="round-2-badge">R2</span>
+                <span v-else class="rank-number">#{{ index + 1 }}</span>
               </div>
-              <div class="avatar">{{ getInitials(candidate.nama_lengkap) }}</div>
-              <div class="info">
-                <div class="name">{{ candidate.nama_lengkap }}</div>
-                <div class="votes">
-                  {{ candidate.total_suara }} suara
-                  <span v-if="candidate.voteChange > 0" class="vote-change">
-                    +{{ candidate.voteChange }}
-                  </span>
+
+              <div class="candidate-profile">
+                <div class="candidate-avatar">{{ getInitials(candidate.name) }}</div>
+                <div class="candidate-info">
+                  <div class="candidate-name">{{ candidate.name }}</div>
+                  <div class="candidate-meta">
+                    <span class="meta-votes">{{ candidate.votes }} suara</span>
+                    <span class="meta-separator">•</span>
+                    <span class="meta-percentage">{{ candidate.percentage }}%</span>
+                    <span v-if="candidate.voteChange > 0" class="meta-change">
+                      (+{{ candidate.voteChange }})
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div class="progress-container">
-                <div
-                  class="progress-bar"
-                  :style="{ width: Math.min(candidate.percentage, 100) + '%' }"
-                  :class="{ supermajority: candidate.percentage > 50 }"
-                ></div>
-                <div class="percentage">{{ candidate.percentage }}%</div>
+
+              <div class="candidate-progress">
+                <div class="progress-bar">
+                  <div
+                    class="progress-fill"
+                    :style="{ width: candidate.percentage + '%' }"
+                    :class="{ supermajority: candidate.percentage > 50 }"
+                  ></div>
+                </div>
+                <div class="progress-text">
+                  {{ candidate.percentage }}%
+                  <span v-if="candidate.percentage > 50" class="supermajority-indicator"
+                    >(>50%)</span
+                  >
+                </div>
+              </div>
+
+              <div class="candidate-status">
+                <span v-if="isWinner(candidate.id, activePosition)" class="status-winner">🏆</span>
+                <span v-else-if="votingRound === 2 && index < 2" class="status-runoff">🔄</span>
+                <span v-else-if="votingRound === 2 && index >= 2" class="status-eliminated"
+                  >❌</span
+                >
+                <span v-else class="status-active">{{ index === 0 ? '👑' : '📈' }}</span>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- Right: Stats & Activity -->
-        <div class="stats-sidebar">
-          <!-- Real-time Stats -->
-          <div class="stats-card">
+      <!-- Sidebar Stats -->
+      <div class="stats-sidebar">
+        <!-- Real-time Stats Card -->
+        <div class="stats-card">
+          <div class="card-header">
             <h3 class="card-title">📈 STATISTIK REAL-TIME</h3>
-            <div class="stats-grid">
-              <div class="stat">
-                <div class="stat-value">{{ stats.totalGuru }}</div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">👥</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ totalVoters }}</div>
                 <div class="stat-label">Total Pemilih</div>
               </div>
-              <div class="stat">
-                <div class="stat-value">{{ stats.votedCount }}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🗳️</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ votedCount }}</div>
                 <div class="stat-label">Sudah Voting</div>
               </div>
-              <div class="stat">
-                <div class="stat-value">{{ stats.pendingCount }}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ pendingCount }}</div>
                 <div class="stat-label">Belum Voting</div>
               </div>
-              <div class="stat">
-                <div class="stat-value">{{ stats.participationRate }}%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📊</div>
+              <div class="stat-content">
+                <div class="stat-value">{{ participationRate }}%</div>
                 <div class="stat-label">Partisipasi</div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Live Activity -->
-          <div class="activity-card">
-            <h3 class="card-title">🔄 AKTIVITAS LIVE</h3>
-            <div class="activity-list">
+        <!-- Live Activity Feed -->
+        <div class="activity-card">
+          <div class="card-header">
+            <h3 class="card-title">🔄 AKTIVITAS TERBARU</h3>
+            <span class="activity-count">{{ activityLog.length }}</span>
+          </div>
+          <div class="activity-feed">
+            <div v-if="activityLog.length === 0" class="empty-activity">
+              <p>Menunggu aktivitas voting...</p>
+            </div>
+            <div v-else class="activity-list">
               <div
-                v-for="activity in recentActivity"
+                v-for="activity in recentActivities"
                 :key="activity.id"
                 class="activity-item"
                 :class="activity.type"
               >
-                <span class="activity-icon">
-                  {{
-                    activity.type === 'vote'
-                      ? '🗳️'
-                      : activity.type === 'winner'
-                        ? '🏆'
-                        : activity.type === 'round'
-                          ? '🔄'
-                          : '📊'
-                  }}
-                </span>
-                <span class="activity-text">{{ activity.message }}</span>
-                <span class="activity-time">{{ activity.time }}</span>
+                <div class="activity-icon">{{ getActivityIcon(activity.type) }}</div>
+                <div class="activity-content">
+                  <p class="activity-message">{{ activity.message }}</p>
+                  <div class="activity-meta">
+                    <span class="activity-time">{{ activity.time }}</span>
+                    <span v-if="activity.live" class="activity-live">LIVE</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Round Info -->
-          <div class="round-card">
-            <h3 class="card-title">🔄 PUTARAN {{ votingRound }}</h3>
-            <div class="round-status">
-              <div class="status-item" v-for="jabatan in ['kesiswaan', 'sarpras']" :key="jabatan">
-                <span class="position-name">{{ formatJabatan(jabatan) }}</span>
-                <span
-                  class="status-indicator"
-                  :class="{
-                    winner: winners.some((w) => w.jabatan === jabatan),
-                    runoff: runoffs.some((r) => r.jabatan === jabatan),
-                  }"
-                >
-                  {{
-                    winners.some((w) => w.jabatan === jabatan)
-                      ? '✅'
-                      : runoffs.some((r) => r.jabatan === jabatan)
-                        ? '🔄'
-                        : '⏳'
-                  }}
-                </span>
-              </div>
+        <!-- Round Summary -->
+        <div class="round-summary-card">
+          <div class="card-header">
+            <h3 class="card-title">⏱️ RINGKASAN PUTARAN</h3>
+          </div>
+          <div class="round-summary">
+            <div class="summary-item">
+              <div class="summary-label">Putaran Saat Ini</div>
+              <div class="summary-value">{{ votingRound }}</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Pemenang</div>
+              <div class="summary-value">{{ winners.length }}/2</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Run-off</div>
+              <div class="summary-value">{{ runoffs.length }} posisi</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Total Suara</div>
+              <div class="summary-value">{{ totalVotes }}</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Hidden Audio for Beep Sound -->
-    <audio ref="beepSound" preload="auto">
-      <source
-        src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3"
-        type="audio/mpeg"
-      />
-    </audio>
+    <!-- System Footer -->
+    <div class="system-footer">
+      <div class="footer-left">
+        <div class="system-brand">
+          <span class="brand-name">SMANDA VOTE LIVE</span>
+          <span class="version">v2.0</span>
+        </div>
+        <div class="session-info">
+          <span class="session-name">{{ sessionName }}</span>
+          <span class="session-status">{{ isConnected ? '• REAL-TIME' : '• OFFLINE' }}</span>
+        </div>
+      </div>
+      <div class="footer-right">
+        <div class="update-info">
+          <span class="update-label">Update Terakhir:</span>
+          <span class="update-time">{{ lastUpdateTime }}</span>
+        </div>
+        <div class="connection-info" :class="{ connected: isConnected }">
+          <div class="connection-dot"></div>
+          <span class="connection-text">
+            {{ isConnected ? 'TERHUBUNG' : 'MEMUAT...' }}
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -252,40 +350,50 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 
-// State
+// ===== STATE =====
 const isConnected = ref(false)
-const votingRound = ref(1)
-const activeJabatan = ref('kesiswaan')
-const isAdmin = ref(true)
+const isFullscreen = ref(false)
 const soundEnabled = ref(true)
-const showLiveAlert = ref(false)
-const alertType = ref('vote')
+const votingRound = ref(1)
+const activePosition = ref('kesiswaan')
+const isAdmin = ref(true)
 
 // Data
-const candidates = ref([])
+const candidatesData = ref([])
+const votesData = ref(0)
+const sessionData = ref(null)
 const activityLog = ref([])
-const recentVotes = ref([])
-const liveAlertData = ref({})
+const recentUpdates = ref([])
 
-// Stats
-const stats = ref({
-  totalGuru: 0,
-  votedCount: 0,
-  pendingCount: 0,
-  participationRate: 0,
+// Live Alert
+const showVoteAlert = ref(false)
+const lastVoter = ref('')
+const lastCandidate = ref('')
+const lastPosition = ref('')
+const lastVoteTime = ref('')
+const notificationType = ref('vote')
+const notificationTitle = ref('VOTE BARU DITERIMA!')
+const notificationAction = ref('memilih')
+const notificationPosition = ref('')
+
+// Counters
+const updatesCount = ref(0)
+
+// ===== POSITIONS =====
+const positions = [
+  { id: 'kesiswaan', name: 'WAKA KESISWAAN', icon: '👨‍🎓' },
+  { id: 'sarpras', name: 'WAKA SARPRAS', icon: '🏫' },
+]
+
+// ===== COMPUTED =====
+const totalVoters = computed(() => sessionData.value?.total_pemilih || 150)
+const votedCount = computed(() => votesData.value)
+const pendingCount = computed(() => Math.max(0, totalVoters.value - votedCount.value))
+const participationRate = computed(() => {
+  return totalVoters.value > 0 ? Math.round((votedCount.value / totalVoters.value) * 100) : 0
 })
 
-// Realtime subscription
-let realtimeChannel = null
-
-// Audio
-const beepSound = ref(null)
-
-// Computed
-const updatesPerSecond = computed(() => {
-  const oneSecondAgo = Date.now() - 1000
-  return activityLog.value.filter((a) => a.timestamp > oneSecondAgo).length
-})
+const totalVotes = computed(() => votesData.value)
 
 const currentTime = computed(() => {
   return new Date().toLocaleTimeString('id-ID', {
@@ -295,49 +403,37 @@ const currentTime = computed(() => {
   })
 })
 
-const candidatesByJabatan = computed(() => {
-  const grouped = { kesiswaan: [], sarpras: [] }
-
-  candidates.value.forEach((candidate) => {
-    if (grouped[candidate.jabatan]) {
-      const positionCandidates = grouped[candidate.jabatan]
-      const totalVotes = [...positionCandidates, candidate].reduce(
-        (sum, k) => sum + (k.total_suara || 0),
-        0,
-      )
-
-      candidate.percentage =
-        totalVotes > 0 ? Math.round((candidate.total_suara / totalVotes) * 100) : 0
-      grouped[candidate.jabatan].push(candidate)
-    }
+const lastUpdateTime = computed(() => {
+  return new Date().toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
   })
+})
 
-  // Sort by votes
-  Object.keys(grouped).forEach((jabatan) => {
-    grouped[jabatan].sort((a, b) => b.total_suara - a.total_suara)
-  })
+const sessionName = computed(() => sessionData.value?.nama_sesi || 'PEMILIHAN WAKA 2024')
 
-  return grouped
+const recentActivities = computed(() => {
+  return activityLog.value.slice(0, 5)
 })
 
 const winners = computed(() => {
   const result = []
 
-  Object.keys(candidatesByJabatan.value).forEach((jabatan) => {
-    const kandidats = candidatesByJabatan.value[jabatan]
-    if (kandidats.length === 0) return
+  positions.forEach((position) => {
+    const candidates = getCandidates(position.id)
+    if (candidates.length === 0) return
 
-    const totalVotes = kandidats.reduce((sum, k) => sum + (k.total_suara || 0), 0)
+    const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
     if (totalVotes === 0) return
 
-    kandidats.forEach((k) => {
-      const percentage = (k.total_suara / totalVotes) * 100
+    candidates.forEach((candidate) => {
+      const percentage = (candidate.votes / totalVotes) * 100
       if (percentage > 50) {
         result.push({
-          jabatan,
-          kandidat: k,
+          jabatan: position.id,
+          name: candidate.name,
+          votes: candidate.votes,
           percentage: Math.round(percentage),
-          round: votingRound.value,
         })
       }
     })
@@ -349,62 +445,196 @@ const winners = computed(() => {
 const runoffs = computed(() => {
   const result = []
 
-  Object.keys(candidatesByJabatan.value).forEach((jabatan) => {
-    const kandidats = candidatesByJabatan.value[jabatan]
-    if (kandidats.length === 0) return
-
-    const hasWinner = winners.value.some((w) => w.jabatan === jabatan)
-    if (hasWinner) return
-
-    if (kandidats.length >= 2) {
-      const top2 = kandidats.slice(0, 2)
-      result.push({ jabatan, kandidats: top2 })
+  positions.forEach((position) => {
+    const hasWinner = winners.value.some((w) => w.jabatan === position.id)
+    if (!hasWinner) {
+      const candidates = getCandidates(position.id)
+      if (candidates.length >= 2) {
+        result.push(position.id)
+      }
     }
   })
 
   return result
 })
 
-const totalVotesAllPositions = computed(() => {
-  return ['kesiswaan', 'sarpras'].reduce((sum, jabatan) => {
-    return sum + getPositionStats(jabatan).totalVotes
-  }, 0)
-})
+// ===== SOUND SYSTEM =====
+const playVoteSound = () => {
+  if (!soundEnabled.value) return
 
-const recentActivity = computed(() => {
-  return activityLog.value.slice(0, 5)
-})
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
 
-// Helper Functions
-const getPositionStats = (jabatan) => {
-  const kandidats = candidatesByJabatan.value[jabatan] || []
-  const totalVotes = kandidats.reduce((sum, k) => sum + (k.total_suara || 0), 0)
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
 
-  return {
-    totalVotes,
-    candidateCount: kandidats.length,
-    hasWinner: winners.value.some((w) => w.jabatan === jabatan),
-    needsRunoff: runoffs.value.some((r) => r.jabatan === jabatan),
+    oscillator.frequency.value = 800
+    oscillator.type = 'sine'
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
+
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.1)
+  } catch {
+    // Silent catch
   }
 }
 
-const getCurrentRoundCandidates = (jabatan) => {
-  const kandidats = candidatesByJabatan.value[jabatan] || []
+const playWinnerSound = () => {
+  if (!soundEnabled.value) return
 
-  // Jika round 2, hanya ambil 2 teratas
-  if (votingRound.value === 2 && kandidats.length > 2) {
-    return kandidats.slice(0, 2)
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.setValueAtTime(400, audioContext.currentTime)
+    oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.5)
+
+    oscillator.type = 'sine'
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6)
+
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.6)
+  } catch {
+    // Silent catch
   }
+}
 
-  return kandidats
+const playRoundChangeSound = () => {
+  if (!soundEnabled.value) return
+
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.value = 600
+    oscillator.type = 'square'
+
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime)
+
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05)
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1)
+
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.15)
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2)
+
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.25)
+  } catch {
+    // Silent catch
+  }
+}
+
+const playErrorSound = () => {
+  if (!soundEnabled.value) return
+
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.value = 300
+    oscillator.type = 'sawtooth'
+
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
+
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.3)
+  } catch {
+    // Silent catch
+  }
+}
+
+const playConnectionSound = () => {
+  if (!soundEnabled.value) return
+
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    oscillator.frequency.setValueAtTime(200, audioContext.currentTime)
+    oscillator.frequency.linearRampToValueAtTime(800, audioContext.currentTime + 0.2)
+
+    oscillator.type = 'sine'
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25)
+
+    oscillator.start(audioContext.currentTime)
+    oscillator.stop(audioContext.currentTime + 0.25)
+  } catch {
+    // Silent catch
+  }
+}
+
+// ===== METHODS =====
+const getPositionVotes = (positionId) => {
+  return getCandidates(positionId).reduce((sum, c) => sum + c.votes, 0)
+}
+
+const getCandidates = (positionId) => {
+  let candidates = candidatesData.value.filter((c) => c.jabatan === positionId)
+
+  const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
+  candidates = candidates.map((c) => ({
+    ...c,
+    percentage: totalVotes > 0 ? Math.round((c.votes / totalVotes) * 100) : 0,
+  }))
+
+  return candidates.sort((a, b) => b.votes - a.votes)
+}
+
+const getPositionName = (positionId) => {
+  const position = positions.find((p) => p.id === positionId)
+  return position?.name || positionId
+}
+
+const getTabIcon = (positionId) => {
+  if (winners.value.some((w) => w.jabatan === positionId)) return '✅'
+  if (runoffs.value.includes(positionId)) return '🔄'
+  return '📊'
+}
+
+const getPositionStatus = (positionId) => {
+  if (winners.value.some((w) => w.jabatan === positionId)) return '✅ POSISI TERISI'
+  if (runoffs.value.includes(positionId)) return '🔄 PERLU RUN-OFF'
+  return '📊 SEDANG BERLANGSUNG'
+}
+
+const getPositionParticipation = (positionId) => {
+  const positionVotes = getPositionVotes(positionId)
+  return totalVoters.value > 0 ? Math.round((positionVotes / totalVoters.value) * 100) : 0
+}
+
+const isWinner = (candidateId, positionId) => {
+  return winners.value.some(
+    (w) =>
+      w.jabatan === positionId &&
+      getCandidates(positionId).find((c) => c.id === candidateId)?.name === w.name,
+  )
 }
 
 const formatJabatan = (jabatan) => {
-  const map = {
-    sarpras: 'Waka Sarpras',
-    kesiswaan: 'Waka Kesiswaan',
-  }
-  return map[jabatan] || jabatan
+  return jabatan === 'kesiswaan' ? 'Waka Kesiswaan' : 'Waka Sarpras'
 }
 
 const getInitials = (name) => {
@@ -417,20 +647,31 @@ const getInitials = (name) => {
     .substring(0, 2)
 }
 
-const formatTime = (date) => {
-  return new Date(date).toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const getActivityIcon = (type) => {
+  const icons = {
+    vote: '🗳️',
+    winner: '🏆',
+    round: '🔄',
+    info: 'ℹ️',
+    error: '❌',
+    success: '✅',
+    connection: '🔌',
+  }
+  return icons[type] || '📝'
 }
 
-const addActivity = (message, type = 'info') => {
+// ===== ACTIVITY LOG =====
+const addActivity = (message, type = 'info', live = false) => {
   activityLog.value.unshift({
     id: Date.now(),
     message,
     type,
+    time: new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    live,
     timestamp: Date.now(),
-    time: formatTime(new Date()),
   })
 
   if (activityLog.value.length > 50) {
@@ -438,316 +679,370 @@ const addActivity = (message, type = 'info') => {
   }
 }
 
-const playBeepSound = () => {
-  if (soundEnabled.value && beepSound.value) {
-    beepSound.value.currentTime = 0
-    beepSound.value.play().catch((e) => console.log('Audio play failed:', e))
-  }
-}
+// ===== NOTIFICATION SYSTEM =====
+const showNotification = (type, voter, candidate, position) => {
+  showVoteAlert.value = true
+  lastVoter.value = voter
+  lastCandidate.value = candidate
+  lastPosition.value = position
+  lastVoteTime.value = currentTime.value
+  notificationType.value = type
 
-const showVoteAlert = (pemilih, kandidat, jabatan) => {
-  liveAlertData.value = {
-    pemilih,
-    kandidat,
-    jabatan,
-    time: formatTime(new Date()),
+  switch (type) {
+    case 'vote':
+      notificationTitle.value = 'VOTE BARU DITERIMA!'
+      notificationAction.value = 'memilih'
+      notificationPosition.value = `untuk ${formatJabatan(position)}`
+      playVoteSound()
+      break
+    case 'winner':
+      notificationTitle.value = '🏆 PEMENANG BARU!'
+      notificationAction.value = 'menjadi pemenang'
+      notificationPosition.value = formatJabatan(position)
+      playWinnerSound()
+      break
+    case 'round':
+      notificationTitle.value = '🔄 PUTARAN BERUBAH!'
+      notificationAction.value = 'putaran'
+      notificationPosition.value = `ke Putaran ${votingRound.value}`
+      playRoundChangeSound()
+      break
+    case 'connection':
+      notificationTitle.value = '🔌 KONEKSI REAL-TIME'
+      notificationAction.value = 'terhubung'
+      notificationPosition.value = 'sistem voting'
+      playConnectionSound()
+      break
   }
-  showLiveAlert.value = true
-  alertType.value = 'vote'
 
-  // Auto hide after 3 seconds
   setTimeout(() => {
-    showLiveAlert.value = false
+    showVoteAlert.value = false
   }, 3000)
 }
 
+// ===== REALTIME FUNCTIONS =====
+const setupRealtime = async () => {
+  try {
+    console.log('🔌 Setting up Supabase Realtime...')
+
+    const { data: session, error: sessionError } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (sessionError) {
+      console.error('Session error:', sessionError)
+      addActivity('❌ Tidak ada sesi aktif', 'error')
+      return
+    }
+
+    sessionData.value = session
+
+    await loadCandidates()
+    await loadVotesCount()
+
+    const channel = supabase.channel('live-voting-system')
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'suara',
+        filter: `sesi_id=eq.${session.id}`,
+      },
+      async (payload) => {
+        console.log('🎯 New vote detected:', payload.new)
+        await handleNewVote(payload.new)
+      },
+    )
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'kandidat',
+        filter: `sesi_id=eq.${session.id}`,
+      },
+      (payload) => {
+        console.log('📈 Candidate updated:', payload.new)
+        handleCandidateUpdate(payload.new)
+      },
+    )
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sesi_pemilihan',
+        filter: `id=eq.${session.id}`,
+      },
+      (payload) => {
+        console.log('🔄 Session updated:', payload.new)
+        sessionData.value = payload.new
+      },
+    )
+
+    channel.subscribe((status) => {
+      console.log('📡 Realtime status:', status)
+      isConnected.value = status === 'SUBSCRIBED'
+
+      if (status === 'SUBSCRIBED') {
+        showNotification('connection', 'Sistem', 'Live Results', 'connection')
+        addActivity('✅ Terhubung ke sistem realtime', 'connection', true)
+      } else if (status === 'CHANNEL_ERROR') {
+        addActivity('⚠️ Koneksi terputus, mencoba ulang...', 'error')
+        playErrorSound()
+        setTimeout(setupRealtime, 3000)
+      }
+    })
+  } catch (err) {
+    console.error('❌ Setup realtime error:', err)
+    addActivity('❌ Gagal menyambung ke realtime', 'error')
+    playErrorSound()
+
+    setTimeout(setupRealtime, 5000)
+  }
+}
+
+const loadCandidates = async () => {
+  try {
+    if (!sessionData.value?.id) return
+
+    const { data: candidates, error } = await supabase
+      .from('kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id(nama_lengkap)
+      `,
+      )
+      .eq('sesi_id', sessionData.value.id)
+      .in('jabatan', ['kesiswaan', 'sarpras'])
+      .order('total_suara', { ascending: false })
+
+    if (error) {
+      console.error('Load candidates error:', error)
+      addActivity('❌ Gagal memuat data kandidat', 'error')
+      return
+    }
+
+    candidatesData.value = (candidates || []).map((candidate) => ({
+      id: candidate.id,
+      name: candidate.pengguna?.nama_lengkap || 'Unknown',
+      jabatan: candidate.jabatan,
+      votes: candidate.total_suara || 0,
+      voteChange: 0,
+      hasUpdate: false,
+    }))
+
+    addActivity(`📊 ${candidatesData.value.length} kandidat dimuat`, 'info')
+  } catch (err) {
+    console.error('❌ Load candidates error:', err)
+    addActivity('❌ Gagal memuat data kandidat', 'error')
+  }
+}
+
+const loadVotesCount = async () => {
+  try {
+    if (!sessionData.value?.id) return
+
+    const { count, error } = await supabase
+      .from('suara')
+      .select('*', { count: 'exact', head: true })
+      .eq('sesi_id', sessionData.value.id)
+      .eq('is_draft', false)
+
+    if (error) {
+      console.error('Load votes count error:', error)
+      return
+    }
+
+    votesData.value = count || 0
+  } catch (err) {
+    console.error('❌ Load votes count error:', err)
+  }
+}
+
+const handleNewVote = async (vote) => {
+  try {
+    updatesCount.value++
+
+    const [voterResult, candidateResult] = await Promise.all([
+      supabase.from('pengguna').select('nama_lengkap').eq('id', vote.pemilih_id).single(),
+      supabase
+        .from('kandidat')
+        .select('*, pengguna:pengguna_id(nama_lengkap)')
+        .eq('id', vote.kandidat_id)
+        .single(),
+    ])
+
+    const voterName = voterResult.data?.nama_lengkap || 'Seseorang'
+    const candidateName = candidateResult.data?.pengguna?.nama_lengkap || 'Unknown'
+
+    showNotification('vote', voterName, candidateName, vote.jabatan)
+
+    if (!recentUpdates.value.includes(vote.jabatan)) {
+      recentUpdates.value.push(vote.jabatan)
+      setTimeout(() => {
+        recentUpdates.value = recentUpdates.value.filter((p) => p !== vote.jabatan)
+      }, 1000)
+    }
+
+    votesData.value++
+
+    addActivity(`🗳️ ${voterName} memilih ${candidateName}`, 'vote', true)
+  } catch (err) {
+    console.error('❌ Handle new vote error:', err)
+    addActivity('❌ Gagal memproses vote baru', 'error')
+  }
+}
+
+const handleCandidateUpdate = (candidate) => {
+  try {
+    const index = candidatesData.value.findIndex((c) => c.id === candidate.id)
+    if (index !== -1) {
+      const oldVotes = candidatesData.value[index].votes
+      const newVotes = candidate.total_suara || 0
+
+      if (newVotes > oldVotes) {
+        const voteChange = newVotes - oldVotes
+
+        candidatesData.value[index] = {
+          ...candidatesData.value[index],
+          votes: newVotes,
+          voteChange: voteChange,
+          hasUpdate: true,
+        }
+
+        setTimeout(() => {
+          checkForNewWinner(candidate)
+        }, 100)
+
+        setTimeout(() => {
+          if (candidatesData.value[index]) {
+            candidatesData.value[index].hasUpdate = false
+            candidatesData.value[index].voteChange = 0
+          }
+        }, 2000)
+      }
+    }
+  } catch (err) {
+    console.error('❌ Handle candidate update error:', err)
+  }
+}
+
+const checkForNewWinner = (candidate) => {
+  const positionCandidates = getCandidates(candidate.jabatan)
+  const totalVotes = positionCandidates.reduce((sum, c) => sum + c.votes, 0)
+
+  if (totalVotes > 0) {
+    const candidateData = positionCandidates.find((c) => c.id === candidate.id)
+    if (candidateData) {
+      const percentage = (candidateData.votes / totalVotes) * 100
+
+      if (percentage > 50 && !isWinner(candidate.id, candidate.jabatan)) {
+        showNotification('winner', candidateData.name, '', candidate.jabatan)
+        addActivity(
+          `🏆 ${candidateData.name} MENANG sebagai ${formatJabatan(candidate.jabatan)}!`,
+          'winner',
+          true,
+        )
+      }
+    }
+  }
+}
+
+// ===== UI CONTROLS =====
 const toggleSound = () => {
   soundEnabled.value = !soundEnabled.value
   addActivity(soundEnabled.value ? '🔊 Suara diaktifkan' : '🔇 Suara dimatikan', 'info')
 }
 
-// REAL-TIME FUNCTIONS
-const setupRealtimeConnection = async () => {
-  try {
-    // Load active session
-    const { data: sessions, error: sessionError } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
-
-    if (sessionError) throw sessionError
-
-    const activeSession = sessions?.[0]
-
-    if (!activeSession) {
-      console.error('No active session found')
-      return
-    }
-
-    // Load initial candidates data
-    await loadCandidates(activeSession.id)
-
-    // Setup realtime subscription for VOTES
-    realtimeChannel = supabase
-      .channel('live_votes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'suara',
-          filter: `sesi_id=eq.${activeSession.id}`,
-        },
-        async (payload) => {
-          console.log('🎯 NEW VOTE DETECTED:', payload.new)
-          await handleNewVote(payload.new)
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'kandidat',
-          filter: `sesi_id=eq.${activeSession.id}`,
-        },
-        (payload) => {
-          console.log('📈 CANDIDATE UPDATE:', payload.new)
-          handleCandidateUpdate(payload.new)
-        },
-      )
-      .subscribe((status) => {
-        console.log('🔌 Subscription status:', status)
-        isConnected.value = status === 'SUBSCRIBED'
-
-        if (status === 'SUBSCRIBED') {
-          addActivity('✅ Sistem realtime terhubung', 'info')
-        }
-      })
-  } catch (error) {
-    console.error('Setup error:', error)
-    setTimeout(setupRealtimeConnection, 3000)
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+    isFullscreen.value = true
+    addActivity('🖥️ Mode layar penuh diaktifkan', 'info')
+  } else {
+    document.exitFullscreen()
+    isFullscreen.value = false
+    addActivity('📱 Mode layar penuh dinonaktifkan', 'info')
   }
 }
 
-const loadCandidates = async (sessionId) => {
-  try {
-    const { data: kandidatData, error } = await supabase
-      .from('kandidat')
-      .select(
-        `
-        *,
-        pengguna:pengguna_id(nama_lengkap)
-      `,
-      )
-      .eq('sesi_id', sessionId)
-      .in('jabatan', ['kesiswaan', 'sarpras'])
-      .order('total_suara', { ascending: false })
-
-    if (error) throw error
-
-    candidates.value = (kandidatData || []).map((k) => ({
-      ...k,
-      nama_lengkap: k.pengguna?.nama_lengkap || 'Unknown',
-      voteChange: 0,
-      percentage: 0,
-    }))
-
-    // Load stats
-    await loadStats(sessionId)
-
-    addActivity(`📊 ${candidates.value.length} kandidat dimuat`, 'info')
-  } catch (error) {
-    console.error('Load candidates error:', error)
-  }
-}
-
-const loadStats = async (sessionId) => {
-  try {
-    // Total eligible voters (guru)
-    const { count: totalGuru, error: guruError } = await supabase
-      .from('pengguna')
-      .select('*', { count: 'exact', head: true })
-      .eq('peran', 'guru')
-      .eq('is_active', true)
-
-    if (guruError) throw guruError
-
-    stats.value.totalGuru = totalGuru || 0
-
-    // Total votes in this session
-    const { count: totalVotes, error: votesError } = await supabase
-      .from('suara')
-      .select('*', { count: 'exact', head: true })
-      .eq('sesi_id', sessionId)
-      .eq('is_draft', false)
-
-    if (votesError) throw votesError
-
-    stats.value.votedCount = totalVotes || 0
-    stats.value.pendingCount = stats.value.totalGuru - stats.value.votedCount
-    stats.value.participationRate = Math.round(
-      (stats.value.votedCount / stats.value.totalGuru) * 100,
-    )
-  } catch (error) {
-    console.error('Load stats error:', error)
-  }
-}
-
-const handleNewVote = async (newVote) => {
-  try {
-    // Get voter name
-    const { data: voter, error: voterError } = await supabase
-      .from('pengguna')
-      .select('nama_lengkap')
-      .eq('id', newVote.pemilih_id)
-      .single()
-
-    if (voterError) throw voterError
-
-    // Get candidate name
-    const { data: candidate, error: candidateError } = await supabase
-      .from('kandidat')
-      .select(
-        `
-        *,
-        pengguna:pengguna_id(nama_lengkap)
-      `,
-      )
-      .eq('id', newVote.kandidat_id)
-      .single()
-
-    if (candidateError) throw candidateError
-
-    // Play beep sound
-    playBeepSound()
-
-    // Show live alert
-    showVoteAlert(
-      voter?.nama_lengkap || 'Seseorang',
-      candidate?.pengguna?.nama_lengkap || 'seorang kandidat',
-      newVote.jabatan,
-    )
-
-    // Add to recent votes for animation
-    recentVotes.value.push({
-      candidateId: newVote.kandidat_id,
-      jabatan: newVote.jabatan,
-      timestamp: Date.now(),
-    })
-
-    // Remove after 2 seconds
-    setTimeout(() => {
-      recentVotes.value = recentVotes.value.filter((v) => v.candidateId !== newVote.kandidat_id)
-    }, 2000)
-
-    // Update stats
-    stats.value.votedCount++
-    stats.value.pendingCount = stats.value.totalGuru - stats.value.votedCount
-    stats.value.participationRate = Math.round(
-      (stats.value.votedCount / stats.value.totalGuru) * 100,
-    )
-
-    // Add activity
-    addActivity(
-      `${voter?.nama_lengkap || 'Seseorang'} memilih ${candidate?.pengguna?.nama_lengkap || 'seorang kandidat'}`,
-      'vote',
-    )
-
-    // Trigger animation on tab
-    setTimeout(() => {
-      // This will trigger the has-vote-animation class
-    }, 100)
-  } catch (error) {
-    console.error('Handle new vote error:', error)
-  }
-}
-
-const handleCandidateUpdate = (updatedCandidate) => {
-  const index = candidates.value.findIndex((c) => c.id === updatedCandidate.id)
-  if (index !== -1) {
-    const oldVotes = candidates.value[index].total_suara || 0
-    const newVotes = updatedCandidate.total_suara || 0
-
-    // Calculate vote change
-    const voteChange = newVotes - oldVotes
-
-    if (voteChange > 0) {
-      // Update candidate with vote change
-      candidates.value[index] = {
-        ...candidates.value[index],
-        ...updatedCandidate,
-        voteChange: voteChange,
-      }
-
-      // Reset voteChange after 3 seconds
-      setTimeout(() => {
-        if (candidates.value[index]) {
-          candidates.value[index].voteChange = 0
-        }
-      }, 3000)
-    }
-  }
-}
-
-const startNextRound = () => {
+const startRunoff = () => {
   if (votingRound.value === 1 && runoffs.value.length > 0) {
     votingRound.value = 2
-    addActivity(`🔄 PUTARAN 2 DIMULAI! ${runoffs.value.length} posisi run-off`, 'round')
-
-    // Play different sound for round change
-    if (soundEnabled.value) {
-      beepSound.value.src = 'https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3'
-      beepSound.value.play()
-    }
+    showNotification('round', 'Putaran', '2', 'round')
+    addActivity(`🔄 PUTARAN 2 DIMULAI! ${runoffs.value.length} posisi run-off`, 'round', true)
   }
 }
 
-// Lifecycle
-onMounted(() => {
-  setupRealtimeConnection()
+// ===== LIFECYCLE =====
+onMounted(async () => {
+  console.log('🚀 Live Results mounted')
+
+  if (window.innerWidth > 1024) {
+    isFullscreen.value = true
+    document.documentElement.requestFullscreen?.()
+  }
+
+  await setupRealtime()
+
+  setInterval(() => {
+    updatesCount.value = 0
+  }, 1000)
 })
 
 onUnmounted(() => {
-  if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel)
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
   }
 })
 </script>
 
 <style scoped>
-/* Base */
+/* ===== BASE STYLES ===== */
 .live-results {
   min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: #f1f5f9;
+  color: white;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* Status Bar */
-.status-bar {
+.fullscreen-mode {
+  padding: 0;
+}
+
+/* ===== TOP BAR ===== */
+.top-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 12px 24px;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 12px 20px;
-  margin-bottom: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
-.status-left,
-.status-center,
-.status-right {
+.connection-status,
+.center-info,
+.right-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.live-indicator {
+.status-indicator {
   width: 12px;
   height: 12px;
   border-radius: 50%;
@@ -755,7 +1050,7 @@ onUnmounted(() => {
   animation: pulse 1.5s infinite;
 }
 
-.live-indicator.connected {
+.status-indicator.connected {
   background: #22c55e;
   animation: pulse 1s infinite;
 }
@@ -767,98 +1062,117 @@ onUnmounted(() => {
     transform: scale(1);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(1.1);
+    opacity: 0.5;
+    transform: scale(1.2);
   }
 }
 
-.round-badge,
-.vote-count,
-.winners-count {
-  background: rgba(59, 130, 246, 0.2);
-  padding: 4px 12px;
+.status-text,
+.updates-counter {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.updates-counter {
+  color: #3b82f6;
+}
+
+.round-info,
+.votes-info,
+.winners-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 20px;
+}
+
+.round-icon,
+.votes-icon,
+.winners-icon {
+  font-size: 16px;
+}
+
+.round-text,
+.votes-text,
+.winners-text {
   font-weight: bold;
   font-size: 14px;
 }
 
-.time {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
+.time-display,
+.participation-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.participation {
-  color: #22c55e;
+.time-text,
+.participation-text {
   font-weight: 600;
+  font-size: 14px;
 }
 
-.sound-btn {
-  background: none;
+.sound-toggle,
+.fullscreen-toggle {
+  background: rgba(255, 255, 255, 0.1);
   border: none;
-  font-size: 20px;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-size: 18px;
   transition: background 0.2s;
 }
 
-.sound-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.sound-toggle:hover,
+.fullscreen-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* Live Alert */
-.live-alert {
+.sound-toggle.muted {
+  opacity: 0.7;
+}
+
+/* ===== VOTE NOTIFICATION ===== */
+.vote-notification {
   position: fixed;
   top: 80px;
-  right: 20px;
-  background: rgba(59, 130, 246, 0.9);
-  backdrop-filter: blur(10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   border-radius: 12px;
-  padding: 16px;
-  min-width: 300px;
+  padding: 16px 24px;
+  min-width: 400px;
   z-index: 1000;
-  animation:
-    slideInRight 0.3s,
-    fadeOut 0.3s 2.7s forwards;
-  border-left: 4px solid #3b82f6;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.3s ease;
 }
 
-@keyframes slideInRight {
+@keyframes slideDown {
   from {
-    transform: translateX(100%);
+    transform: translate(-50%, -20px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translate(-50%, 0);
     opacity: 1;
   }
 }
 
-@keyframes fadeOut {
-  to {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-}
-
-.live-alert.vote {
-  background: rgba(59, 130, 246, 0.9);
-  border-left-color: #3b82f6;
-}
-
-.live-alert.winner {
-  background: rgba(34, 197, 94, 0.9);
-  border-left-color: #22c55e;
-}
-
-.alert-content {
+.notification-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.alert-icon {
-  font-size: 28px;
+.notification-icon {
+  font-size: 32px;
   animation: bounce 2s infinite;
 }
 
@@ -873,67 +1187,104 @@ onUnmounted(() => {
   }
 }
 
-.alert-text strong {
-  color: white;
-  display: block;
+.notification-text {
+  flex: 1;
+}
+
+.notification-title {
+  font-weight: bold;
+  font-size: 16px;
   margin-bottom: 4px;
 }
 
-.alert-text p {
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0;
+.notification-details {
   font-size: 14px;
+  margin-bottom: 2px;
 }
 
-.alert-text small {
-  color: rgba(255, 255, 255, 0.7);
+.voter,
+.candidate {
+  font-weight: bold;
+}
+
+.notification-position {
   font-size: 12px;
+  opacity: 0.9;
 }
 
-.alert-time {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
+.notification-time {
   font-family: 'Courier New', monospace;
-  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
-/* Dashboard */
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* ===== MAIN DASHBOARD ===== */
+.main-dashboard {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  padding: 24px;
+  flex: 1;
+  overflow: hidden;
 }
 
-/* Winners Section */
+.fullscreen-mode .main-dashboard {
+  padding: 32px;
+}
+
+/* ===== WINNERS SECTION ===== */
 .winners-section {
+  grid-column: 1 / -1;
   background: rgba(34, 197, 94, 0.1);
   border: 2px solid rgba(34, 197, 94, 0.3);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.winners-header {
+  margin-bottom: 20px;
 }
 
 .section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 16px 0;
-  font-size: 18px;
+  gap: 12px;
+  margin: 0;
+  font-size: 24px;
   color: #22c55e;
+}
+
+.title-icon {
+  font-size: 28px;
+}
+
+.title-count {
+  background: rgba(34, 197, 94, 0.3);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 16px;
+  margin-left: 8px;
 }
 
 .winners-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 20px;
 }
 
 .winner-card {
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  border: 2px solid rgba(34, 197, 94, 0.2);
   position: relative;
   overflow: hidden;
+}
+
+.winner-card.supermajority {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
 }
 
 .winner-card::before {
@@ -942,20 +1293,24 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 4px;
   background: linear-gradient(90deg, #22c55e, #4ade80);
 }
 
+.winner-card.supermajority::before {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
 .winner-position {
-  font-size: 12px;
+  font-size: 14px;
   color: #94a3b8;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .winner-name {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: bold;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
   color: white;
 }
 
@@ -965,50 +1320,52 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.votes {
+.stat-votes {
   color: #cbd5e1;
-  font-size: 14px;
+  font-size: 16px;
 }
 
-.percentage {
+.stat-percentage {
+  font-size: 28px;
   font-weight: bold;
-  font-size: 16px;
   color: #22c55e;
 }
 
-.percentage.supermajority {
+.winner-card.supermajority .stat-percentage {
   color: #fbbf24;
-  animation: glow 2s infinite;
-}
-
-@keyframes glow {
-  0%,
-  100% {
-    text-shadow: 0 0 5px currentColor;
-  }
-  50% {
-    text-shadow: 0 0 15px currentColor;
-  }
 }
 
 .winner-badge {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 20px;
+  right: 20px;
   background: rgba(34, 197, 94, 0.2);
   color: #22c55e;
-  font-size: 11px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
   font-weight: bold;
-  padding: 2px 8px;
-  border-radius: 10px;
 }
 
-/* Run-off Alert */
+.winner-badge.supermajority {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+/* ===== RUN-OFF SECTION ===== */
+.runoff-section {
+  grid-column: 1 / -1;
+  margin-bottom: 16px;
+}
+
 .runoff-alert {
+  display: flex;
+  align-items: center;
+  gap: 20px;
   background: rgba(245, 158, 11, 0.1);
   border: 2px solid rgba(245, 158, 11, 0.3);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 24px;
   animation: pulseBorder 2s infinite;
 }
 
@@ -1022,67 +1379,105 @@ onUnmounted(() => {
   }
 }
 
-.alert-content {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.runoff-icon {
+  font-size: 40px;
 }
 
-.runoff-btn {
+.runoff-content {
+  flex: 1;
+}
+
+.runoff-title {
+  margin: 0 0 8px 0;
+  color: #f59e0b;
+  font-size: 20px;
+}
+
+.runoff-description {
+  margin: 0 0 12px 0;
+  color: #cbd5e1;
+  font-size: 16px;
+}
+
+.runoff-positions {
+  display: flex;
+  gap: 8px;
+}
+
+.position-tag {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.runoff-button {
   background: linear-gradient(135deg, #f59e0b, #d97706);
   color: white;
   border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 12px 24px;
+  border-radius: 8px;
   font-weight: bold;
+  font-size: 16px;
   cursor: pointer;
-  margin-left: auto;
   transition: transform 0.2s;
 }
 
-.runoff-btn:hover {
+.runoff-button:hover {
   transform: translateY(-2px);
 }
 
-/* Position Tabs */
-.position-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
+/* ===== POSITIONS CONTAINER ===== */
+.positions-container {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.tab {
+.position-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.position-tab {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 12px;
+  gap: 12px;
+  background: none;
+  border: none;
+  color: white;
+  padding: 16px;
   cursor: pointer;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 16px;
   transition: all 0.2s;
-  font-weight: 600;
   position: relative;
 }
 
-.tab:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(59, 130, 246, 0.1);
+.position-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.tab.active {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.2);
+.position-tab.active {
+  background: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
-.tab.winner {
-  border-color: #22c55e;
+.position-tab.has-winner {
   background: rgba(34, 197, 94, 0.1);
+  border: 2px solid rgba(34, 197, 94, 0.3);
 }
 
-.tab.has-vote-animation {
+.position-tab.has-update {
   animation: tabPulse 1s;
 }
 
@@ -1098,12 +1493,12 @@ onUnmounted(() => {
   }
 }
 
-.pulse-dot {
+.update-dot {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
+  top: 12px;
+  right: 12px;
+  width: 10px;
+  height: 10px;
   background: #3b82f6;
   border-radius: 50%;
   animation: dotPulse 1s infinite;
@@ -1122,79 +1517,124 @@ onUnmounted(() => {
 }
 
 .tab-count {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  margin-left: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
 }
 
-/* Charts Section */
-.charts-section {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 20px;
-  min-height: 500px;
+/* ===== POSITION DASHBOARD ===== */
+.position-dashboard {
+  padding: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* Rankings */
-.rankings {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.rankings-header {
+.dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
 }
 
-.chart-title {
+.dashboard-title {
+  margin: 0;
+  font-size: 24px;
+  color: white;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 18px;
-  color: white;
-}
-
-.position-stats {
-  display: flex;
   gap: 12px;
 }
 
-.stat {
+.dashboard-status {
+  font-size: 14px;
+  font-weight: normal;
   background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.dashboard-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
   font-size: 12px;
   color: #94a3b8;
+  margin-bottom: 4px;
 }
 
-.candidates-list {
+.stat-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: #3b82f6;
+}
+
+/* ===== CANDIDATES RANKING ===== */
+.candidates-ranking {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.candidate-row {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto;
-  align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  transition: all 0.2s;
-  position: relative;
+  padding-right: 8px;
 }
 
-.candidate-row.vote-animation {
+.candidate-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border-left: 4px solid transparent;
+  transition: all 0.2s;
+  animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.candidate-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.candidate-item.rank-1 {
+  border-left-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.candidate-item.rank-2 {
+  border-left-color: #94a3b8;
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.candidate-item.rank-3 {
+  border-left-color: #92400e;
+  background: rgba(146, 64, 14, 0.05);
+}
+
+.candidate-item.vote-update {
   animation: highlightVote 1s;
-  border-left: 4px solid #3b82f6;
+  border-left-color: #3b82f6;
 }
 
 @keyframes highlightVote {
@@ -1206,30 +1646,50 @@ onUnmounted(() => {
   }
 }
 
-.candidate-row.winner {
-  border-left: 4px solid #22c55e;
+.candidate-item.is-winner {
+  border-left-color: #22c55e;
   background: rgba(34, 197, 94, 0.05);
 }
 
-.candidate-row.runoff {
-  border-left: 4px solid #f59e0b;
+.candidate-item.in-runoff {
+  border-left-color: #f59e0b;
 }
 
-.candidate-row.eliminated {
+.candidate-item.eliminated {
   opacity: 0.5;
-  border-left: 4px solid #ef4444;
+  border-left-color: #ef4444;
 }
 
-.rank {
-  font-weight: bold;
-  color: #94a3b8;
-  min-width: 40px;
+.candidate-rank {
+  min-width: 60px;
   text-align: center;
 }
 
-.avatar {
-  width: 36px;
-  height: 36px;
+.round-2-badge {
+  background: #f59e0b;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.rank-number {
+  font-size: 24px;
+  font-weight: bold;
+  color: #94a3b8;
+}
+
+.candidate-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.candidate-avatar {
+  width: 48px;
+  height: 48px;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   border-radius: 50%;
   display: flex;
@@ -1237,23 +1697,31 @@ onUnmounted(() => {
   justify-content: center;
   font-weight: bold;
   color: white;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
-.name {
-  font-weight: 600;
-  margin-bottom: 2px;
+.candidate-info {
+  flex: 1;
 }
 
-.votes {
-  font-size: 12px;
+.candidate-name {
+  font-weight: bold;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.candidate-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
   color: #94a3b8;
 }
 
-.vote-change {
+.meta-change {
   color: #22c55e;
   font-weight: bold;
   animation: fadeInUp 0.5s;
-  margin-left: 4px;
 }
 
 @keyframes fadeInUp {
@@ -1267,70 +1735,142 @@ onUnmounted(() => {
   }
 }
 
-.progress-container {
-  width: 150px;
+.candidate-progress {
+  width: 200px;
+  flex-shrink: 0;
 }
 
 .progress-bar {
-  height: 8px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  border-radius: 4px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
   margin-bottom: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  border-radius: 5px;
   transition: width 0.5s ease;
 }
 
-.progress-bar.supermajority {
+.progress-fill.supermajority {
   background: linear-gradient(90deg, #fbbf24, #f59e0b);
 }
 
-.percentage {
+.progress-text {
   text-align: center;
-  font-size: 12px;
+  font-size: 14px;
   color: #94a3b8;
 }
 
-/* Stats Sidebar */
+.supermajority-indicator {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.candidate-status {
+  min-width: 40px;
+  text-align: center;
+  font-size: 24px;
+}
+
+.status-winner {
+  color: #22c55e;
+  animation: spin 2s infinite linear;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-runoff {
+  color: #f59e0b;
+}
+
+.status-eliminated {
+  color: #ef4444;
+  opacity: 0.7;
+}
+
+.status-active {
+  color: #3b82f6;
+}
+
+/* ===== STATS SIDEBAR ===== */
 .stats-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
+  overflow-y: auto;
 }
 
 .stats-card,
 .activity-card,
-.round-card {
+.round-summary-card {
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 
 .card-title {
-  margin: 0 0 16px 0;
-  font-size: 16px;
+  margin: 0;
+  font-size: 18px;
   color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
+.activity-count {
+  background: #3b82f6;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* ===== STATS GRID ===== */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
-.stat {
-  text-align: center;
-  padding: 12px;
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  border-radius: 12px;
+}
+
+.stat-icon {
+  font-size: 24px;
+}
+
+.stat-content {
+  flex: 1;
 }
 
 .stat-value {
   font-size: 24px;
   font-weight: bold;
   color: #3b82f6;
-  margin-bottom: 4px;
+  display: block;
+  margin-bottom: 2px;
 }
 
 .stat-label {
@@ -1338,22 +1878,33 @@ onUnmounted(() => {
   color: #94a3b8;
 }
 
-/* Activity */
+/* ===== ACTIVITY FEED ===== */
+.activity-feed {
+  height: 200px;
+  overflow-y: auto;
+}
+
+.empty-activity {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+  font-style: italic;
+}
+
 .activity-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 180px;
-  overflow-y: auto;
 }
 
 .activity-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
+  border-radius: 8px;
+  border-left: 3px solid transparent;
   animation: slideInLeft 0.3s;
 }
 
@@ -1369,78 +1920,213 @@ onUnmounted(() => {
 }
 
 .activity-item.vote {
-  border-left: 3px solid #3b82f6;
+  border-left-color: #3b82f6;
 }
 
 .activity-item.winner {
-  border-left: 3px solid #22c55e;
+  border-left-color: #22c55e;
 }
 
 .activity-item.round {
-  border-left: 3px solid #f59e0b;
+  border-left-color: #f59e0b;
 }
 
 .activity-icon {
-  font-size: 16px;
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.activity-text {
+.activity-content {
   flex: 1;
-  font-size: 13px;
+}
+
+.activity-message {
+  font-size: 14px;
   color: #e2e8f0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
 }
 
 .activity-time {
-  font-size: 11px;
   color: #94a3b8;
   font-family: 'Courier New', monospace;
 }
 
-/* Round Status */
-.round-status {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.status-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-}
-
-.position-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.status-indicator.winner {
-  color: #22c55e;
-  animation: spin 2s infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.status-indicator.runoff {
-  color: #f59e0b;
+.activity-live {
+  background: #ef4444;
+  color: white;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
   animation: pulse 1s infinite;
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
-  .charts-section {
+/* ===== ROUND SUMMARY ===== */
+.round-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.summary-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+.summary-label {
+  display: block;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: white;
+}
+
+/* ===== SYSTEM FOOTER ===== */
+.system-footer {
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.system-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-name {
+  font-weight: bold;
+  color: #3b82f6;
+  font-size: 14px;
+}
+
+.version {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.session-status {
+  color: #22c55e;
+}
+
+.connection-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 20px;
+}
+
+.connection-info.connected {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1.5s infinite;
+}
+
+.connection-info.connected .connection-dot {
+  background: #22c55e;
+  animation: pulse 1s infinite;
+}
+
+.connection-text {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.connection-info.connected .connection-text {
+  color: #22c55e;
+}
+
+.update-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.update-label {
+  color: #94a3b8;
+}
+
+.update-time {
+  color: white;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* ===== TRANSITIONS ===== */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  transform: translate(-50%, -20px);
+  opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1400px) {
+  .main-dashboard {
     grid-template-columns: 1fr;
   }
 
@@ -1450,20 +2136,30 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .status-bar {
+  .top-bar {
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     text-align: center;
   }
 
   .position-tabs {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
-  .live-alert {
-    left: 20px;
-    right: 20px;
-    min-width: auto;
+  .vote-notification {
+    min-width: 90%;
+    left: 5%;
+    transform: translateX(0);
+  }
+
+  .candidate-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .candidate-progress {
+    width: 100%;
   }
 }
 </style>
