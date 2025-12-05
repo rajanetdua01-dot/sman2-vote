@@ -1,444 +1,250 @@
 <template>
-  <div class="live-results" :class="{ 'fullscreen-mode': isFullscreen }">
-    <!-- Connection Status -->
-    <div class="connection-status" :class="{ connected: isConnected }">
-      <div class="status-indicator">
-        <span class="status-dot"></span>
-        <span class="status-text">
-          {{ isConnected ? '🔗 LIVE CONNECTED' : '🔌 CONNECTING...' }}
+  <div class="live-results">
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-left">
+        <span class="live-indicator" :class="{ connected: isConnected }"></span>
+        <span class="status-text">{{ isConnected ? '🔴 LIVE' : '🟡 CONNECTING...' }}</span>
+        <span class="update-rate" v-if="updatesPerSecond > 0">
+          ⚡ {{ updatesPerSecond }}/detik
         </span>
-        <span class="status-details">
-          <span v-if="updatesPerSecond > 0" class="updates-count">
-            {{ updatesPerSecond }}/detik
-          </span>
-          <span v-if="latency > 0" class="latency">Ping: {{ latency }}ms</span>
-        </span>
+      </div>
+      <div class="status-center">
+        <span class="round-badge">🔄 PUTARAN {{ votingRound }}</span>
+        <span class="vote-count">🗳️ {{ totalVotesAllPositions }} suara</span>
+        <span class="winners-count">🏆 {{ winners.length }}/2 pemenang</span>
+      </div>
+      <div class="status-right">
+        <span class="time">⏰ {{ currentTime }}</span>
+        <span class="participation">📊 {{ stats.participationRate }}% partisipasi</span>
+        <button class="sound-btn" @click="toggleSound">
+          {{ soundEnabled ? '🔊' : '🔇' }}
+        </button>
       </div>
     </div>
 
-    <!-- Loader -->
-    <div v-if="loading" class="loader-overlay">
-      <div class="loader-container">
-        <div class="loader-spinner"></div>
-        <p class="loader-text">Memuat sistem voting multi-putaran...</p>
-        <div class="loader-dots">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
+    <!-- Live Vote Alert -->
+    <div v-if="showLiveAlert" class="live-alert" :class="alertType">
+      <div class="alert-content">
+        <span class="alert-icon">🎉</span>
+        <div class="alert-text">
+          <strong>VOTE BARU!</strong>
+          <p>{{ liveAlertData.pemilih }} memilih {{ liveAlertData.kandidat }}</p>
+          <small>untuk {{ formatJabatan(liveAlertData.jabatan) }}</small>
         </div>
+        <span class="alert-time">{{ liveAlertData.time }}</span>
       </div>
     </div>
 
-    <!-- Main Content -->
-    <div v-else class="results-wrapper">
-      <!-- Header -->
-      <div class="header-section">
-        <div class="header-main">
-          <div class="session-info">
-            <h1 class="title-main">🗳️ SISTEM VOTING MULTI-PUTARAN</h1>
-            <h2 class="title-sub">{{ activeSession?.nama_sesi || 'Sesi Pemilihan' }}</h2>
-            <div class="session-meta">
-              <span class="meta-item">
-                <span class="meta-icon">📅</span>
-                {{ currentDate }}
-              </span>
-              <span class="meta-item">
-                <span class="meta-icon">📍</span>
-                SMAN 2 Bandar Lampung
-              </span>
-            </div>
-          </div>
-
-          <div class="header-right">
-            <!-- Round Indicator -->
-            <div class="round-container" :class="roundStatusClass">
-              <div class="round-badge">
-                <span class="round-icon">🔄</span>
-                <span class="round-text">PUTARAN {{ votingRound }}</span>
-              </div>
-              <div class="round-stats">
-                <div class="stat-item winners">
-                  <span class="stat-icon">✅</span>
-                  <span class="stat-value">{{ winners.length }}</span>
-                  <span class="stat-label">/4</span>
-                </div>
-                <div class="stat-item runoffs" v-if="runoffs.length > 0">
-                  <span class="stat-icon">🔄</span>
-                  <span class="stat-value">{{ runoffs.length }}</span>
-                  <span class="stat-label">run-off</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Live Indicator -->
-            <div class="live-indicator">
-              <span class="live-dot"></span>
-              <span class="live-text">LIVE STREAMING</span>
-              <span class="update-badge">
-                <span class="update-icon">⚡</span>
-                {{ lastUpdateTime }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Real-time Stats -->
-        <div class="realtime-stats">
-          <div class="stat-card" v-for="stat in realtimeStats" :key="stat.id">
-            <div class="stat-icon">{{ stat.icon }}</div>
-            <div class="stat-content">
-              <div class="stat-label">{{ stat.label }}</div>
-              <div class="stat-value">{{ stat.value }}</div>
-              <div class="stat-trend" v-if="stat.trend" :class="stat.trendClass">
-                {{ stat.trend }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Winners Banner -->
-      <div v-if="winners.length > 0" class="winners-banner">
-        <div class="banner-header">
-          <span class="banner-icon">🏆</span>
-          <h3>PEMENANG PUTARAN {{ votingRound }}</h3>
-          <span class="banner-icon">🏆</span>
-        </div>
+    <!-- Main Dashboard -->
+    <div class="dashboard">
+      <!-- Winners Section -->
+      <div class="winners-section" v-if="winners.length > 0">
+        <h2 class="section-title">
+          <span class="icon">🏆</span>
+          PEMENANG ({{ winners.length }}/2)
+        </h2>
         <div class="winners-grid">
           <div v-for="winner in winners" :key="winner.jabatan" class="winner-card">
-            <div class="winner-jabatan">{{ formatJabatan(winner.jabatan) }}</div>
+            <div class="winner-position">{{ formatJabatan(winner.jabatan) }}</div>
             <div class="winner-name">{{ winner.kandidat.nama_lengkap }}</div>
-            <div class="winner-votes">
-              {{ winner.kandidat.total_suara }} suara ({{ winner.percentage }}%)
+            <div class="winner-stats">
+              <span class="votes">{{ winner.kandidat.total_suara }} suara</span>
+              <span class="percentage" :class="{ supermajority: winner.percentage > 50 }">
+                {{ winner.percentage }}%
+              </span>
             </div>
-            <div class="winner-badge">
-              <span v-if="winner.percentage > 50">✅ MENANG</span>
-              <span v-else>📊 LEADING</span>
-            </div>
+            <div class="winner-badge" v-if="winner.percentage > 50">✅ MENANG</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Run-off Alert -->
+      <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-alert">
+        <div class="alert-content">
+          <span class="icon">🔄</span>
+          <div class="alert-text">
+            <strong>{{ runoffs.length }} POSISI PERLU RUN-OFF</strong>
+            <p>Belum ada yang mencapai >50% suara</p>
+          </div>
+          <button v-if="isAdmin" @click="startNextRound" class="runoff-btn">Mulai Putaran 2</button>
         </div>
       </div>
 
       <!-- Position Tabs -->
-      <div class="jabatan-tabs">
+      <div class="position-tabs">
         <button
-          v-for="jabatan in ['kurikulum', 'kesiswaan', 'sarpras', 'humas']"
+          v-for="jabatan in ['kesiswaan', 'sarpras']"
           :key="jabatan"
-          class="tab-button"
+          class="tab"
           :class="{
             active: activeJabatan === jabatan,
             winner: winners.some((w) => w.jabatan === jabatan),
-            runoff: runoffs.some((r) => r.jabatan === jabatan),
+            'has-vote-animation': recentVotes.some((v) => v.jabatan === jabatan),
           }"
           @click="activeJabatan = jabatan"
         >
           <span class="tab-icon">
-            <span v-if="winners.some((w) => w.jabatan === jabatan)">🏆</span>
-            <span v-else-if="runoffs.some((r) => r.jabatan === jabatan)">🔄</span>
-            <span v-else>📊</span>
+            {{ winners.some((w) => w.jabatan === jabatan) ? '✅' : '📊' }}
           </span>
-          <span class="tab-label">{{ formatJabatan(jabatan) }}</span>
-          <span class="tab-badge"> {{ getPositionStats(jabatan).candidateCount }} kandidat </span>
+          {{ formatJabatan(jabatan) }}
+          <span class="tab-count">{{ getPositionStats(jabatan).totalVotes }}</span>
+          <span v-if="recentVotes.some((v) => v.jabatan === jabatan)" class="pulse-dot"></span>
         </button>
       </div>
 
-      <!-- Main Dashboard Grid -->
-      <div class="dashboard-grid">
-        <!-- Left Column: Position Leaderboard -->
-        <div class="column-left">
-          <div class="card position-leaderboard-card">
-            <div class="card-header">
-              <h3>{{ formatJabatan(activeJabatan) }}</h3>
-              <div class="card-actions">
-                <button
-                  class="btn-action"
-                  @click="toggleFullscreen"
-                  :title="isFullscreen ? 'Keluar Fullscreen' : 'Fullscreen'"
-                >
-                  <span class="action-icon">{{ isFullscreen ? '📱' : '🖥️' }}</span>
-                </button>
-                <button
-                  class="btn-action"
-                  @click="toggleSound"
-                  :title="soundEnabled ? 'Mute Sound' : 'Unmute Sound'"
-                >
-                  <span class="action-icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-                </button>
+      <!-- Charts Section -->
+      <div class="charts-section">
+        <!-- Left: Candidate Rankings -->
+        <div class="rankings">
+          <div class="rankings-header">
+            <h3 class="chart-title">
+              {{ formatJabatan(activeJabatan) }}
+              <span class="position-status">
+                {{
+                  getPositionStats(activeJabatan).hasWinner
+                    ? '✅'
+                    : getPositionStats(activeJabatan).needsRunoff
+                      ? '🔄'
+                      : '📊'
+                }}
+              </span>
+            </h3>
+            <div class="position-stats">
+              <span class="stat">{{ getPositionStats(activeJabatan).totalVotes }} suara</span>
+              <span class="stat"
+                >{{ getPositionStats(activeJabatan).candidateCount }} kandidat</span
+              >
+            </div>
+          </div>
+
+          <div class="candidates-list">
+            <div
+              v-for="(candidate, index) in getCurrentRoundCandidates(activeJabatan)"
+              :key="candidate.id"
+              class="candidate-row"
+              :class="{
+                'vote-animation': recentVotes.some((v) => v.candidateId === candidate.id),
+                winner: winners.some(
+                  (w) => w.jabatan === activeJabatan && w.kandidat.id === candidate.id,
+                ),
+                runoff: votingRound === 2 && index < 2,
+                eliminated: votingRound === 2 && index >= 2,
+              }"
+            >
+              <div class="rank">
+                <span v-if="votingRound === 2 && index < 2" class="round-badge">R2</span>
+                <span v-else>#{{ index + 1 }}</span>
+              </div>
+              <div class="avatar">{{ getInitials(candidate.nama_lengkap) }}</div>
+              <div class="info">
+                <div class="name">{{ candidate.nama_lengkap }}</div>
+                <div class="votes">
+                  {{ candidate.total_suara }} suara
+                  <span v-if="candidate.voteChange > 0" class="vote-change">
+                    +{{ candidate.voteChange }}
+                  </span>
+                </div>
+              </div>
+              <div class="progress-container">
+                <div
+                  class="progress-bar"
+                  :style="{ width: Math.min(candidate.percentage, 100) + '%' }"
+                  :class="{ supermajority: candidate.percentage > 50 }"
+                ></div>
+                <div class="percentage">{{ candidate.percentage }}%</div>
               </div>
             </div>
+          </div>
+        </div>
 
-            <!-- Position Stats -->
-            <div class="position-stats-summary">
-              <div class="position-stat">
-                <div class="stat-value">{{ getPositionStats(activeJabatan).totalVotes }}</div>
-                <div class="stat-label">Total Suara</div>
+        <!-- Right: Stats & Activity -->
+        <div class="stats-sidebar">
+          <!-- Real-time Stats -->
+          <div class="stats-card">
+            <h3 class="card-title">📈 STATISTIK REAL-TIME</h3>
+            <div class="stats-grid">
+              <div class="stat">
+                <div class="stat-value">{{ stats.totalGuru }}</div>
+                <div class="stat-label">Total Pemilih</div>
               </div>
-              <div class="position-stat">
-                <div class="stat-value">{{ activePositionStats.participation }}%</div>
+              <div class="stat">
+                <div class="stat-value">{{ stats.votedCount }}</div>
+                <div class="stat-label">Sudah Voting</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">{{ stats.pendingCount }}</div>
+                <div class="stat-label">Belum Voting</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">{{ stats.participationRate }}%</div>
                 <div class="stat-label">Partisipasi</div>
               </div>
-              <div class="position-stat" v-if="activePositionStats.leading">
-                <div class="stat-value">{{ activePositionStats.leading.total_suara }}</div>
-                <div class="stat-label">Pemimpin</div>
-              </div>
-              <div class="position-stat" v-if="activePositionStats.margin > 0">
-                <div class="stat-value">+{{ activePositionStats.margin }}</div>
-                <div class="stat-label">Selisih</div>
-              </div>
-            </div>
-
-            <!-- Live Vote Counter -->
-            <div
-              class="live-vote-counter"
-              v-if="latestVote && latestVote.jabatan === activeJabatan"
-            >
-              <div class="vote-alert">
-                <span class="alert-icon">🎉</span>
-                <div class="alert-content">
-                  <strong>VOTE BARU!</strong>
-                  <p>{{ latestVote.pemilih_nama }} memilih {{ latestVote.kandidat_nama }}</p>
-                </div>
-                <span class="alert-time">{{ formatTimeAgo(latestVote.timestamp) }}</span>
-              </div>
-            </div>
-
-            <!-- Position Candidates -->
-            <div class="position-candidates">
-              <div
-                v-for="(candidate, index) in candidatesByJabatan[activeJabatan]"
-                :key="candidate.id"
-                class="position-candidate-row"
-                :class="{
-                  'first-place': index === 0,
-                  'second-place': index === 1,
-                  winner: winners.some(
-                    (w) => w.jabatan === activeJabatan && w.kandidat.id === candidate.id,
-                  ),
-                  'vote-animation': recentVotes.includes(candidate.id),
-                }"
-              >
-                <div class="row-rank">#{{ index + 1 }}</div>
-                <div class="row-avatar">{{ getInitials(candidate.nama_lengkap) }}</div>
-                <div class="row-info">
-                  <div class="row-name">{{ candidate.nama_lengkap }}</div>
-                  <div class="row-meta">
-                    <span class="meta-votes">{{ candidate.total_suara }} suara</span>
-                    <span class="meta-separator">•</span>
-                    <span class="meta-percentage">{{ candidate.percentage }}%</span>
-                  </div>
-                </div>
-                <div class="row-status">
-                  <span
-                    v-if="
-                      winners.some(
-                        (w) => w.jabatan === activeJabatan && w.kandidat.id === candidate.id,
-                      )
-                    "
-                    class="status-winner"
-                  >
-                    🏆
-                  </span>
-                  <span
-                    v-else-if="
-                      runoffs.some(
-                        (r) =>
-                          r.jabatan === activeJabatan &&
-                          r.kandidats.some((k) => k.id === candidate.id),
-                      )
-                    "
-                    class="status-runoff"
-                  >
-                    🔄
-                  </span>
-                  <span v-else class="status-active">
-                    {{ index === 0 ? '👑' : '📈' }}
-                  </span>
-                </div>
-                <div class="row-progress">
-                  <div class="progress-bar">
-                    <div class="progress-fill" :style="{ width: candidate.percentage + '%' }"></div>
-                  </div>
-                </div>
-                <div class="row-change" v-if="candidate.voteChange > 0">
-                  +{{ candidate.voteChange }}
-                </div>
-              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Right Column: Stats & Activity -->
-        <div class="column-right">
-          <!-- Round Progress -->
-          <div class="card round-progress-card">
-            <div class="card-header">
-              <h3>📊 PROGRES PUTARAN</h3>
-              <div class="progress-badge" :class="roundProgressStatus">
-                {{ roundProgressLabel }}
-              </div>
-            </div>
-            <div class="round-progress-content">
-              <!-- Progress Bars for Each Position -->
+          <!-- Live Activity -->
+          <div class="activity-card">
+            <h3 class="card-title">🔄 AKTIVITAS LIVE</h3>
+            <div class="activity-list">
               <div
-                v-for="jabatan in ['kurikulum', 'kesiswaan', 'sarpras', 'humas']"
-                :key="jabatan"
-                class="position-progress-item"
-                @click="activeJabatan = jabatan"
+                v-for="activity in recentActivity"
+                :key="activity.id"
+                class="activity-item"
+                :class="activity.type"
               >
-                <div class="position-header">
-                  <span class="position-icon">
-                    <span v-if="winners.some((w) => w.jabatan === jabatan)">✅</span>
-                    <span v-else-if="runoffs.some((r) => r.jabatan === jabatan)">🔄</span>
-                    <span v-else>📊</span>
-                  </span>
-                  <span class="position-name">{{ formatJabatan(jabatan) }}</span>
-                </div>
-                <div class="position-progress">
-                  <div class="progress-bar small">
-                    <div
-                      class="progress-fill"
-                      :style="{ width: getPositionProgress(jabatan) + '%' }"
-                    ></div>
-                  </div>
-                  <div class="progress-text">{{ getPositionStats(jabatan).totalVotes }} suara</div>
-                </div>
-                <div class="position-result">
-                  <span v-if="winners.some((w) => w.jabatan === jabatan)" class="result-winner">
-                    {{
-                      winners
-                        .find((w) => w.jabatan === jabatan)
-                        ?.kandidat.nama_lengkap.split(' ')[0]
-                    }}
-                  </span>
-                  <span
-                    v-else-if="runoffs.some((r) => r.jabatan === jabatan)"
-                    class="result-runoff"
-                  >
-                    RUN-OFF
-                  </span>
-                  <span v-else class="result-active"> PROSES </span>
-                </div>
+                <span class="activity-icon">
+                  {{
+                    activity.type === 'vote'
+                      ? '🗳️'
+                      : activity.type === 'winner'
+                        ? '🏆'
+                        : activity.type === 'round'
+                          ? '🔄'
+                          : '📊'
+                  }}
+                </span>
+                <span class="activity-text">{{ activity.message }}</span>
+                <span class="activity-time">{{ activity.time }}</span>
               </div>
             </div>
           </div>
 
-          <!-- Live Activity Feed -->
-          <div class="card activity-card">
-            <div class="card-header">
-              <h3>🔄 AKTIVITAS LIVE</h3>
-              <span class="activity-badge">{{ activityLog.length }}</span>
-            </div>
-            <div class="activity-feed">
-              <div v-if="activityLog.length === 0" class="empty-activity">
-                <p>Menunggu aktivitas voting...</p>
-              </div>
-              <div v-else class="activity-list">
-                <div
-                  v-for="activity in activityLog.slice(0, 8)"
-                  :key="activity.id"
-                  class="activity-item"
-                  :class="activity.type"
+          <!-- Round Info -->
+          <div class="round-card">
+            <h3 class="card-title">🔄 PUTARAN {{ votingRound }}</h3>
+            <div class="round-status">
+              <div class="status-item" v-for="jabatan in ['kesiswaan', 'sarpras']" :key="jabatan">
+                <span class="position-name">{{ formatJabatan(jabatan) }}</span>
+                <span
+                  class="status-indicator"
+                  :class="{
+                    winner: winners.some((w) => w.jabatan === jabatan),
+                    runoff: runoffs.some((r) => r.jabatan === jabatan),
+                  }"
                 >
-                  <div class="activity-icon">
-                    <span v-if="activity.type === 'vote'">🗳️</span>
-                    <span v-if="activity.type === 'rank_change'">🔄</span>
-                    <span v-if="activity.type === 'milestone'">🎯</span>
-                    <span v-if="activity.type === 'winner'">🏆</span>
-                    <span v-if="activity.type === 'info'">ℹ️</span>
-                  </div>
-                  <div class="activity-content">
-                    <p class="activity-message">{{ activity.message }}</p>
-                    <div class="activity-meta">
-                      <span class="activity-time">{{ formatTime(activity.timestamp) }}</span>
-                      <span class="activity-live" v-if="activity.live">LIVE</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Round Summary -->
-          <div class="card round-summary-card">
-            <div class="card-header">
-              <h3>📋 RINGKASAN PUTARAN</h3>
-            </div>
-            <div class="round-summary">
-              <div class="summary-item">
-                <div class="summary-label">Putaran Saat Ini</div>
-                <div class="summary-value">{{ votingRound }}</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">Pemenang</div>
-                <div class="summary-value">{{ winners.length }} dari 4</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">Run-off</div>
-                <div class="summary-value">{{ runoffs.length }} posisi</div>
-              </div>
-              <div class="summary-item">
-                <div class="summary-label">Total Vote</div>
-                <div class="summary-value">{{ totalVotesAllPositions }}</div>
-              </div>
-            </div>
-            <div class="round-actions" v-if="isAdmin">
-              <button
-                class="btn-round-action"
-                @click="startNextRound"
-                v-if="votingRound === 1 && runoffs.length > 0"
-              >
-                Mulai Putaran 2
-              </button>
-              <button class="btn-round-action" @click="endVoting" v-if="winners.length === 4">
-                Selesaikan Voting
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Footer with Status -->
-      <div class="footer-section">
-        <div class="footer-left">
-          <div class="voting-status">
-            <div class="status-icon">🎯</div>
-            <div class="status-info">
-              <div class="status-title">Status Voting Multi-Putaran</div>
-              <div class="status-details">
-                <span class="detail-item">
-                  <span class="detail-label">Putaran:</span>
-                  <span class="detail-value">{{ votingRound }}</span>
-                </span>
-                <span class="detail-item">
-                  <span class="detail-label">Pemenang:</span>
-                  <span class="detail-value">{{ winners.length }}/4 posisi</span>
-                </span>
-                <span class="detail-item">
-                  <span class="detail-label">Total Vote:</span>
-                  <span class="detail-value">{{ totalVotesAllPositions }}</span>
-                </span>
-                <span class="detail-item">
-                  <span class="detail-label">Update:</span>
-                  <span class="detail-value">{{ lastUpdateTime }}</span>
+                  {{
+                    winners.some((w) => w.jabatan === jabatan)
+                      ? '✅'
+                      : runoffs.some((r) => r.jabatan === jabatan)
+                        ? '🔄'
+                        : '⏳'
+                  }}
                 </span>
               </div>
             </div>
-          </div>
-        </div>
-        <div class="footer-right">
-          <div class="system-info">
-            <span class="info-item">SMANDA VOTE v2.1</span>
-            <span class="info-separator">•</span>
-            <span class="info-item">Multi-Round System</span>
-            <span class="info-separator">•</span>
-            <span class="info-item">{{ currentTime }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Sound Notification -->
-    <audio ref="notificationSound" preload="auto"></audio>
+    <!-- Hidden Audio for Beep Sound -->
+    <audio ref="beepSound" preload="auto">
+      <source
+        src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3"
+        type="audio/mpeg"
+      />
+    </audio>
   </div>
 </template>
 
@@ -446,23 +252,20 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 
-// ===== STATE MANAGEMENT =====
-const loading = ref(true)
+// State
 const isConnected = ref(false)
-const isFullscreen = ref(false)
-const soundEnabled = ref(true)
-const latency = ref(0)
-const connectionStartTime = ref(null)
-const realtimeSubscription = ref(null)
-
-// Multi-round voting states
 const votingRound = ref(1)
-const activeJabatan = ref('kurikulum')
-const isAdmin = ref(false) // Set based on user role
+const activeJabatan = ref('kesiswaan')
+const isAdmin = ref(true)
+const soundEnabled = ref(true)
+const showLiveAlert = ref(false)
+const alertType = ref('vote')
 
-// Data States
-const activeSession = ref(null)
+// Data
 const candidates = ref([])
+const activityLog = ref([])
+const recentVotes = ref([])
+const liveAlertData = ref({})
 
 // Stats
 const stats = ref({
@@ -472,47 +275,44 @@ const stats = ref({
   participationRate: 0,
 })
 
-// Real-time tracking
-const latestVote = ref(null)
-const recentVotes = ref([])
-const voteChange = ref(0)
-const activityLog = ref([])
-const connectionErrors = ref(0)
+// Realtime subscription
+let realtimeChannel = null
 
 // Audio
-const notificationSound = ref(null)
+const beepSound = ref(null)
 
-// ===== COMPUTED PROPERTIES =====
+// Computed
+const updatesPerSecond = computed(() => {
+  const oneSecondAgo = Date.now() - 1000
+  return activityLog.value.filter((a) => a.timestamp > oneSecondAgo).length
+})
 
-// Group candidates by position
+const currentTime = computed(() => {
+  return new Date().toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+})
+
 const candidatesByJabatan = computed(() => {
-  const grouped = {
-    kurikulum: [],
-    kesiswaan: [],
-    sarpras: [],
-    humas: [],
-  }
+  const grouped = { kesiswaan: [], sarpras: [] }
 
   candidates.value.forEach((candidate) => {
     if (grouped[candidate.jabatan]) {
-      // Calculate percentage for this position
       const positionCandidates = grouped[candidate.jabatan]
-      const totalVotesPosition = [...positionCandidates, candidate].reduce(
+      const totalVotes = [...positionCandidates, candidate].reduce(
         (sum, k) => sum + (k.total_suara || 0),
         0,
       )
 
-      const percentage =
-        totalVotesPosition > 0 ? Math.round((candidate.total_suara / totalVotesPosition) * 100) : 0
-
-      grouped[candidate.jabatan].push({
-        ...candidate,
-        percentage,
-      })
+      candidate.percentage =
+        totalVotes > 0 ? Math.round((candidate.total_suara / totalVotes) * 100) : 0
+      grouped[candidate.jabatan].push(candidate)
     }
   })
 
-  // Sort by votes (descending) within each position
+  // Sort by votes
   Object.keys(grouped).forEach((jabatan) => {
     grouped[jabatan].sort((a, b) => b.total_suara - a.total_suara)
   })
@@ -520,7 +320,6 @@ const candidatesByJabatan = computed(() => {
   return grouped
 })
 
-// Cari pemenang (>50% threshold)
 const winners = computed(() => {
   const result = []
 
@@ -533,12 +332,12 @@ const winners = computed(() => {
 
     kandidats.forEach((k) => {
       const percentage = (k.total_suara / totalVotes) * 100
-      // PASTIKAN LEBIH DARI 50%, BUKAN SAMA DENGAN
       if (percentage > 50) {
         result.push({
           jabatan,
           kandidat: k,
           percentage: Math.round(percentage),
+          round: votingRound.value,
         })
       }
     })
@@ -546,7 +345,7 @@ const winners = computed(() => {
 
   return result
 })
-// Check positions needing run-off
+
 const runoffs = computed(() => {
   const result = []
 
@@ -554,27 +353,29 @@ const runoffs = computed(() => {
     const kandidats = candidatesByJabatan.value[jabatan]
     if (kandidats.length === 0) return
 
-    // Skip if already has winner
     const hasWinner = winners.value.some((w) => w.jabatan === jabatan)
     if (hasWinner) return
 
-    // Need at least 2 candidates for run-off
     if (kandidats.length >= 2) {
       const top2 = kandidats.slice(0, 2)
-      const totalVotesTop2 = top2.reduce((sum, k) => sum + k.total_suara, 0)
-
-      result.push({
-        jabatan,
-        kandidats: top2,
-        totalVotes: totalVotesTop2,
-      })
+      result.push({ jabatan, kandidats: top2 })
     }
   })
 
   return result
 })
 
-// Position stats
+const totalVotesAllPositions = computed(() => {
+  return ['kesiswaan', 'sarpras'].reduce((sum, jabatan) => {
+    return sum + getPositionStats(jabatan).totalVotes
+  }, 0)
+})
+
+const recentActivity = computed(() => {
+  return activityLog.value.slice(0, 5)
+})
+
+// Helper Functions
 const getPositionStats = (jabatan) => {
   const kandidats = candidatesByJabatan.value[jabatan] || []
   const totalVotes = kandidats.reduce((sum, k) => sum + (k.total_suara || 0), 0)
@@ -587,127 +388,23 @@ const getPositionStats = (jabatan) => {
   }
 }
 
-// Active position stats
-const activePositionStats = computed(() => {
-  const kandidats = candidatesByJabatan.value[activeJabatan.value] || []
-  const totalVotes = kandidats.reduce((sum, k) => sum + k.total_suara, 0)
-
-  return {
-    totalVotes,
-    participation:
-      stats.value.totalGuru > 0 ? Math.round((totalVotes / stats.value.totalGuru) * 100) : 0,
-    leading: kandidats[0] || null,
-    margin:
-      kandidats.length >= 2
-        ? (kandidats[0]?.total_suara || 0) - (kandidats[1]?.total_suara || 0)
-        : 0,
-  }
-})
-
-// Total votes across all positions
-const totalVotesAllPositions = computed(() => {
-  return Object.keys(candidatesByJabatan.value).reduce((sum, jabatan) => {
-    return sum + getPositionStats(jabatan).totalVotes
-  }, 0)
-})
-
-// Round status
-const roundStatusClass = computed(() => {
-  if (winners.value.length === 4) return 'completed'
-  if (votingRound.value === 2) return 'runoff'
-  if (winners.value.length > 0) return 'progress'
-  return 'active'
-})
-
-const roundProgressStatus = computed(() => {
-  const completed = winners.value.length
-  if (completed === 4) return 'completed'
-  if (completed >= 3) return 'good'
-  if (completed >= 1) return 'average'
-  return 'low'
-})
-
-const roundProgressLabel = computed(() => {
-  const map = {
-    completed: 'SELESAI',
-    good: 'BAIK',
-    average: 'SEDANG',
-    low: 'MULAI',
-  }
-  return map[roundProgressStatus.value]
-})
-
-// Real-time stats
-const updatesPerSecond = computed(() => {
-  const oneSecondAgo = Date.now() - 1000
-  return activityLog.value.filter((a) => new Date(a.timestamp).getTime() > oneSecondAgo).length
-})
-
-const currentTime = computed(() => {
-  return new Date().toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-})
-
-const lastUpdateTime = computed(() => {
-  return new Date().toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-})
-
-const currentDate = computed(() => {
-  return new Date().toLocaleDateString('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-})
-
-const realtimeStats = computed(() => [
-  {
-    id: 1,
-    icon: '🔄',
-    label: 'Putaran',
-    value: `#${votingRound.value}`,
-    trend: winners.value.length > 0 ? `${winners.value.length}/4` : null,
-    trendClass: 'positive',
-  },
-  {
-    id: 2,
-    icon: '🏆',
-    label: 'Pemenang',
-    value: `${winners.value.length}`,
-    trend: runoffs.value.length > 0 ? `${runoffs.value.length} run-off` : null,
-    trendClass: runoffs.value.length > 0 ? 'alert' : 'positive',
-  },
-  {
-    id: 3,
-    icon: '📊',
-    label: 'Partisipasi',
-    value: `${stats.value.participationRate}%`,
-    trend: null,
-    trendClass: stats.value.participationRate >= 70 ? 'positive' : 'neutral',
-  },
-  {
-    id: 4,
-    icon: '⚡',
-    label: 'Live Update',
-    value: `${updatesPerSecond.value}/dtk`,
-    trend: null,
-    trendClass: 'positive',
-  },
-])
-
-// ===== HELPER FUNCTIONS =====
-const getPositionProgress = (jabatan) => {
+const getCurrentRoundCandidates = (jabatan) => {
   const kandidats = candidatesByJabatan.value[jabatan] || []
-  const totalVotes = kandidats.reduce((sum, k) => sum + k.total_suara, 0)
-  const maxPossible = stats.value.totalGuru * 4 // Max votes per position
-  return maxPossible > 0 ? Math.min(100, Math.round((totalVotes / maxPossible) * 100)) : 0
+
+  // Jika round 2, hanya ambil 2 teratas
+  if (votingRound.value === 2 && kandidats.length > 2) {
+    return kandidats.slice(0, 2)
+  }
+
+  return kandidats
+}
+
+const formatJabatan = (jabatan) => {
+  const map = {
+    sarpras: 'Waka Sarpras',
+    kesiswaan: 'Waka Kesiswaan',
+  }
+  return map[jabatan] || jabatan
 }
 
 const getInitials = (name) => {
@@ -720,41 +417,20 @@ const getInitials = (name) => {
     .substring(0, 2)
 }
 
-const formatJabatan = (jabatan) => {
-  const map = {
-    humas: 'Waka Humas',
-    sarpras: 'Waka Sarpras',
-    kesiswaan: 'Waka Kesiswaan',
-    kurikulum: 'Waka Kurikulum',
-  }
-  return map[jabatan] || jabatan
-}
-
 const formatTime = (date) => {
   return new Date(date).toLocaleTimeString('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
   })
 }
 
-const formatTimeAgo = (date) => {
-  const now = new Date()
-  const diff = now - new Date(date)
-  const seconds = Math.floor(diff / 1000)
-
-  if (seconds < 60) return `${seconds} detik lalu`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} menit lalu`
-  return `${Math.floor(seconds / 3600)} jam lalu`
-}
-
-const addActivity = (message, type = 'info', live = false) => {
+const addActivity = (message, type = 'info') => {
   activityLog.value.unshift({
     id: Date.now(),
     message,
     type,
-    timestamp: new Date(),
-    live,
+    timestamp: Date.now(),
+    time: formatTime(new Date()),
   })
 
   if (activityLog.value.length > 50) {
@@ -762,106 +438,176 @@ const addActivity = (message, type = 'info', live = false) => {
   }
 }
 
-const playNotificationSound = () => {
-  if (soundEnabled.value && notificationSound.value) {
-    notificationSound.value.currentTime = 0
-    notificationSound.value.play().catch((e) => {
-      console.log('Audio play failed:', e)
-    })
+const playBeepSound = () => {
+  if (soundEnabled.value && beepSound.value) {
+    beepSound.value.currentTime = 0
+    beepSound.value.play().catch((e) => console.log('Audio play failed:', e))
   }
 }
 
-// ===== WEBSOCKET / REALTIME FUNCTIONS =====
+const showVoteAlert = (pemilih, kandidat, jabatan) => {
+  liveAlertData.value = {
+    pemilih,
+    kandidat,
+    jabatan,
+    time: formatTime(new Date()),
+  }
+  showLiveAlert.value = true
+  alertType.value = 'vote'
+
+  // Auto hide after 3 seconds
+  setTimeout(() => {
+    showLiveAlert.value = false
+  }, 3000)
+}
+
+const toggleSound = () => {
+  soundEnabled.value = !soundEnabled.value
+  addActivity(soundEnabled.value ? '🔊 Suara diaktifkan' : '🔇 Suara dimatikan', 'info')
+}
+
+// REAL-TIME FUNCTIONS
 const setupRealtimeConnection = async () => {
-  console.log('🚀 Setting up Multi-Round Voting System...')
-
   try {
-    await loadInitialData()
-    startWebSocketConnection()
-    startConnectionMonitor()
+    // Load active session
+    const { data: sessions, error: sessionError } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
 
-    loading.value = false
-    isConnected.value = true
-    connectionStartTime.value = Date.now()
+    if (sessionError) throw sessionError
 
-    addActivity('🟢 Sistem voting multi-putaran siap', 'info', true)
-    addActivity(`📊 4 posisi tersedia untuk dipilih`, 'info')
+    const activeSession = sessions?.[0]
+
+    if (!activeSession) {
+      console.error('No active session found')
+      return
+    }
+
+    // Load initial candidates data
+    await loadCandidates(activeSession.id)
+
+    // Setup realtime subscription for VOTES
+    realtimeChannel = supabase
+      .channel('live_votes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'suara',
+          filter: `sesi_id=eq.${activeSession.id}`,
+        },
+        async (payload) => {
+          console.log('🎯 NEW VOTE DETECTED:', payload.new)
+          await handleNewVote(payload.new)
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'kandidat',
+          filter: `sesi_id=eq.${activeSession.id}`,
+        },
+        (payload) => {
+          console.log('📈 CANDIDATE UPDATE:', payload.new)
+          handleCandidateUpdate(payload.new)
+        },
+      )
+      .subscribe((status) => {
+        console.log('🔌 Subscription status:', status)
+        isConnected.value = status === 'SUBSCRIBED'
+
+        if (status === 'SUBSCRIBED') {
+          addActivity('✅ Sistem realtime terhubung', 'info')
+        }
+      })
   } catch (error) {
-    console.error('❌ Failed to setup voting system:', error)
-    addActivity('🔴 Koneksi gagal, mencoba lagi...', 'info')
+    console.error('Setup error:', error)
     setTimeout(setupRealtimeConnection, 3000)
   }
 }
 
-const startWebSocketConnection = () => {
-  if (realtimeSubscription.value) {
-    supabase.removeChannel(realtimeSubscription.value)
+const loadCandidates = async (sessionId) => {
+  try {
+    const { data: kandidatData, error } = await supabase
+      .from('kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id(nama_lengkap)
+      `,
+      )
+      .eq('sesi_id', sessionId)
+      .in('jabatan', ['kesiswaan', 'sarpras'])
+      .order('total_suara', { ascending: false })
+
+    if (error) throw error
+
+    candidates.value = (kandidatData || []).map((k) => ({
+      ...k,
+      nama_lengkap: k.pengguna?.nama_lengkap || 'Unknown',
+      voteChange: 0,
+      percentage: 0,
+    }))
+
+    // Load stats
+    await loadStats(sessionId)
+
+    addActivity(`📊 ${candidates.value.length} kandidat dimuat`, 'info')
+  } catch (error) {
+    console.error('Load candidates error:', error)
   }
+}
 
-  realtimeSubscription.value = supabase
-    .channel('multi_round_voting')
-    .on('broadcast', { event: 'ping' }, (payload) => {
-      handlePing(payload)
-    })
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'suara',
-        filter: `sesi_id=eq.${activeSession.value?.id}`,
-      },
-      async (payload) => {
-        const startTime = Date.now()
-        await handleNewVote(payload.new)
-        latency.value = Date.now() - startTime
+const loadStats = async (sessionId) => {
+  try {
+    // Total eligible voters (guru)
+    const { count: totalGuru, error: guruError } = await supabase
+      .from('pengguna')
+      .select('*', { count: 'exact', head: true })
+      .eq('peran', 'guru')
+      .eq('is_active', true)
 
-        if (soundEnabled.value) {
-          playNotificationSound()
-        }
-      },
+    if (guruError) throw guruError
+
+    stats.value.totalGuru = totalGuru || 0
+
+    // Total votes in this session
+    const { count: totalVotes, error: votesError } = await supabase
+      .from('suara')
+      .select('*', { count: 'exact', head: true })
+      .eq('sesi_id', sessionId)
+      .eq('is_draft', false)
+
+    if (votesError) throw votesError
+
+    stats.value.votedCount = totalVotes || 0
+    stats.value.pendingCount = stats.value.totalGuru - stats.value.votedCount
+    stats.value.participationRate = Math.round(
+      (stats.value.votedCount / stats.value.totalGuru) * 100,
     )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'kandidat',
-        filter: `sesi_id=eq.${activeSession.value?.id}`,
-      },
-      (payload) => {
-        handleCandidateUpdate(payload.new)
-      },
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'sesi_pemilihan',
-        filter: `id=eq.${activeSession.value?.id}`,
-      },
-      (payload) => {
-        activeSession.value = payload.new
-        addActivity('📋 Sesi pemilihan diperbarui', 'info')
-      },
-    )
-    .subscribe((status) => {
-      handleSubscriptionStatus(status)
-    })
+  } catch (error) {
+    console.error('Load stats error:', error)
+  }
 }
 
 const handleNewVote = async (newVote) => {
-  console.log('🎉 VOTE BARU:', newVote)
-
   try {
-    const { data: voter } = await supabase
+    // Get voter name
+    const { data: voter, error: voterError } = await supabase
       .from('pengguna')
       .select('nama_lengkap')
       .eq('id', newVote.pemilih_id)
       .single()
 
-    const { data: candidate } = await supabase
+    if (voterError) throw voterError
+
+    // Get candidate name
+    const { data: candidate, error: candidateError } = await supabase
       .from('kandidat')
       .select(
         `
@@ -872,337 +618,144 @@ const handleNewVote = async (newVote) => {
       .eq('id', newVote.kandidat_id)
       .single()
 
-    latestVote.value = {
-      pemilih_nama: voter?.nama_lengkap || 'Anonymous',
-      kandidat_nama: candidate?.pengguna?.nama_lengkap || 'Unknown',
+    if (candidateError) throw candidateError
+
+    // Play beep sound
+    playBeepSound()
+
+    // Show live alert
+    showVoteAlert(
+      voter?.nama_lengkap || 'Seseorang',
+      candidate?.pengguna?.nama_lengkap || 'seorang kandidat',
+      newVote.jabatan,
+    )
+
+    // Add to recent votes for animation
+    recentVotes.value.push({
+      candidateId: newVote.kandidat_id,
       jabatan: newVote.jabatan,
-      timestamp: new Date(),
-    }
+      timestamp: Date.now(),
+    })
+
+    // Remove after 2 seconds
+    setTimeout(() => {
+      recentVotes.value = recentVotes.value.filter((v) => v.candidateId !== newVote.kandidat_id)
+    }, 2000)
 
     // Update stats
-    const oldVoteCount = stats.value.votedCount
     stats.value.votedCount++
     stats.value.pendingCount = stats.value.totalGuru - stats.value.votedCount
     stats.value.participationRate = Math.round(
       (stats.value.votedCount / stats.value.totalGuru) * 100,
     )
 
-    voteChange.value = stats.value.votedCount - oldVoteCount
-
-    // Update candidate
-    const candidateIndex = candidates.value.findIndex((c) => c.id === newVote.kandidat_id)
-    if (candidateIndex !== -1) {
-      const oldVotes = candidates.value[candidateIndex].total_suara
-      candidates.value[candidateIndex].total_suara++
-      candidates.value[candidateIndex].voteChange =
-        candidates.value[candidateIndex].total_suara - oldVotes
-
-      // Trigger animation
-      recentVotes.value.push(newVote.kandidat_id)
-      setTimeout(() => {
-        recentVotes.value = recentVotes.value.filter((id) => id !== newVote.kandidat_id)
-      }, 2000)
-
-      // Check if this creates a winner
-      setTimeout(() => {
-        checkForNewWinner(newVote.jabatan)
-      }, 100)
-    }
-
-    // Add to activity log
+    // Add activity
     addActivity(
-      `🗳️ ${voter?.nama_lengkap || 'Seseorang'} memilih ${candidate?.pengguna?.nama_lengkap || 'seorang kandidat'} untuk ${formatJabatan(newVote.jabatan)}`,
+      `${voter?.nama_lengkap || 'Seseorang'} memilih ${candidate?.pengguna?.nama_lengkap || 'seorang kandidat'}`,
       'vote',
-      true,
     )
+
+    // Trigger animation on tab
+    setTimeout(() => {
+      // This will trigger the has-vote-animation class
+    }, 100)
   } catch (error) {
-    console.error('Error processing vote:', error)
+    console.error('Handle new vote error:', error)
   }
-}
-
-const checkForNewWinner = (jabatan) => {
-  const kandidats = candidatesByJabatan.value[jabatan] || []
-  if (kandidats.length === 0) return
-
-  const totalVotes = kandidats.reduce((sum, k) => sum + k.total_suara, 0)
-  if (totalVotes === 0) return
-
-  kandidats.forEach((k) => {
-    const percentage = (k.total_suara / totalVotes) * 100
-    if (percentage > 50) {
-      // Check if this is a new winner
-      const existingWinner = winners.value.find((w) => w.jabatan === jabatan)
-      if (!existingWinner) {
-        addActivity(
-          `🏆 ${k.nama_lengkap} MENANG sebagai ${formatJabatan(jabatan)} dengan ${Math.round(percentage)}% suara!`,
-          'winner',
-          true,
-        )
-      }
-    }
-  })
 }
 
 const handleCandidateUpdate = (updatedCandidate) => {
   const index = candidates.value.findIndex((c) => c.id === updatedCandidate.id)
   if (index !== -1) {
-    const oldVotes = candidates.value[index].total_suara
-    candidates.value[index] = {
-      ...candidates.value[index],
-      ...updatedCandidate,
-      voteChange: updatedCandidate.total_suara - oldVotes,
-    }
+    const oldVotes = candidates.value[index].total_suara || 0
+    const newVotes = updatedCandidate.total_suara || 0
 
-    // Trigger animation
-    recentVotes.value.push(updatedCandidate.id)
-    setTimeout(() => {
-      recentVotes.value = recentVotes.value.filter((id) => id !== updatedCandidate.id)
-    }, 2000)
+    // Calculate vote change
+    const voteChange = newVotes - oldVotes
 
-    addActivity(`📈 ${candidates.value[index].nama_lengkap} mendapatkan vote baru`, 'rank_change')
-  }
-}
-
-const handleSubscriptionStatus = (status) => {
-  console.log('WebSocket Status:', status)
-
-  switch (status) {
-    case 'SUBSCRIBED':
-      isConnected.value = true
-      connectionErrors.value = 0
-      addActivity('✅ Sistem realtime terhubung', 'info')
-      break
-
-    case 'CHANNEL_ERROR':
-      isConnected.value = false
-      connectionErrors.value++
-      addActivity('⚠️ Koneksi terputus', 'info')
-
-      if (connectionErrors.value < 5) {
-        setTimeout(startWebSocketConnection, 2000)
+    if (voteChange > 0) {
+      // Update candidate with vote change
+      candidates.value[index] = {
+        ...candidates.value[index],
+        ...updatedCandidate,
+        voteChange: voteChange,
       }
-      break
 
-    case 'TIMED_OUT':
-      isConnected.value = false
-      addActivity('⏱️ Timeout, menyambung ulang...', 'info')
-      setTimeout(startWebSocketConnection, 1000)
-      break
-  }
-}
-
-const handlePing = (payload) => {
-  latency.value = Date.now() - payload.sent_at
-}
-
-const startConnectionMonitor = () => {
-  setInterval(() => {
-    if (!isConnected.value && connectionErrors.value < 10) {
-      console.log('Mencoba menyambung ulang...')
-      startWebSocketConnection()
+      // Reset voteChange after 3 seconds
+      setTimeout(() => {
+        if (candidates.value[index]) {
+          candidates.value[index].voteChange = 0
+        }
+      }, 3000)
     }
-  }, 5000)
-}
-
-const loadInitialData = async () => {
-  try {
-    // Load active session
-    const { data: sessions } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
-
-    activeSession.value = sessions?.[0]
-
-    if (activeSession.value) {
-      // Load candidates
-      const { data: kandidatData } = await supabase
-        .from('kandidat')
-        .select(
-          `
-          *,
-          pengguna:pengguna_id(nama_lengkap)
-        `,
-        )
-        .eq('sesi_id', activeSession.value.id)
-        .order('total_suara', { ascending: false })
-
-      candidates.value = (kandidatData || []).map((k) => ({
-        ...k,
-        nama_lengkap: k.pengguna?.nama_lengkap || 'Unknown',
-        voteChange: 0,
-      }))
-
-      // Load total voters (guru)
-      const { count: totalGuru } = await supabase
-        .from('pengguna')
-        .select('*', { count: 'exact', head: true })
-        .eq('peran', 'guru')
-        .eq('is_active', true)
-
-      stats.value.totalGuru = totalGuru || 0
-
-      // Load total votes
-      const { count: totalVotes } = await supabase
-        .from('suara')
-        .select('*', { count: 'exact', head: true })
-        .eq('sesi_id', activeSession.value.id)
-        .eq('is_draft', false)
-
-      stats.value.votedCount = totalVotes || 0
-      stats.value.pendingCount = stats.value.totalGuru - stats.value.votedCount
-      stats.value.participationRate = Math.round(
-        (stats.value.votedCount / stats.value.totalGuru) * 100,
-      )
-    }
-
-    addActivity('🚀 Sistem voting multi-putaran dimuat', 'info')
-    addActivity('📊 Memuat data kandidat dan pemilih...', 'info')
-  } catch (error) {
-    console.error('Error loading data:', error)
-    loadMockData()
   }
-}
-
-const loadMockData = () => {
-  // Minimal fallback data
-  candidates.value = []
-  stats.value = {
-    totalGuru: 0,
-    votedCount: 0,
-    pendingCount: 0,
-    participationRate: 0,
-  }
-
-  addActivity('⚠️ Menggunakan data simulasi', 'info')
-  addActivity('🔗 Sambungkan ke database untuk data real', 'info')
-}
-
-// ===== UI CONTROLS =====
-const toggleFullscreen = () => {
-  isFullscreen.value = !isFullscreen.value
-
-  if (isFullscreen.value) {
-    document.documentElement.requestFullscreen?.()
-    addActivity('🖥️ Mode layar penuh diaktifkan', 'info')
-  } else {
-    document.exitFullscreen?.()
-    addActivity('📱 Mode layar penuh dinonaktifkan', 'info')
-  }
-}
-
-const toggleSound = () => {
-  soundEnabled.value = !soundEnabled.value
-  addActivity(
-    soundEnabled.value ? '🔊 Notifikasi suara diaktifkan' : '🔇 Notifikasi suara dinonaktifkan',
-    'info',
-  )
 }
 
 const startNextRound = () => {
   if (votingRound.value === 1 && runoffs.value.length > 0) {
     votingRound.value = 2
-    addActivity(`🔄 PUTARAN 2 DIMULAI! ${runoffs.value.length} posisi run-off`, 'milestone', true)
-    addActivity('🎯 Voting fokus pada posisi yang belum memiliki pemenang', 'info')
+    addActivity(`🔄 PUTARAN 2 DIMULAI! ${runoffs.value.length} posisi run-off`, 'round')
+
+    // Play different sound for round change
+    if (soundEnabled.value) {
+      beepSound.value.src = 'https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3'
+      beepSound.value.play()
+    }
   }
 }
 
-const endVoting = () => {
-  if (winners.value.length === 4) {
-    addActivity('🏁 VOTING SELESAI! Semua posisi telah terisi', 'milestone', true)
-    addActivity('🎉 Selamat kepada semua pemenang!', 'info')
-  }
-}
-
-// ===== LIFECYCLE =====
-onMounted(async () => {
-  await setupRealtimeConnection()
-
-  // Auto fullscreen for smartboard (large screens)
-  if (window.innerWidth > 1920) {
-    isFullscreen.value = true
-    document.documentElement.requestFullscreen?.()
-  }
+// Lifecycle
+onMounted(() => {
+  setupRealtimeConnection()
 })
 
 onUnmounted(() => {
-  if (realtimeSubscription.value) {
-    supabase.removeChannel(realtimeSubscription.value)
-  }
-  if (document.fullscreenElement) {
-    document.exitFullscreen()
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel)
   }
 })
 </script>
 
 <style scoped>
-/* ===== BASE STYLES ===== */
+/* Base */
 .live-results {
   min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   color: #f1f5f9;
-  font-family:
-    'Inter',
-    -apple-system,
-    BlinkMacSystemFont,
-    sans-serif;
-  padding: 1rem;
-  position: relative;
-  overflow-x: hidden;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  padding: 20px;
 }
 
-.results-wrapper {
-  max-width: 1600px;
-  margin: 0 auto;
-  opacity: 0;
-  animation: fadeIn 0.5s ease forwards;
-}
-
-@keyframes fadeIn {
-  to {
-    opacity: 1;
-  }
-}
-
-/* ===== CONNECTION STATUS ===== */
-.connection-status {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(220, 38, 38, 0.1);
+/* Status Bar */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(220, 38, 38, 0.2);
-  padding: 0.5rem 1rem;
-  margin: -1rem -1rem 1rem -1rem;
-  transition: all 0.3s ease;
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.connection-status.connected {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.status-indicator {
+.status-left,
+.status-center,
+.status-right {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  font-size: 0.875rem;
+  gap: 12px;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
+.live-indicator {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  display: inline-block;
-  margin-right: 0.5rem;
-  animation: pulse 2s infinite;
+  background: #ef4444;
+  animation: pulse 1.5s infinite;
 }
 
-.connection-status.connected .status-dot {
+.live-indicator.connected {
   background: #22c55e;
   animation: pulse 1s infinite;
 }
@@ -1211,355 +764,63 @@ onUnmounted(() => {
   0%,
   100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.7;
+    transform: scale(1.1);
   }
 }
 
-.status-details {
-  display: flex;
-  gap: 1rem;
-  color: #94a3b8;
-}
-
-.updates-count {
+.round-badge,
+.vote-count,
+.winners-count {
   background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.time {
+  font-family: 'Courier New', monospace;
   font-weight: 600;
 }
 
-/* ===== ROUND CONTAINER ===== */
-.round-container {
-  background: rgba(15, 23, 42, 0.8);
-  border-radius: 16px;
-  padding: 1rem;
-  border: 2px solid #3b82f6;
-  text-align: center;
-  min-width: 200px;
-  transition: all 0.3s ease;
-}
-
-.round-container.completed {
-  border-color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
-  animation: pulseGlow 2s infinite;
-}
-
-.round-container.runoff {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-  animation: pulseGlow 1.5s infinite;
-}
-
-.round-container.progress {
-  border-color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.1);
-}
-
-.round-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  font-size: 1.5rem;
-  font-weight: 900;
-  margin-bottom: 0.5rem;
-  color: #f1f5f9;
-}
-
-.round-text {
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.round-stats {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
+.participation {
+  color: #22c55e;
   font-weight: 600;
 }
 
-.stat-item.winners {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.stat-item.runoffs {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-}
-
-@keyframes pulseGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 10px currentColor;
-  }
-  50% {
-    box-shadow: 0 0 20px currentColor;
-  }
-}
-
-/* ===== WINNERS BANNER ===== */
-.winners-banner {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(21, 128, 61, 0.1));
-  border: 2px solid rgba(34, 197, 94, 0.3);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin: 1.5rem 0;
-  animation: slideInDown 0.5s ease;
-}
-
-@keyframes slideInDown {
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.banner-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.banner-header h3 {
-  color: #22c55e;
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.banner-icon {
-  font-size: 1.5rem;
-}
-
-.winners-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.winner-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 1rem;
-  text-align: center;
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  transition: all 0.3s ease;
-}
-
-.winner-card:hover {
-  transform: translateY(-2px);
-  border-color: #22c55e;
-  box-shadow: 0 8px 16px rgba(34, 197, 94, 0.2);
-}
-
-.winner-jabatan {
-  font-size: 0.9rem;
-  color: #94a3b8;
-  margin-bottom: 0.25rem;
-}
-
-.winner-name {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin-bottom: 0.5rem;
-  line-height: 1.3;
-}
-
-.winner-votes {
-  font-size: 0.85rem;
-  color: #22c55e;
-  margin-bottom: 0.5rem;
-}
-
-.winner-badge {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  display: inline-block;
-}
-
-/* ===== JABATAN TABS ===== */
-.jabatan-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.tab-button {
-  background: rgba(30, 41, 59, 0.8);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 1rem;
-  text-align: center;
+.sound-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
 }
 
-.tab-button:hover {
-  border-color: rgba(59, 130, 246, 0.5);
-  transform: translateY(-2px);
-}
-
-.tab-button.active {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
-}
-
-.tab-button.winner {
-  border-color: #22c55e;
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.tab-button.runoff {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-  animation: pulse 2s infinite;
-}
-
-.tab-icon {
-  font-size: 1.5rem;
-}
-
-.tab-label {
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: #f1f5f9;
-}
-
-.tab-badge {
-  font-size: 0.75rem;
+.sound-btn:hover {
   background: rgba(255, 255, 255, 0.1);
-  padding: 0.125rem 0.5rem;
-  border-radius: 10px;
-  color: #94a3b8;
 }
 
-/* ===== POSITION LEADERBOARD ===== */
-.position-leaderboard-card {
-  background: rgba(30, 41, 59, 0.8);
+/* Live Alert */
+.live-alert {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: rgba(59, 130, 246, 0.9);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.card-header h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin: 0;
-}
-
-.card-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-action {
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  color: #f1f5f9;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.btn-action:hover {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: #3b82f6;
-  transform: scale(1.1);
-}
-
-.position-stats-summary {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.position-stat {
-  background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
-  padding: 1rem;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.position-stat .stat-value {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #3b82f6;
-  margin-bottom: 0.25rem;
-}
-
-.position-stat .stat-label {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* ===== LIVE VOTE COUNTER ===== */
-.live-vote-counter {
-  margin-bottom: 1.5rem;
-}
-
-.vote-alert {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  border-radius: 12px;
-  padding: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  animation: slideInRight 0.5s ease;
+  padding: 16px;
+  min-width: 300px;
+  z-index: 1000;
+  animation:
+    slideInRight 0.3s,
+    fadeOut 0.3s 2.7s forwards;
+  border-left: 4px solid #3b82f6;
 }
 
 @keyframes slideInRight {
@@ -1573,8 +834,31 @@ onUnmounted(() => {
   }
 }
 
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.live-alert.vote {
+  background: rgba(59, 130, 246, 0.9);
+  border-left-color: #3b82f6;
+}
+
+.live-alert.winner {
+  background: rgba(34, 197, 94, 0.9);
+  border-left-color: #22c55e;
+}
+
+.alert-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .alert-icon {
-  font-size: 2rem;
+  font-size: 28px;
   animation: bounce 2s infinite;
 }
 
@@ -1585,713 +869,601 @@ onUnmounted(() => {
     transform: translateY(0);
   }
   30% {
-    transform: translateY(-10px);
+    transform: translateY(-5px);
+  }
+}
+
+.alert-text strong {
+  color: white;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.alert-text p {
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+  font-size: 14px;
+}
+
+.alert-text small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.alert-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'Courier New', monospace;
+  margin-left: auto;
+}
+
+/* Dashboard */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Winners Section */
+.winners-section {
+  background: rgba(34, 197, 94, 0.1);
+  border: 2px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: #22c55e;
+}
+
+.winners-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.winner-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.winner-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.winner-position {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.winner-name {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: white;
+}
+
+.winner-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.votes {
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.percentage {
+  font-weight: bold;
+  font-size: 16px;
+  color: #22c55e;
+}
+
+.percentage.supermajority {
+  color: #fbbf24;
+  animation: glow 2s infinite;
+}
+
+@keyframes glow {
+  0%,
+  100% {
+    text-shadow: 0 0 5px currentColor;
+  }
+  50% {
+    text-shadow: 0 0 15px currentColor;
+  }
+}
+
+.winner-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Run-off Alert */
+.runoff-alert {
+  background: rgba(245, 158, 11, 0.1);
+  border: 2px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  animation: pulseBorder 2s infinite;
+}
+
+@keyframes pulseBorder {
+  0%,
+  100% {
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.6);
   }
 }
 
 .alert-content {
-  flex: 1;
-}
-
-.alert-content strong {
-  color: #60a5fa;
-  font-size: 0.9rem;
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.alert-content p {
-  color: #cbd5e1;
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.alert-time {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-family: 'Courier New', monospace;
-}
-
-/* ===== POSITION CANDIDATES ===== */
-.position-candidates {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.position-candidate-row {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto auto auto;
+  display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
+  gap: 12px;
+}
+
+.runoff-btn {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.runoff-btn:hover {
+  transform: translateY(-2px);
+}
+
+/* Position Tabs */
+.position-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
   position: relative;
 }
 
-.position-candidate-row:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.position-candidate-row.vote-animation {
+.tab:hover {
+  border-color: rgba(59, 130, 246, 0.5);
   background: rgba(59, 130, 246, 0.1);
-  animation: votePulse 2s ease;
 }
 
-@keyframes votePulse {
+.tab.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.tab.winner {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.tab.has-vote-animation {
+  animation: tabPulse 1s;
+}
+
+@keyframes tabPulse {
   0% {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.02);
+    transform: scale(1.05);
   }
   100% {
     transform: scale(1);
   }
 }
 
-.position-candidate-row.first-place {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), transparent);
-  border-left: 4px solid #fbbf24;
+.pulse-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  background: #3b82f6;
+  border-radius: 50%;
+  animation: dotPulse 1s infinite;
 }
 
-.position-candidate-row.second-place {
-  background: linear-gradient(135deg, rgba(209, 213, 219, 0.1), transparent);
-  border-left: 4px solid #d1d5db;
+@keyframes dotPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.7;
+  }
 }
 
-.position-candidate-row.winner {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), transparent);
+.tab-count {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+/* Charts Section */
+.charts-section {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  min-height: 500px;
+}
+
+/* Rankings */
+.rankings {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.rankings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chart-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 18px;
+  color: white;
+}
+
+.position-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.stat {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.candidates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.candidate-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.candidate-row.vote-animation {
+  animation: highlightVote 1s;
+  border-left: 4px solid #3b82f6;
+}
+
+@keyframes highlightVote {
+  0% {
+    background: rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.candidate-row.winner {
   border-left: 4px solid #22c55e;
+  background: rgba(34, 197, 94, 0.05);
 }
 
-.row-rank {
-  font-weight: 800;
-  font-size: 1.1rem;
+.candidate-row.runoff {
+  border-left: 4px solid #f59e0b;
+}
+
+.candidate-row.eliminated {
+  opacity: 0.5;
+  border-left: 4px solid #ef4444;
+}
+
+.rank {
+  font-weight: bold;
   color: #94a3b8;
   min-width: 40px;
+  text-align: center;
 }
 
-.row-avatar {
-  width: 40px;
-  height: 40px;
+.avatar {
+  width: 36px;
+  height: 36px;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: bold;
+  color: white;
 }
 
-.row-info {
-  overflow: hidden;
-}
-
-.row-name {
+.name {
   font-weight: 600;
-  color: #f1f5f9;
-  font-size: 0.9rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 0.25rem;
+  margin-bottom: 2px;
 }
 
-.row-meta {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.75rem;
+.votes {
+  font-size: 12px;
   color: #94a3b8;
 }
 
-.row-status {
-  font-size: 1.25rem;
-  min-width: 40px;
-  text-align: center;
-}
-
-.status-winner {
+.vote-change {
   color: #22c55e;
+  font-weight: bold;
+  animation: fadeInUp 0.5s;
+  margin-left: 4px;
 }
 
-.status-runoff {
-  color: #f59e0b;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.status-active {
-  color: #3b82f6;
-}
-
-.row-progress {
-  width: 100px;
+.progress-container {
+  width: 150px;
 }
 
 .progress-bar {
   height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-bar.small {
-  height: 4px;
-}
-
-.progress-fill {
-  height: 100%;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
   border-radius: 4px;
+  margin-bottom: 4px;
   transition: width 0.5s ease;
 }
 
-.row-change {
-  background: #22c55e;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
-  border-radius: 10px;
-  min-width: 40px;
+.progress-bar.supermajority {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.percentage {
   text-align: center;
-  animation: popIn 0.5s ease;
+  font-size: 12px;
+  color: #94a3b8;
 }
 
-@keyframes popIn {
-  0% {
-    transform: scale(0);
-  }
-  50% {
-    transform: scale(1.2);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* ===== ROUND PROGRESS CARD ===== */
-.round-progress-card {
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.progress-badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-}
-
-.progress-badge.completed {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.4);
-}
-
-.progress-badge.good {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.4);
-}
-
-.progress-badge.average {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-}
-
-.progress-badge.low {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.4);
-}
-
-.position-progress-item {
+/* Stats Sidebar */
+.stats-sidebar {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-card,
+.activity-card,
+.round-card {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 12px;
-  margin-bottom: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
+  padding: 16px;
 }
 
-.position-progress-item:hover {
-  border-color: rgba(59, 130, 246, 0.3);
-  background: rgba(59, 130, 246, 0.1);
-  transform: translateX(2px);
-}
-
-.position-header {
+.card-title {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: white;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 120px;
+  gap: 8px;
 }
 
-.position-icon {
-  font-size: 1.1rem;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
-.position-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #f1f5f9;
-}
-
-.position-progress {
-  flex: 1;
-}
-
-.progress-text {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-top: 0.25rem;
-}
-
-.position-result {
-  min-width: 70px;
-  text-align: right;
-}
-
-.result-winner {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
-  border-radius: 10px;
-}
-
-.result-runoff {
-  background: rgba(245, 158, 11, 0.2);
-  color: #f59e0b;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
-  border-radius: 10px;
-}
-
-.result-active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.5rem;
-  border-radius: 10px;
-}
-
-/* ===== ACTIVITY FEED ===== */
-.activity-card {
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.activity-badge {
-  background: #3b82f6;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.125rem 0.5rem;
-  border-radius: 10px;
-}
-
-.activity-feed {
-  height: 300px;
-  overflow-y: auto;
-}
-
-.empty-activity {
+.stat {
   text-align: center;
-  padding: 3rem 1rem;
-  color: #64748b;
-  font-style: italic;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
 }
 
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #3b82f6;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Activity */
 .activity-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
 .activity-item {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  border-left: 3px solid transparent;
-  transition: all 0.2s;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  animation: slideInLeft 0.3s;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .activity-item.vote {
-  border-left-color: #3b82f6;
-}
-
-.activity-item.rank_change {
-  border-left-color: #8b5cf6;
-}
-
-.activity-item.milestone {
-  border-left-color: #f59e0b;
+  border-left: 3px solid #3b82f6;
 }
 
 .activity-item.winner {
-  border-left-color: #22c55e;
+  border-left: 3px solid #22c55e;
 }
 
-.activity-item.info {
-  border-left-color: #94a3b8;
-}
-
-.activity-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateX(2px);
+.activity-item.round {
+  border-left: 3px solid #f59e0b;
 }
 
 .activity-icon {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  margin-top: 0.125rem;
+  font-size: 16px;
 }
 
-.activity-content {
+.activity-text {
   flex: 1;
-}
-
-.activity-message {
-  font-size: 0.85rem;
+  font-size: 13px;
   color: #e2e8f0;
-  margin-bottom: 0.25rem;
-  line-height: 1.4;
-}
-
-.activity-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .activity-time {
+  font-size: 11px;
   color: #94a3b8;
   font-family: 'Courier New', monospace;
 }
 
-.activity-live {
-  background: #ef4444;
-  color: white;
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.125rem 0.375rem;
-  border-radius: 4px;
-  animation: pulse 2s infinite;
-}
-
-/* ===== ROUND SUMMARY ===== */
-.round-summary-card {
-  background: rgba(30, 41, 59, 0.8);
-  border-radius: 16px;
-  padding: 1.5rem;
-}
-
-.round-summary {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.summary-item {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 1rem;
-  text-align: center;
-}
-
-.summary-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-bottom: 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.summary-value {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #f1f5f9;
-}
-
-.round-actions {
+/* Round Status */
+.round-status {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.btn-round-action {
-  flex: 1;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: white;
-  border: none;
-  padding: 0.75rem;
-  border-radius: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.btn-round-action:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
-}
-
-.btn-round-action:active {
-  transform: translateY(0);
-}
-
-/* ===== FOOTER ===== */
-.footer-section {
+.status-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  margin-top: 2rem;
-  flex-wrap: wrap;
-  gap: 1.5rem;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
 }
 
-.voting-status {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 1rem;
-  border-radius: 12px;
-  min-width: 300px;
-}
-
-.status-icon {
-  font-size: 2rem;
-  opacity: 0.8;
-}
-
-.status-info {
-  flex: 1;
-}
-
-.status-title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin-bottom: 0.5rem;
-}
-
-.status-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.detail-item {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.detail-label {
-  color: #94a3b8;
-  min-width: 80px;
-}
-
-.detail-value {
+.position-name {
   font-weight: 600;
-  font-family: 'Courier New', monospace;
-  color: #f1f5f9;
+  font-size: 14px;
 }
 
-.system-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.85rem;
-  color: #94a3b8;
-  flex-wrap: wrap;
+.status-indicator.winner {
+  color: #22c55e;
+  animation: spin 2s infinite;
 }
 
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.info-separator {
-  color: #475569;
-  opacity: 0.5;
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
-  .jabatan-tabs {
-    grid-template-columns: repeat(2, 1fr);
+@keyframes spin {
+  0% {
+    transform: rotate(0);
   }
-
-  .header-main {
-    flex-direction: column;
+  100% {
+    transform: rotate(360deg);
   }
+}
 
-  .header-right {
-    width: 100%;
-    flex-direction: column;
-    gap: 1rem;
-  }
+.status-indicator.runoff {
+  color: #f59e0b;
+  animation: pulse 1s infinite;
+}
 
-  .round-container {
-    width: 100%;
+/* Responsive */
+@media (max-width: 1200px) {
+  .charts-section {
+    grid-template-columns: 1fr;
   }
 
   .winners-grid {
     grid-template-columns: 1fr;
   }
+}
 
-  .position-stats-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .position-candidate-row {
-    grid-template-columns: auto auto 1fr auto;
-  }
-
-  .row-progress,
-  .row-change {
-    display: none;
-  }
-
-  .footer-section {
+@media (max-width: 768px) {
+  .status-bar {
     flex-direction: column;
+    gap: 8px;
     text-align: center;
   }
 
-  .voting-status {
-    min-width: 100%;
+  .position-tabs {
+    grid-template-columns: 1fr;
   }
-}
 
-@media (min-width: 1200px) {
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 2rem;
+  .live-alert {
+    left: 20px;
+    right: 20px;
+    min-width: auto;
   }
-}
-
-/* ===== LOADER ===== */
-.loader-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.loader-container {
-  text-align: center;
-  animation: slideUp 0.5s ease;
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.loader-spinner {
-  width: 80px;
-  height: 80px;
-  border: 4px solid rgba(59, 130, 246, 0.3);
-  border-top: 4px solid #3b82f6;
-  border-radius: 50%;
-  margin: 0 auto 2rem;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.loader-text {
-  font-size: 1.25rem;
-  color: #cbd5e1;
-  margin-bottom: 1.5rem;
-  font-weight: 500;
-}
-
-.loader-dots {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-}
-
-.loader-dots .dot {
-  width: 12px;
-  height: 12px;
-  background: #3b82f6;
-  border-radius: 50%;
-  animation: bounce 1.4s infinite;
-}
-
-.loader-dots .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.loader-dots .dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-/* ===== FULLSCREEN MODE ===== */
-.fullscreen-mode {
-  padding: 2rem;
-}
-
-.fullscreen-mode .title-main {
-  font-size: 3rem;
-}
-
-.fullscreen-mode .title-sub {
-  font-size: 1.5rem;
-}
-
-.fullscreen-mode .winner-name {
-  font-size: 1.5rem;
-}
-
-.fullscreen-mode .tab-label {
-  font-size: 1.1rem;
-}
-
-.fullscreen-mode .position-stat .stat-value {
-  font-size: 2rem;
 }
 </style>

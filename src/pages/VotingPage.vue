@@ -21,72 +21,22 @@
       </div>
     </div>
 
-    <!-- Voting Steps -->
+    <!-- Voting Steps - DIUBAH: 2 step saja -->
     <div class="voting-steps">
       <div class="step" :class="{ active: currentStep === 1 }">
         <div class="step-number">1</div>
-        <div class="step-label">Waka Kurikulum</div>
+        <div class="step-label">Waka Kesiswaan</div>
       </div>
       <div class="step" :class="{ active: currentStep === 2 }">
         <div class="step-number">2</div>
-        <div class="step-label">Waka Kesiswaan</div>
-      </div>
-      <div class="step" :class="{ active: currentStep === 3 }">
-        <div class="step-number">3</div>
         <div class="step-label">Waka Sarpras</div>
-      </div>
-      <div class="step" :class="{ active: currentStep === 4 }">
-        <div class="step-number">4</div>
-        <div class="step-label">Waka Humas</div>
       </div>
     </div>
 
-    <!-- Main Content -->
+    <!-- Main Content - DIUBAH: 2 step saja -->
     <div class="voting-content">
-      <!-- Step 1: Waka Kurikulum -->
+      <!-- Step 1: Waka Kesiswaan -->
       <div v-if="currentStep === 1" class="step-content">
-        <h2 class="step-title">Pilih Waka Kurikulum</h2>
-        <p class="step-description">
-          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Kurikulum
-        </p>
-
-        <div class="candidates-grid">
-          <div
-            v-for="candidate in kurikulumCandidates"
-            :key="candidate.id"
-            class="candidate-card"
-            :class="{ selected: selectedKurikulum?.id === candidate.id }"
-            @click="selectKurikulum(candidate)"
-          >
-            <div class="candidate-photo">
-              <img
-                v-if="candidate.foto_kampanye"
-                :src="candidate.foto_kampanye"
-                :alt="candidate.pengguna.nama_lengkap"
-              />
-              <div v-else class="photo-placeholder">
-                {{ getInitials(candidate.pengguna.nama_lengkap) }}
-              </div>
-            </div>
-            <div class="candidate-info">
-              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
-              <div class="candidate-number">
-                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
-              </div>
-              <div class="candidate-visi">
-                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="kurikulumCandidates.length === 0" class="empty-candidates">
-          <p>Belum ada calon untuk jabatan ini</p>
-        </div>
-      </div>
-
-      <!-- Step 2: Waka Kesiswaan -->
-      <div v-if="currentStep === 2" class="step-content">
         <h2 class="step-title">Pilih Waka Kesiswaan</h2>
         <p class="step-description">
           Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Kesiswaan
@@ -127,8 +77,8 @@
         </div>
       </div>
 
-      <!-- Step 3: Waka Sarpras -->
-      <div v-if="currentStep === 3" class="step-content">
+      <!-- Step 2: Waka Sarpras -->
+      <div v-if="currentStep === 2" class="step-content">
         <h2 class="step-title">Pilih Waka Sarpras</h2>
         <p class="step-description">
           Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Sarana Prasarana
@@ -168,51 +118,9 @@
           <p>Belum ada calon untuk jabatan ini</p>
         </div>
       </div>
-
-      <!-- Step 4: Waka Humas -->
-      <div v-if="currentStep === 4" class="step-content">
-        <h2 class="step-title">Pilih Waka Humas</h2>
-        <p class="step-description">
-          Pilih satu calon untuk jabatan Wakil Kepala Sekolah Bidang Hubungan Masyarakat
-        </p>
-
-        <div class="candidates-grid">
-          <div
-            v-for="candidate in humasCandidates"
-            :key="candidate.id"
-            class="candidate-card"
-            :class="{ selected: selectedHumas?.id === candidate.id }"
-            @click="selectHumas(candidate)"
-          >
-            <div class="candidate-photo">
-              <img
-                v-if="candidate.foto_kampanye"
-                :src="candidate.foto_kampanye"
-                :alt="candidate.pengguna.nama_lengkap"
-              />
-              <div v-else class="photo-placeholder">
-                {{ getInitials(candidate.pengguna.nama_lengkap) }}
-              </div>
-            </div>
-            <div class="candidate-info">
-              <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
-              <div class="candidate-number">
-                <span class="number-badge">#{{ candidate.nomor_urut }}</span>
-              </div>
-              <div class="candidate-visi">
-                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="humasCandidates.length === 0" class="empty-candidates">
-          <p>Belum ada calon untuk jabatan ini</p>
-        </div>
-      </div>
     </div>
 
-    <!-- Navigation Buttons -->
+    <!-- Navigation Buttons - DIUBAH: max step = 2 -->
     <div class="navigation-buttons">
       <button
         v-if="currentStep > 1"
@@ -224,7 +132,7 @@
       </button>
 
       <button
-        v-if="currentStep < 4"
+        v-if="currentStep < 2"
         @click="nextStep"
         class="nav-btn next-btn"
         :disabled="!isCurrentStepValid || submitting"
@@ -233,7 +141,7 @@
       </button>
 
       <button
-        v-if="currentStep === 4"
+        v-if="currentStep === 2"
         @click="submitVote"
         class="nav-btn submit-btn"
         :disabled="!isAllStepsValid || submitting"
@@ -242,16 +150,10 @@
       </button>
     </div>
 
-    <!-- Selection Summary -->
+    <!-- Selection Summary - DIUBAH: 2 item saja -->
     <div class="selection-summary">
       <h3>Ringkasan Pilihan Anda:</h3>
       <div class="summary-grid">
-        <div class="summary-item" :class="{ filled: selectedKurikulum }">
-          <span class="summary-label">Waka Kurikulum</span>
-          <span class="summary-value">
-            {{ selectedKurikulum ? selectedKurikulum.pengguna.nama_lengkap : 'Belum dipilih' }}
-          </span>
-        </div>
         <div class="summary-item" :class="{ filled: selectedKesiswaan }">
           <span class="summary-label">Waka Kesiswaan</span>
           <span class="summary-value">
@@ -262,12 +164,6 @@
           <span class="summary-label">Waka Sarpras</span>
           <span class="summary-value">
             {{ selectedSarpras ? selectedSarpras.pengguna.nama_lengkap : 'Belum dipilih' }}
-          </span>
-        </div>
-        <div class="summary-item" :class="{ filled: selectedHumas }">
-          <span class="summary-label">Waka Humas</span>
-          <span class="summary-value">
-            {{ selectedHumas ? selectedHumas.pengguna.nama_lengkap : 'Belum dipilih' }}
           </span>
         </div>
       </div>
@@ -284,7 +180,7 @@
       </div>
     </div>
 
-    <!-- Confirmation Modal -->
+    <!-- Confirmation Modal - DIUBAH: Hanya 2 item -->
     <div v-if="showConfirmModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
@@ -294,17 +190,11 @@
         <div class="modal-body">
           <p>Anda akan mengirim pilihan Anda:</p>
           <ul class="modal-selections">
-            <li v-if="selectedKurikulum">
-              <strong>Waka Kurikulum:</strong> {{ selectedKurikulum.pengguna.nama_lengkap }}
-            </li>
             <li v-if="selectedKesiswaan">
               <strong>Waka Kesiswaan:</strong> {{ selectedKesiswaan.pengguna.nama_lengkap }}
             </li>
             <li v-if="selectedSarpras">
               <strong>Waka Sarpras:</strong> {{ selectedSarpras.pengguna.nama_lengkap }}
-            </li>
-            <li v-if="selectedHumas">
-              <strong>Waka Humas:</strong> {{ selectedHumas.pengguna.nama_lengkap }}
             </li>
           </ul>
           <p class="modal-warning">
@@ -328,7 +218,7 @@ import { supabase } from '@/utils/supabase'
 const router = useRouter()
 
 // State
-const currentStep = ref(1)
+const currentStep = ref(1) // DIUBAH: Max 2 step
 const voterData = ref(null)
 const activeSession = ref(null)
 const submitting = ref(false)
@@ -336,41 +226,28 @@ const error = ref('')
 const success = ref(false)
 const showConfirmModal = ref(false)
 
-// Candidates data
-const kurikulumCandidates = ref([])
+// Candidates data - DIUBAH: Hanya 2 array
 const kesiswaanCandidates = ref([])
 const sarprasCandidates = ref([])
-const humasCandidates = ref([])
 
-// Selections
-const selectedKurikulum = ref(null)
+// Selections - DIUBAH: Hanya 2 selection
 const selectedKesiswaan = ref(null)
 const selectedSarpras = ref(null)
-const selectedHumas = ref(null)
 
-// Computed
+// Computed - DIUBAH: Hanya 2 step validasi
 const isCurrentStepValid = computed(() => {
   switch (currentStep.value) {
     case 1:
-      return selectedKurikulum.value !== null
-    case 2:
       return selectedKesiswaan.value !== null
-    case 3:
+    case 2:
       return selectedSarpras.value !== null
-    case 4:
-      return selectedHumas.value !== null
     default:
       return false
   }
 })
 
 const isAllStepsValid = computed(() => {
-  return (
-    selectedKurikulum.value !== null &&
-    selectedKesiswaan.value !== null &&
-    selectedSarpras.value !== null &&
-    selectedHumas.value !== null
-  )
+  return selectedKesiswaan.value !== null && selectedSarpras.value !== null
 })
 
 // Methods
@@ -390,11 +267,7 @@ const truncateText = (text, maxLength) => {
   return text.substring(0, maxLength) + '...'
 }
 
-// Selection handlers
-const selectKurikulum = (candidate) => {
-  selectedKurikulum.value = candidate
-}
-
+// Selection handlers - DIUBAH: Hanya 2 fungsi
 const selectKesiswaan = (candidate) => {
   selectedKesiswaan.value = candidate
 }
@@ -403,13 +276,9 @@ const selectSarpras = (candidate) => {
   selectedSarpras.value = candidate
 }
 
-const selectHumas = (candidate) => {
-  selectedHumas.value = candidate
-}
-
-// Navigation
+// Navigation - DIUBAH: Max step = 2
 const nextStep = () => {
-  if (currentStep.value < 4 && isCurrentStepValid.value) {
+  if (currentStep.value < 2 && isCurrentStepValid.value) {
     currentStep.value++
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -463,7 +332,7 @@ const loadCandidates = async () => {
   try {
     if (!activeSession.value?.id) return
 
-    // Load all candidates for current session
+    // Load all candidates for current session - DIUBAH: Filter hanya 2 jabatan
     const { data: candidates, error: candidatesError } = await supabase
       .from('kandidat')
       .select(
@@ -476,16 +345,15 @@ const loadCandidates = async () => {
       `,
       )
       .eq('sesi_id', activeSession.value.id)
+      .in('jabatan', ['kesiswaan', 'sarpras']) // DIUBAH: Hanya ambil 2 jabatan
       .order('jabatan', { ascending: true })
       .order('nomor_urut', { ascending: true })
 
     if (candidatesError) throw candidatesError
 
-    // Filter by position
-    kurikulumCandidates.value = candidates?.filter((c) => c.jabatan === 'kurikulum') || []
+    // Filter by position - DIUBAH: Hanya 2 filter
     kesiswaanCandidates.value = candidates?.filter((c) => c.jabatan === 'kesiswaan') || []
     sarprasCandidates.value = candidates?.filter((c) => c.jabatan === 'sarpras') || []
-    humasCandidates.value = candidates?.filter((c) => c.jabatan === 'humas') || []
   } catch (err) {
     console.error('Error loading candidates:', err)
     error.value = 'Gagal memuat data calon'
@@ -513,21 +381,8 @@ const confirmSubmit = async () => {
       throw new Error('Data sesi atau pemilih tidak valid')
     }
 
-    // Prepare votes data
+    // Prepare votes data - DIUBAH: Hanya 2 vote
     const votes = []
-
-    if (selectedKurikulum.value) {
-      votes.push({
-        sesi_id: activeSession.value.id,
-        pemilih_id: voterData.value.pengguna.id,
-        kandidat_id: selectedKurikulum.value.id,
-        jabatan: 'kurikulum',
-        is_draft: false,
-        is_valid: true,
-        disubmit_pada: new Date().toISOString(),
-        info_perangkat: navigator.userAgent,
-      })
-    }
 
     if (selectedKesiswaan.value) {
       votes.push({
@@ -548,19 +403,6 @@ const confirmSubmit = async () => {
         pemilih_id: voterData.value.pengguna.id,
         kandidat_id: selectedSarpras.value.id,
         jabatan: 'sarpras',
-        is_draft: false,
-        is_valid: true,
-        disubmit_pada: new Date().toISOString(),
-        info_perangkat: navigator.userAgent,
-      })
-    }
-
-    if (selectedHumas.value) {
-      votes.push({
-        sesi_id: activeSession.value.id,
-        pemilih_id: voterData.value.pengguna.id,
-        kandidat_id: selectedHumas.value.id,
-        jabatan: 'humas',
         is_draft: false,
         is_valid: true,
         disubmit_pada: new Date().toISOString(),
@@ -590,11 +432,6 @@ const confirmSubmit = async () => {
     submitting.value = false
   }
 }
-
-// Remove unused saveDraft function
-// const saveDraft = async () => {
-//   // Optional: implement draft saving if needed
-// }
 
 // Prevent accidental page leave
 const beforeUnloadHandler = (event) => {
@@ -712,17 +549,17 @@ onUnmounted(() => {
   margin-top: 0.25rem;
 }
 
-/* Voting Steps */
+/* Voting Steps - DIUBAH: Grid 2 kolom */
 .voting-steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
 .step {
   text-align: center;
-  padding: 1rem;
+  padding: 1.5rem;
   background: white;
   border-radius: 12px;
   border: 2px solid #e5e7eb;
@@ -737,8 +574,8 @@ onUnmounted(() => {
 }
 
 .step-number {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   background: #e5e7eb;
   color: #6b7280;
   border-radius: 50%;
@@ -746,7 +583,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  margin: 0 auto 0.5rem;
+  margin: 0 auto 0.75rem;
+  font-size: 1.1rem;
 }
 
 .step.active .step-number {
@@ -757,7 +595,7 @@ onUnmounted(() => {
 .step-label {
   font-weight: 600;
   color: #4b5563;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .step.active .step-label {
@@ -777,12 +615,14 @@ onUnmounted(() => {
   color: #1e3a8a;
   margin-bottom: 0.5rem;
   text-align: center;
+  font-size: 1.5rem;
 }
 
 .step-description {
   color: #6b7280;
   text-align: center;
   margin-bottom: 2rem;
+  font-size: 1rem;
 }
 
 /* Candidates Grid */
@@ -815,12 +655,12 @@ onUnmounted(() => {
 }
 
 .candidate-photo {
-  width: 100px;
-  height: 100px;
-  margin: 0 auto 1rem;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 1.5rem;
   border-radius: 50%;
   overflow: hidden;
-  border: 3px solid #e5e7eb;
+  border: 4px solid #e5e7eb;
 }
 
 .candidate-photo img {
@@ -837,7 +677,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
+  font-size: 2.5rem;
   font-weight: bold;
 }
 
@@ -848,7 +688,7 @@ onUnmounted(() => {
 .candidate-name {
   color: #1e293b;
   margin-bottom: 0.5rem;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .candidate-number {
@@ -857,18 +697,19 @@ onUnmounted(() => {
 
 .number-badge {
   display: inline-block;
-  padding: 0.25rem 0.75rem;
+  padding: 0.4rem 1rem;
   background: #1e3a8a;
   color: white;
   border-radius: 20px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .candidate-visi {
   color: #4b5563;
-  font-size: 0.9rem;
-  line-height: 1.4;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  min-height: 60px;
 }
 
 .empty-candidates {
@@ -937,7 +778,7 @@ onUnmounted(() => {
   box-shadow: none;
 }
 
-/* Selection Summary */
+/* Selection Summary - DIUBAH: Grid 2 kolom */
 .selection-summary {
   background: white;
   border-radius: 16px;
@@ -948,19 +789,20 @@ onUnmounted(() => {
 
 .selection-summary h3 {
   color: #1e3a8a;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   text-align: center;
+  font-size: 1.3rem;
 }
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
 }
 
 .summary-item {
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 1.25rem;
+  border-radius: 10px;
   border: 2px solid #e5e7eb;
   transition: all 0.3s;
 }
@@ -974,8 +816,8 @@ onUnmounted(() => {
   display: block;
   font-weight: 600;
   color: #4b5563;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
 }
 
 .summary-item.filled .summary-label {
@@ -984,7 +826,8 @@ onUnmounted(() => {
 
 .summary-value {
   color: #9ca3af;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  min-height: 24px;
 }
 
 .summary-item.filled .summary-value {
@@ -1028,6 +871,7 @@ onUnmounted(() => {
 
 .success-content h3 {
   margin-bottom: 0.5rem;
+  font-size: 1.3rem;
 }
 
 /* Modal */
@@ -1078,6 +922,7 @@ onUnmounted(() => {
 .modal-header h3 {
   margin: 0;
   color: #1e3a8a;
+  font-size: 1.3rem;
 }
 
 .modal-close {
@@ -1107,7 +952,8 @@ onUnmounted(() => {
 }
 
 .modal-selections li {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
 }
 
 .modal-warning {
@@ -1117,6 +963,7 @@ onUnmounted(() => {
   padding: 1rem;
   margin-top: 1rem;
   color: #856404;
+  font-size: 0.95rem;
 }
 
 .modal-footer {
@@ -1134,6 +981,7 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
+  font-size: 0.95rem;
 }
 
 .cancel-btn {
@@ -1157,7 +1005,8 @@ onUnmounted(() => {
 /* Responsive */
 @media (max-width: 768px) {
   .voting-steps {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 
   .candidates-grid {
@@ -1166,6 +1015,7 @@ onUnmounted(() => {
 
   .summary-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
   .navigation-buttons {
@@ -1176,23 +1026,39 @@ onUnmounted(() => {
     width: 100%;
   }
 
-  .session-info {
-    flex-direction: column;
-    gap: 0.5rem;
+  .step {
+    padding: 1.25rem;
   }
 }
 
 @media (max-width: 480px) {
   .voting-container {
-    padding: 0.5rem;
+    padding: 0.75rem;
   }
 
   .step-content {
-    padding: 1rem;
+    padding: 1.25rem;
   }
 
   .candidate-card {
-    padding: 1rem;
+    padding: 1.25rem;
+  }
+
+  .candidate-photo {
+    width: 100px;
+    height: 100px;
+  }
+
+  .modal-body {
+    padding: 1.25rem;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-btn {
+    width: 100%;
   }
 }
 </style>
