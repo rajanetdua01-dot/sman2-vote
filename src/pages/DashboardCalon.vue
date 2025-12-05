@@ -1,22 +1,25 @@
 <template>
   <div class="dashboard-calon">
+    <!-- HEADER -->
     <div class="header">
-      <h1>Dashboard Calon Kandidat</h1>
-      <div class="user-info">
-        <p v-if="user">
+      <h1>Pendaftaran Calon Kandidat</h1>
+      <div class="user-info" v-if="user">
+        <p>
           Selamat datang, <strong>{{ user.nama_lengkap }}</strong>
         </p>
-        <p v-if="user">NIP: {{ user.nip }}</p>
-        <p v-if="user">Masa Kerja: {{ masaKerjaTahun }} tahun</p>
+        <p>NIP: {{ user.nip }}</p>
+        <p>Masa Kerja: {{ masaKerjaTahun }} tahun</p>
       </div>
     </div>
 
+    <!-- LOADING STATE -->
     <div v-if="loading" class="loading">Memuat data...</div>
 
+    <!-- MAIN CONTENT -->
     <div v-else class="content">
-      <!-- STATUS SESSION -->
+      <!-- SESSION INFO -->
       <div class="session-info card">
-        <h3>Informasi Sesi Pemilihan</h3>
+        <h3>Sesi Pemilihan Saat Ini</h3>
         <div v-if="activeSession">
           <p>
             <strong>{{ activeSession.nama_sesi }}</strong>
@@ -25,150 +28,178 @@
           <p>
             Status:
             <span :class="'status-' + activeSession.status">
-              {{ activeSession.status.toUpperCase() }}
+              {{ formatStatus(activeSession.status) }}
             </span>
           </p>
-          <p v-if="activeSession.status === 'pendaftaran'">
-            ⏰ Pendaftaran dibuka sampai:
-            {{ formatDate(activeSession.waktu_selesai_pendaftaran) }}
-          </p>
+          <!-- INFO BATASAN -->
+          <div class="limit-info" v-if="activeSession.status === 'pendaftaran'">
+            <p><strong>📋 Ketentuan:</strong></p>
+            <p>• Setiap guru boleh mendaftarkan <strong>1 calon per jabatan</strong></p>
+            <p>• Calon harus memiliki masa kerja <strong>minimal 3 tahun</strong></p>
+            <p>• Anda sudah mendaftarkan:</p>
+            <ul>
+              <li v-if="myRegistrations.sarpras">
+                ✅ Waka Sarpras: {{ myRegistrations.sarpras.nama_lengkap }}
+              </li>
+              <li v-else>❌ Waka Sarpras: Belum ada</li>
+              <li v-if="myRegistrations.kesiswaan">
+                ✅ Waka Kesiswaan: {{ myRegistrations.kesiswaan.nama_lengkap }}
+              </li>
+              <li v-else>❌ Waka Kesiswaan: Belum ada</li>
+            </ul>
+          </div>
         </div>
         <div v-else>
           <p>Tidak ada sesi pemilihan aktif</p>
         </div>
       </div>
 
-      <!-- STATUS PENDAFTARAN -->
-      <div class="registration-status card">
-        <h3>Status Pendaftaran Anda</h3>
-
-        <div v-if="!activeSession || activeSession.status !== 'pendaftaran'" class="not-open">
-          <p>⚠️ Pendaftaran calon belum dibuka atau sudah ditutup</p>
-        </div>
-
-        <div v-else-if="userRegistration">
-          <!-- SUDAH DAFTAR -->
-          <div class="already-registered">
-            <div class="status-badge" :class="userRegistration.status">
-              {{ userRegistration.status.toUpperCase() }}
-            </div>
-
-            <div class="registration-details">
-              <h4>Data Pendaftaran Anda:</h4>
-              <p>
-                <strong>Jabatan:</strong> {{ formatJabatan(userRegistration.jabatan_diajukan) }}
+      <!-- CURRENT CANDIDATES -->
+      <div
+        class="current-candidates card"
+        v-if="
+          activeSession &&
+          (activeSession.status === 'pendaftaran' || activeSession.status === 'voting')
+        "
+      >
+        <h3>Kandidat yang Sudah Terdaftar</h3>
+        <div class="candidates-grid">
+          <div v-for="candidate in currentCandidates" :key="candidate.id" class="candidate-item">
+            <div class="candidate-avatar">{{ getInitials(candidate.nama_lengkap) }}</div>
+            <div class="candidate-details">
+              <p class="candidate-name">{{ candidate.nama_lengkap }}</p>
+              <p class="candidate-position">{{ formatJabatan(candidate.jabatan) }}</p>
+              <p class="candidate-number">#{{ candidate.nomor_urut }}</p>
+              <p v-if="candidate.didaftarkan_oleh" class="registered-by">
+                Didaftarkan oleh: {{ candidate.didaftarkan_oleh }}
               </p>
-              <p><strong>Waktu Daftar:</strong> {{ formatDate(userRegistration.dibuat_pada) }}</p>
-
-              <div v-if="userRegistration.status === 'menunggu'">
-                <p>⏳ Menunggu verifikasi panitia (masa kerja kurang dari 3 tahun)</p>
-              </div>
-
-              <div v-else-if="userRegistration.status === 'disetujui'">
-                <p>✅ Pendaftaran Anda telah disetujui!</p>
-                <p>Anda akan tampil sebagai kandidat di halaman voting</p>
-              </div>
-
-              <div v-else-if="userRegistration.status === 'ditolak'">
-                <p>❌ Pendaftaran Anda ditolak</p>
-                <p v-if="userRegistration.alasan_ditolak">
-                  <strong>Alasan:</strong> {{ userRegistration.alasan_ditolak }}
-                </p>
-                <button @click="showEditForm = true" class="btn-edit">Ajukan Ulang</button>
-              </div>
             </div>
           </div>
         </div>
-
-        <div v-else>
-          <!-- BELUM DAFTAR -->
-          <div class="not-registered">
-            <p>Anda belum mendaftar sebagai calon kandidat</p>
-
-            <div class="approve-info" v-if="user">
-              <p v-if="isAutoApprove(user.nip)" class="auto-approve">
-                ✅ <strong>AUTO-APPROVE</strong> (Masa kerja minimal 3 tahun)
-              </p>
-              <p v-else class="manual-approve">
-                ⏳ <strong>MENUNGGU VERIFIKASI</strong> (Masa kerja kurang dari 3 tahun)
-              </p>
-            </div>
-
-            <button @click="showRegistrationForm = true" class="btn-register">
-              Daftar Sekarang
-            </button>
-          </div>
+        <div v-if="currentCandidates.length === 0" class="no-candidates">
+          <p>Belum ada kandidat yang terdaftar</p>
         </div>
       </div>
 
-      <!-- FORM PENDAFTARAN -->
-      <div v-if="showRegistrationForm" class="modal-overlay">
-        <div class="modal">
-          <div class="modal-header">
-            <h3>Form Pendaftaran Calon Kandidat</h3>
-            <button @click="showRegistrationForm = false" class="btn-close">×</button>
-          </div>
+      <!-- REGISTRATION FORM -->
+      <div class="registration-form card" v-if="canRegister">
+        <h3>Daftarkan Calon Kandidat</h3>
 
-          <div class="modal-body">
-            <div class="approve-notice" v-if="user">
-              <p v-if="isAutoApprove(user.nip)" class="auto-approve-notice">
-                ✅ <strong>PENDAFTARAN ANDA AKAN OTOMATIS DISETUJUI</strong><br />
-                Karena masa kerja Anda {{ masaKerjaTahun }} tahun (minimal 3 tahun)
-              </p>
-              <p v-else class="manual-approve-notice">
-                ⏳ <strong>PENDAFTARAN ANDA AKAN DITINJAU MANUAL</strong><br />
-                Karena masa kerja Anda {{ masaKerjaTahun }} tahun (kurang dari 3 tahun)
+        <!-- INFO BATASAN ANDA -->
+        <div class="my-limit-info">
+          <p v-if="remainingQuota === 0" class="limit-full">
+            ⚠️ Anda sudah mendaftarkan calon untuk <strong>kedua jabatan</strong>. Tidak bisa
+            mendaftarkan lagi.
+          </p>
+          <p v-else class="limit-remaining">
+            Anda masih bisa mendaftarkan calon untuk:
+            <span v-if="!myRegistrations.sarpras" class="available-position">✅ Waka Sarpras</span>
+            <span v-if="!myRegistrations.kesiswaan" class="available-position"
+              >✅ Waka Kesiswaan</span
+            >
+          </p>
+        </div>
+
+        <!-- REGISTRATION FORM -->
+        <div class="form-container" v-if="remainingQuota > 0">
+          <form @submit.prevent="submitRegistration">
+            <!-- SELECT CANDIDATE -->
+            <div class="form-group">
+              <label>Pilih Guru yang Akan Didaftarkan</label>
+              <select v-model="form.pengguna_id" required class="form-select">
+                <option value="">Pilih Guru</option>
+                <option
+                  v-for="guru in eligibleGuruList"
+                  :key="guru.id"
+                  :value="guru.id"
+                  :disabled="isAlreadyCandidate(guru.id)"
+                >
+                  {{ guru.nama_lengkap }} (NIP: {{ guru.nip }}) - Masa Kerja:
+                  {{ hitungMasaKerja(guru.nip) }} tahun
+                </option>
+              </select>
+              <p v-if="selectedGuru" class="guru-info">
+                <strong>Informasi Calon:</strong><br />
+                Nama: {{ selectedGuru.nama_lengkap }}<br />
+                NIP: {{ selectedGuru.nip }}<br />
+                Masa Kerja: {{ hitungMasaKerja(selectedGuru.nip) }} tahun<br />
+                <span v-if="hitungMasaKerja(selectedGuru.nip) >= 3" class="eligible-text">
+                  <span style="color: #10b981">✅</span> Memenuhi syarat (≥ 3 tahun)
+                </span>
+                <span v-else class="not-eligible-text">
+                  <span style="color: #ef4444">❌</span> Tidak memenuhi syarat (&lt; 3 tahun)
+                </span>
               </p>
             </div>
 
-            <form @submit.prevent="submitRegistration">
-              <div class="form-group">
-                <label>Pilih Jabatan *</label>
-                <select v-model="formData.jabatan" required>
-                  <option value="">-- Pilih Jabatan --</option>
-                  <option value="humas">Waka Humas</option>
-                  <option value="sarpras">Waka Sarana Prasarana</option>
-                  <option value="kesiswaan">Waka Kesiswaan</option>
-                  <option value="kurikulum">Waka Kurikulum</option>
-                </select>
-              </div>
+            <!-- POSITION SELECTION (HANYA JABATAN YANG BELUM DIDAFTARKAN) -->
+            <div class="form-group">
+              <label>Pilih Jabatan</label>
+              <select v-model="form.jabatan" required class="form-select">
+                <option value="">Pilih Jabatan</option>
+                <option v-if="!myRegistrations.sarpras" value="sarpras">
+                  Waka Sarana Prasarana (Sarpras)
+                </option>
+                <option v-if="!myRegistrations.kesiswaan" value="kesiswaan">Waka Kesiswaan</option>
+              </select>
+              <p class="position-help">
+                <span v-if="myRegistrations.sarpras" class="position-taken">
+                  ❌ Anda sudah mendaftarkan calon untuk Waka Sarpras </span
+                ><br />
+                <span v-if="myRegistrations.kesiswaan" class="position-taken">
+                  ❌ Anda sudah mendaftarkan calon untuk Waka Kesiswaan
+                </span>
+              </p>
+            </div>
 
-              <div class="form-group">
-                <label>Visi & Misi *</label>
-                <textarea
-                  v-model="formData.visi_misi"
-                  rows="6"
-                  placeholder="Tuliskan visi dan misi Anda..."
-                  required
-                ></textarea>
-                <small>Minimal 100 karakter</small>
-                <p class="char-count">{{ formData.visi_misi.length }}/100 karakter</p>
-              </div>
+            <!-- PENDAFTAR INFO -->
+            <div class="registrant-info">
+              <p><strong>Anda sebagai pendaftar:</strong> {{ user.nama_lengkap }}</p>
+              <p><strong>Masa kerja Anda:</strong> {{ masaKerjaTahun }} tahun</p>
+              <p class="note-text">
+                <em>Catatan: Anda mendaftarkan calon, bukan diri sendiri.</em>
+              </p>
+            </div>
 
-              <div class="form-actions">
-                <button type="button" @click="showRegistrationForm = false" class="btn-cancel">
-                  Batal
-                </button>
-                <button type="submit" :disabled="submitting" class="btn-submit">
-                  {{ submitting ? 'Mengirim...' : 'Kirim Pendaftaran' }}
-                </button>
-              </div>
-            </form>
-          </div>
+            <!-- SUBMIT BUTTON -->
+            <div class="form-actions">
+              <button type="submit" :disabled="!canSubmit || submitting" class="btn-submit">
+                {{ submitting ? 'Mendaftarkan...' : 'Daftarkan Calon' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- REGISTRATION STATUS -->
+        <div v-if="registrationResult" class="registration-result" :class="registrationResult.type">
+          <h4>{{ registrationResult.title }}</h4>
+          <p>{{ registrationResult.message }}</p>
         </div>
       </div>
 
-      <!-- EDIT FORM -->
-      <div v-if="showEditForm" class="modal-overlay">
-        <div class="modal">
-          <div class="modal-header">
-            <h3>Edit Pendaftaran</h3>
-            <button @click="showEditForm = false" class="btn-close">×</button>
-          </div>
-          <div class="modal-body">
-            <p>Fitur edit akan segera tersedia...</p>
-            <button @click="showEditForm = false" class="btn-cancel">Tutup</button>
-          </div>
+      <!-- CANNOT REGISTER -->
+      <div v-else class="cannot-register card">
+        <h3>Tidak Dapat Mendaftar</h3>
+        <div v-if="!activeSession">
+          <p><span style="color: #ef4444">❌</span> Tidak ada sesi pemilihan aktif saat ini</p>
+        </div>
+        <div v-else-if="activeSession.status !== 'pendaftaran'">
+          <p>
+            <span style="color: #ef4444">❌</span> Pendaftaran hanya bisa dilakukan saat sesi
+            PENDAFTARAN berlangsung
+          </p>
+          <p v-if="activeSession.status === 'voting'">
+            <em>Sesi saat ini: VOTING (tidak bisa tambah kandidat lagi)</em>
+          </p>
+        </div>
+        <div v-else-if="remainingQuota === 0">
+          <p>
+            <span style="color: #ef4444">❌</span> Anda sudah mendaftarkan calon untuk kedua jabatan
+          </p>
+          <p><strong>Waka Sarpras:</strong> {{ myRegistrations.sarpras?.nama_lengkap || '-' }}</p>
+          <p>
+            <strong>Waka Kesiswaan:</strong> {{ myRegistrations.kesiswaan?.nama_lengkap || '-' }}
+          </p>
         </div>
       </div>
     </div>
@@ -176,7 +207,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue' // HAPUS watch
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/utils/supabase'
@@ -184,72 +215,107 @@ import { supabase } from '@/utils/supabase'
 const router = useRouter()
 const authStore = useAuthStore()
 
-// State - semua harus pake ref()
+// State
 const loading = ref(true)
 const activeSession = ref(null)
-const userRegistration = ref(null)
-const showRegistrationForm = ref(false)
-const showEditForm = ref(false)
+const myRegistrations = ref({ sarpras: null, kesiswaan: null })
+const guruList = ref([])
+const currentCandidates = ref([])
 const submitting = ref(false)
+const registrationResult = ref(null)
 
-// Form data
-const formData = ref({
+// Form data (TIDAK ADA VISI MISI LAGI)
+const form = ref({
+  pengguna_id: '',
   jabatan: '',
-  visi_misi: '',
 })
 
-// Computed properties
-const user = computed(() => {
-  return authStore.user || null
-})
+// Computed
+const user = computed(() => authStore.user || null)
 
 const masaKerjaTahun = computed(() => {
   return user.value ? hitungMasaKerja(user.value.nip) : 0
 })
 
-// Load data saat component mounted
+// BISA daftar jika: ada sesi + status pendaftaran + masih ada kuota
+const canRegister = computed(() => {
+  if (!user.value) return false
+  if (!activeSession.value) return false
+  if (activeSession.value.status !== 'pendaftaran') return false
+  return true
+})
+
+// Kuota tersisa
+const remainingQuota = computed(() => {
+  let count = 2 // maksimal 2 jabatan
+  if (myRegistrations.value.sarpras) count--
+  if (myRegistrations.value.kesiswaan) count--
+  return count
+})
+
+// List guru yang eligible (≥3 tahun dan belum jadi kandidat)
+const eligibleGuruList = computed(() => {
+  return guruList.value.filter((guru) => {
+    const masaKerja = hitungMasaKerja(guru.nip)
+    return masaKerja >= 3 && !isAlreadyCandidate(guru.id)
+  })
+})
+
+const selectedGuru = computed(() => {
+  if (!form.value.pengguna_id) return null
+  return guruList.value.find((g) => g.id === form.value.pengguna_id)
+})
+
+const canSubmit = computed(() => {
+  if (!form.value.jabatan || !form.value.pengguna_id) return false
+
+  const guru = selectedGuru.value
+  if (!guru) return false
+
+  // Validasi: calon harus ≥3 tahun
+  return hitungMasaKerja(guru.nip) >= 3
+})
+
+// Lifecycle
 onMounted(async () => {
-  // Cek apakah user ada
   if (!user.value) {
-    console.log('User not authenticated, redirecting to login...')
     router.push('/login-calon')
     return
   }
-
   await loadData()
 })
 
+// Functions
 const loadData = async () => {
-  if (!user.value) {
-    loading.value = false
-    return
-  }
-
   loading.value = true
   try {
-    // Get active session
+    // Get current session
     const { data: sessions } = await supabase
       .from('sesi_pemilihan')
       .select('*')
-      .eq('status', 'pendaftaran')
+      .in('status', ['pendaftaran', 'voting'])
       .order('dibuat_pada', { ascending: false })
       .limit(1)
 
     if (sessions && sessions.length > 0) {
       activeSession.value = sessions[0]
 
-      // Check user registration
-      const { data: registration } = await supabase
-        .from('pendaftaran_kandidat')
-        .select('*')
-        .eq('pengguna_id', user.value.id)
-        .eq('sesi_id', activeSession.value.id)
-        .single()
+      // Load current candidates
+      await loadCandidates()
 
-      if (registration) {
-        userRegistration.value = registration
-      }
+      // Load registrations saya
+      await loadMyRegistrations()
     }
+
+    // Load all active teachers
+    const { data: guru } = await supabase
+      .from('pengguna')
+      .select('*')
+      .eq('peran', 'guru')
+      .eq('is_active', true)
+      .order('nama_lengkap')
+
+    guruList.value = guru || []
   } catch (error) {
     console.error('Error loading data:', error)
   } finally {
@@ -257,158 +323,209 @@ const loadData = async () => {
   }
 }
 
-// AUTO-APPROVE FUNCTIONS
+const loadMyRegistrations = async () => {
+  try {
+    // Ambil semua pendaftaran yang saya buat
+    // KOLOM didaftarkan_oleh harus ada di database
+    const { data: registrations } = await supabase
+      .from('pendaftaran_kandidat')
+      .select(
+        `
+        *,
+        calon:pengguna_id (id, nama_lengkap)
+      `,
+      )
+      .eq('sesi_id', activeSession.value.id)
+      .eq('didaftarkan_oleh', user.value.id)
+
+    if (registrations) {
+      // Reset
+      myRegistrations.value = { sarpras: null, kesiswaan: null }
+
+      // Pisahkan per jabatan
+      registrations.forEach((reg) => {
+        if (reg.jabatan_diajukan === 'sarpras') {
+          myRegistrations.value.sarpras = {
+            id: reg.calon.id,
+            nama_lengkap: reg.calon.nama_lengkap,
+            pendaftaran_id: reg.id,
+          }
+        } else if (reg.jabatan_diajukan === 'kesiswaan') {
+          myRegistrations.value.kesiswaan = {
+            id: reg.calon.id,
+            nama_lengkap: reg.calon.nama_lengkap,
+            pendaftaran_id: reg.id,
+          }
+        }
+      })
+    }
+  } catch (error) {
+    console.error('Error loading my registrations:', error)
+  }
+}
+
+const loadCandidates = async () => {
+  try {
+    // Query dengan join untuk dapatkan nama pendaftar
+    const { data: candidates } = await supabase
+      .from('kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id (id, nama_lengkap, nip),
+        pendaftaran:pendaftaran_id (
+          didaftarkan_oleh,
+          pendaftar:pengguna!pendaftaran_kandidat_didaftarkan_oleh_fkey (nama_lengkap)
+        )
+      `,
+      )
+      .eq('sesi_id', activeSession.value.id)
+      .order('jabatan')
+      .order('nomor_urut')
+
+    currentCandidates.value = (candidates || []).map((c) => ({
+      id: c.pengguna?.id || c.id,
+      nama_lengkap: c.pengguna?.nama_lengkap || 'Unknown',
+      jabatan: c.jabatan,
+      nomor_urut: c.nomor_urut,
+      didaftarkan_oleh: c.pendaftaran?.pendaftar?.nama_lengkap || 'Admin',
+    }))
+  } catch (error) {
+    console.error('Error loading candidates:', error)
+  }
+}
+
 const hitungMasaKerja = (nip) => {
   if (!nip) return 0
-
   try {
-    // Clean NIP (remove spaces)
     const cleanNIP = nip.replace(/\s/g, '')
-
     if (cleanNIP.length < 12) return 0
-
-    // Ambil tahun pengangkatan (karakter 9-12)
     const tahunPengangkatan = parseInt(cleanNIP.substring(8, 12))
     const tahunSekarang = new Date().getFullYear()
-
     return tahunSekarang - tahunPengangkatan
   } catch {
     return 0
   }
 }
 
-const isAutoApprove = (nip) => {
-  return hitungMasaKerja(nip) >= 3
+const isAlreadyCandidate = (penggunaId) => {
+  return currentCandidates.value.some((c) => c.id === penggunaId)
 }
 
-// Helper functions
+const getInitials = (name) => {
+  if (!name) return '??'
+  return name
+    .split(' ')
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
+}
+
 const formatJabatan = (jabatan) => {
   const map = {
-    humas: 'Waka Humas',
     sarpras: 'Waka Sarana Prasarana',
     kesiswaan: 'Waka Kesiswaan',
-    kurikulum: 'Waka Kurikulum',
   }
   return map[jabatan] || jabatan
 }
 
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  return new Date(dateString).toLocaleDateString('id-ID', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const formatStatus = (status) => {
+  const map = {
+    draft: 'Draft',
+    pendaftaran: 'Pendaftaran',
+    voting: 'Voting Berlangsung',
+    selesai: 'Selesai',
+  }
+  return map[status] || status
 }
 
-// Main registration function
 const submitRegistration = async () => {
-  if (!user.value) {
-    alert('User tidak terautentikasi. Silahkan login ulang.')
-    router.push('/login-calon')
-    return
-  }
-
-  if (!formData.value.jabatan || !formData.value.visi_misi) {
-    alert('Harap isi semua field yang wajib')
-    return
-  }
-
-  if (formData.value.visi_misi.length < 100) {
-    alert('Visi & misi minimal 100 karakter')
-    return
-  }
-
-  if (!activeSession.value) {
-    alert('Tidak ada sesi pemilihan aktif')
-    return
-  }
+  if (!canSubmit.value) return
 
   submitting.value = true
+  registrationResult.value = null
 
   try {
-    // Check auto-approve
-    const autoApprove = isAutoApprove(user.value.nip)
-    const status = autoApprove ? 'disetujui' : 'menunggu'
+    // Validasi: calon harus ≥3 tahun
+    const candidateGuru = guruList.value.find((g) => g.id === form.value.pengguna_id)
+    const candidateMasaKerja = hitungMasaKerja(candidateGuru.nip)
+    if (candidateMasaKerja < 3) {
+      throw new Error('Calon tidak memenuhi syarat masa kerja (minimal 3 tahun)')
+    }
 
-    console.log(`Status: ${status}, Masa kerja: ${hitungMasaKerja(user.value.nip)} tahun`)
+    // Validasi: jabatan belum didaftarkan
+    if (form.value.jabatan === 'sarpras' && myRegistrations.value.sarpras) {
+      throw new Error('Anda sudah mendaftarkan calon untuk Waka Sarpras')
+    }
+    if (form.value.jabatan === 'kesiswaan' && myRegistrations.value.kesiswaan) {
+      throw new Error('Anda sudah mendaftarkan calon untuk Waka Kesiswaan')
+    }
 
-    // Insert registration
-    const { data, error } = await supabase
+    // Get last candidate number for this position
+    const { data: lastCandidate } = await supabase
+      .from('kandidat')
+      .select('nomor_urut')
+      .eq('jabatan', form.value.jabatan)
+      .eq('sesi_id', activeSession.value.id)
+      .order('nomor_urut', { ascending: false })
+      .limit(1)
+
+    const nomorUrut = lastCandidate?.length > 0 ? lastCandidate[0].nomor_urut + 1 : 1
+
+    // 1. Buat pendaftaran_kandidat (TANPA VISI MISI)
+    const { data: pendaftaran, error: pendaftaranError } = await supabase
       .from('pendaftaran_kandidat')
       .insert({
-        pengguna_id: user.value.id,
+        pengguna_id: form.value.pengguna_id,
         sesi_id: activeSession.value.id,
-        jabatan_diajukan: formData.value.jabatan,
-        visi_misi: formData.value.visi_misi,
-        status: status,
+        jabatan_diajukan: form.value.jabatan,
+        visi_misi: '-', // Kosong atau placeholder
+        status: 'disetujui',
+        didaftarkan_oleh: user.value.id, // Track siapa yang daftarkan
         dibuat_pada: new Date().toISOString(),
         diperbarui_pada: new Date().toISOString(),
       })
-      .select()
+      .select('id')
       .single()
 
-    if (error) throw error
+    if (pendaftaranError) throw pendaftaranError
 
-    // If auto-approve, create candidate automatically
-    if (autoApprove) {
-      try {
-        // Generate nomor urut
-        const { data: lastCandidate } = await supabase
-          .from('kandidat')
-          .select('nomor_urut')
-          .eq('jabatan', formData.value.jabatan)
-          .eq('sesi_id', activeSession.value.id)
-          .order('nomor_urut', { ascending: false })
-          .limit(1)
+    // 2. Buat kandidat (TANPA VISI MISI)
+    const { error: kandidatError } = await supabase.from('kandidat').insert({
+      pendaftaran_id: pendaftaran.id,
+      pengguna_id: form.value.pengguna_id,
+      sesi_id: activeSession.value.id,
+      jabatan: form.value.jabatan,
+      nomor_urut: nomorUrut,
+      visi_misi: '-',
+      total_suara: 0,
+      dibuat_pada: new Date().toISOString(),
+    })
 
-        const nomorUrut = lastCandidate?.length > 0 ? lastCandidate[0].nomor_urut + 1 : 1
+    if (kandidatError) throw kandidatError
 
-        // Create candidate
-        await supabase.from('kandidat').insert({
-          pendaftaran_id: data.id,
-          pengguna_id: user.value.id,
-          sesi_id: activeSession.value.id,
-          jabatan: formData.value.jabatan,
-          nomor_urut: nomorUrut,
-          visi_misi: formData.value.visi_misi,
-          total_suara: 0,
-          dibuat_pada: new Date().toISOString(),
-        })
-      } catch (candidateError) {
-        console.error('Error creating candidate:', candidateError)
-        // Continue anyway
-      }
+    // Success
+    registrationResult.value = {
+      success: true,
+      type: 'success',
+      title: '✅ Pendaftaran Berhasil!',
+      message: `Anda berhasil mendaftarkan ${candidateGuru.nama_lengkap} sebagai calon ${formatJabatan(form.value.jabatan)} (No. ${nomorUrut})`,
     }
-
-    // Update UI
-    userRegistration.value = data
-    showRegistrationForm.value = false
 
     // Reset form
-    formData.value = {
-      jabatan: '',
-      visi_misi: '',
-    }
+    form.value = { pengguna_id: '', jabatan: '' }
 
-    // Show success message
-    if (autoApprove) {
-      alert(
-        '✅ Pendaftaran berhasil! Status: DISETUJUI OTOMATIS\n\nAnda sudah menjadi kandidat resmi.',
-      )
-    } else {
-      alert(
-        '📝 Pendaftaran berhasil dikirim! Status: MENUNGGU VERIFIKASI\n\nPanitia akan meninjau pendaftaran Anda.',
-      )
-    }
-
-    // Refresh data
+    // Reload data
     await loadData()
   } catch (error) {
-    console.error('Error submitting registration:', error)
-    alert('Gagal mengirim pendaftaran: ' + error.message)
+    console.error('Registration error:', error)
+    registrationResult.value = {
+      success: false,
+      type: 'error',
+      title: '❌ Gagal Mendaftarkan',
+      message: error.message || 'Terjadi kesalahan saat mendaftarkan',
+    }
   } finally {
     submitting.value = false
   }
@@ -416,207 +533,291 @@ const submitRegistration = async () => {
 </script>
 
 <style scoped>
-.dashboard-calon {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.header {
-  margin-bottom: 30px;
-  text-align: center;
-}
-
-.header h1 {
-  color: #1e3a8a;
-  margin-bottom: 10px;
-}
-
-.user-info {
-  background: #f8f9fa;
-  padding: 15px;
+.limit-info {
+  margin-top: 15px;
+  padding: 12px;
+  background: #f0f7ff;
   border-radius: 8px;
-  display: inline-block;
-  text-align: left;
+  border-left: 4px solid #3b82f6;
 }
 
-.card {
-  background: white;
-  border-radius: 10px;
-  padding: 20px;
+.limit-info ul {
+  margin: 8px 0 0 20px;
+}
+
+.limit-info li {
+  margin: 4px 0;
+}
+
+.my-limit-info {
   margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 12px;
+  border-radius: 8px;
 }
 
-.card h3 {
-  color: #333;
-  margin-bottom: 15px;
-  border-bottom: 2px solid #f0f0f0;
-  padding-bottom: 10px;
-}
-
-.status-pendaftaran {
-  color: #3b82f6;
-  font-weight: bold;
-}
-.status-voting {
-  color: #10b981;
-  font-weight: bold;
-}
-.status-selesai {
-  color: #ef4444;
-  font-weight: bold;
-}
-
-.not-open {
-  text-align: center;
-  padding: 30px;
-  color: #666;
-}
-
-.already-registered {
-  padding: 20px 0;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 5px 15px;
-  border-radius: 20px;
-  font-weight: bold;
-  margin-bottom: 15px;
-}
-
-.status-badge.menunggu {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-badge.disetujui {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge.ditolak {
+.limit-full {
   background: #fee2e2;
+  border: 1px solid #fca5a5;
   color: #991b1b;
+  padding: 10px;
 }
 
-.registration-details h4 {
-  color: #555;
-  margin-bottom: 10px;
-}
-
-.registration-details p {
-  margin: 5px 0;
-  color: #666;
-}
-
-.not-registered {
-  text-align: center;
-  padding: 30px;
-}
-
-.approve-info {
-  margin: 20px 0;
-}
-
-.auto-approve {
-  color: #065f46;
+.limit-remaining {
   background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
   padding: 10px;
-  border-radius: 5px;
-  display: inline-block;
 }
 
-.manual-approve {
-  color: #92400e;
-  background: #fef3c7;
-  padding: 10px;
-  border-radius: 5px;
+.available-position {
   display: inline-block;
-}
-
-.btn-register,
-.btn-edit {
-  background: #1e3a8a;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 5px;
+  margin: 0 8px;
+  padding: 4px 8px;
+  background: white;
+  border-radius: 6px;
   font-weight: bold;
-  cursor: pointer;
+}
+
+.position-help {
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.position-taken {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.registrant-info {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.note-text {
+  color: #6b7280;
+  font-size: 0.9rem;
   margin-top: 10px;
 }
 
-.btn-register:hover,
-.btn-edit:hover {
-  background: #1e40af;
+.registered-by {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+.dashboard-calon {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #000000; /* Tambah ini untuk default text color hitam */
+}
+
+/* HEADER */
+.header {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white; /* Tetap putih untuk header */
+  padding: 25px;
+  border-radius: 15px;
+  margin-bottom: 25px;
+  box-shadow: 0 5px 15px rgba(30, 58, 138, 0.2);
+}
+
+.header h1 {
+  margin: 0 0 15px 0;
+  font-size: 1.8rem;
+  text-align: center;
+}
+
+.user-info {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.user-info p {
+  margin: 8px 0;
+}
+
+.warning-text {
+  color: #fbbf24;
+  font-weight: 600;
+  background: rgba(251, 191, 36, 0.1);
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 10px !important;
+}
+
+.success-text {
+  color: #10b981;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 10px !important;
+}
+
+/* CARDS */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 20px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eef2ff;
+}
+
+.card h3 {
+  color: #000000; /* UBAH JADI HITAM */
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #eef2ff;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+/* SESSION INFO - TEKS HITAM SEMUA */
+.session-info p {
+  color: #000000 !important;
+  margin: 8px 0;
+}
+
+.session-info strong {
+  color: #000000;
+  font-weight: 700;
+}
+
+.session-info .status-pendaftaran {
+  background: #fef3c7;
+  color: #000000; /* UBAH JADI HITAM */
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  margin-left: 8px;
+  border: 1px solid #fbbf24;
+}
+
+/* CURRENT CANDIDATES */
+.candidates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.candidate-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s;
+}
+
+.candidate-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.candidate-avatar {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  font-weight: bold;
+  font-size: 1.2rem;
 }
 
-.modal {
-  background: white;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
+.candidate-name {
+  font-weight: 600;
+  color: #000000; /* UBAH JADI HITAM */
+  margin-bottom: 4px;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #eee;
+.candidate-position {
+  font-size: 0.9rem;
+  color: #000000; /* UBAH JADI HITAM */
+  background: #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-bottom: 3px;
+  font-weight: 600;
 }
 
-.modal-header h3 {
-  margin: 0;
+.candidate-number {
+  font-size: 0.85rem;
   color: #1e3a8a;
+  font-weight: bold;
 }
 
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
+.no-candidates p {
+  color: #000000; /* UBAH JADI HITAM */
+  font-weight: 600;
 }
 
-.modal-body {
+/* REGISTER TYPE SELECTION */
+.register-type {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.type-option {
+  display: flex;
+  align-items: center;
+  gap: 15px;
   padding: 20px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
 }
 
-.approve-notice {
-  margin-bottom: 20px;
-  padding: 15px;
-  border-radius: 8px;
+.type-option:hover {
+  border-color: #93c5fd;
+  background: #f0f7ff;
 }
 
-.auto-approve-notice {
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
+.type-option.selected {
+  border-color: #1e3a8a;
+  background: #e0f2fe;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
 }
 
-.manual-approve-notice {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
+.type-icon {
+  font-size: 2rem;
+}
+
+.type-content h4 {
+  margin: 0 0 5px 0;
+  color: #000000; /* UBAH JADI HITAM */
+}
+
+.type-content p {
+  margin: 0;
+  color: #000000; /* UBAH JADI HITAM */
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+/* FORM */
+.form-container {
+  margin-top: 25px;
 }
 
 .form-group {
@@ -626,66 +827,188 @@ const submitRegistration = async () => {
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  font-weight: bold;
-  color: #333;
+  font-weight: 600;
+  color: #000000; /* UBAH JADI HITAM */
 }
 
-.form-group select,
-.form-group textarea {
+.form-select,
+.form-textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  font-size: 16px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border 0.3s;
+  color: #000000; /* UBAH JADI HITAM */
 }
 
-.form-group textarea {
-  min-height: 150px;
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-textarea {
+  min-height: 120px;
   resize: vertical;
+  line-height: 1.5;
 }
 
+/* GURU INFO */
+.guru-info {
+  margin-top: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #000000; /* UBAH JADI HITAM */
+}
+
+.guru-info strong {
+  color: #000000;
+}
+
+.eligible-text {
+  color: #10b981;
+  font-weight: 600;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+.not-eligible-text {
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+/* CHARACTER COUNT */
 .char-count {
   text-align: right;
-  color: #666;
-  font-size: 14px;
+  color: #000000; /* UBAH JADI HITAM */
+  font-size: 0.9rem;
   margin-top: 5px;
+  font-weight: 600;
 }
 
+.char-warning {
+  color: #f59e0b;
+}
+
+/* FORM ACTIONS */
 .form-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
   margin-top: 30px;
-}
-
-.btn-cancel {
-  background: #6b7280;
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 5px;
-  cursor: pointer;
+  text-align: center;
 }
 
 .btn-submit {
-  background: #1e3a8a;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 5px;
-  font-weight: bold;
+  padding: 14px 40px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.3s;
+  min-width: 200px;
+}
+
+.btn-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(30, 58, 138, 0.3);
 }
 
 .btn-submit:disabled {
-  background: #9ca3af;
+  background: #94a3b8;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
+/* REGISTRATION RESULT */
+.registration-result {
+  margin-top: 25px;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.registration-result.success {
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+}
+
+.registration-result.error {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+}
+
+.registration-result h4 {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+  color: #000000; /* UBAH JADI HITAM */
+}
+
+.registration-result p {
+  margin: 0 0 15px 0;
+  color: #000000; /* UBAH JADI HITAM */
+  font-weight: 600;
+}
+
+/* CANNOT REGISTER */
+.cannot-register h3 {
+  color: #000000; /* UBAH JADI HITAM */
+}
+
+.cannot-register p {
+  margin: 10px 0;
+  color: #000000 !important; /* UBAH JADI HITAM */
+  font-weight: 600;
+}
+
+.cannot-register em {
+  color: #000000; /* UBAH JADI HITAM */
+  opacity: 0.8;
+}
+
+/* LOADING */
 .loading {
   text-align: center;
   padding: 50px;
-  color: #666;
-  font-size: 18px;
+  color: #000000; /* UBAH JADI HITAM */
+  font-size: 1.1rem;
+  background: #f9fafb;
+  border-radius: 10px;
+  margin: 20px 0;
+  font-weight: 600;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .dashboard-calon {
+    padding: 15px;
+  }
+
+  .header,
+  .card {
+    padding: 20px;
+  }
+
+  .register-type {
+    grid-template-columns: 1fr;
+  }
+
+  .candidates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-submit {
+    width: 100%;
+  }
 }
 </style>
