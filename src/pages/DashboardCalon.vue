@@ -12,7 +12,7 @@
       </div>
     </div>
 
-    <!-- LOADING STATE -->
+    <!-- LOADING -->
     <div v-if="loading" class="loading">Memuat data...</div>
 
     <!-- MAIN CONTENT -->
@@ -31,7 +31,7 @@
               {{ formatStatus(activeSession.status) }}
             </span>
           </p>
-          <!-- INFO BATASAN -->
+
           <div class="limit-info" v-if="activeSession.status === 'pendaftaran'">
             <p><strong>📋 Ketentuan:</strong></p>
             <p>• Setiap guru boleh mendaftarkan <strong>1 calon per jabatan</strong></p>
@@ -39,19 +39,17 @@
             <p>• Anda sudah mendaftarkan:</p>
             <ul>
               <li v-if="myRegistrations.sarpras">
-                ✅ Waka Sarpras: {{ myRegistrations.sarpras.nama_lengkap }}
+                ✅ Waka Sarpras: {{ myRegistrations.sarpras.nama }}
               </li>
               <li v-else>❌ Waka Sarpras: Belum ada</li>
               <li v-if="myRegistrations.kesiswaan">
-                ✅ Waka Kesiswaan: {{ myRegistrations.kesiswaan.nama_lengkap }}
+                ✅ Waka Kesiswaan: {{ myRegistrations.kesiswaan.nama }}
               </li>
               <li v-else>❌ Waka Kesiswaan: Belum ada</li>
             </ul>
           </div>
         </div>
-        <div v-else>
-          <p>Tidak ada sesi pemilihan aktif</p>
-        </div>
+        <div v-else><p>Tidak ada sesi pemilihan aktif</p></div>
       </div>
 
       <!-- CURRENT CANDIDATES -->
@@ -65,13 +63,13 @@
         <h3>Kandidat yang Sudah Terdaftar</h3>
         <div class="candidates-grid">
           <div v-for="candidate in currentCandidates" :key="candidate.id" class="candidate-item">
-            <div class="candidate-avatar">{{ getInitials(candidate.nama_lengkap) }}</div>
+            <div class="candidate-avatar">{{ getInitials(candidate.nama) }}</div>
             <div class="candidate-details">
-              <p class="candidate-name">{{ candidate.nama_lengkap }}</p>
+              <p class="candidate-name">{{ candidate.nama }}</p>
               <p class="candidate-position">{{ formatJabatan(candidate.jabatan) }}</p>
               <p class="candidate-number">#{{ candidate.nomor_urut }}</p>
-              <p v-if="candidate.didaftarkan_oleh" class="registered-by">
-                Didaftarkan oleh: {{ candidate.didaftarkan_oleh }}
+              <p class="registered-by" v-if="candidate.pendaftar">
+                Didaftarkan oleh: {{ candidate.pendaftar }}
               </p>
             </div>
           </div>
@@ -85,11 +83,9 @@
       <div class="registration-form card" v-if="canRegister">
         <h3>Daftarkan Calon Kandidat</h3>
 
-        <!-- INFO BATASAN ANDA -->
         <div class="my-limit-info">
           <p v-if="remainingQuota === 0" class="limit-full">
-            ⚠️ Anda sudah mendaftarkan calon untuk <strong>kedua jabatan</strong>. Tidak bisa
-            mendaftarkan lagi.
+            ⚠️ Anda sudah mendaftarkan calon untuk <strong>kedua jabatan</strong>.
           </p>
           <p v-else class="limit-remaining">
             Anda masih bisa mendaftarkan calon untuk:
@@ -100,13 +96,17 @@
           </p>
         </div>
 
-        <!-- REGISTRATION FORM -->
         <div class="form-container" v-if="remainingQuota > 0">
           <form @submit.prevent="submitRegistration">
             <!-- SELECT CANDIDATE -->
             <div class="form-group">
               <label>Pilih Guru yang Akan Didaftarkan</label>
-              <select v-model="form.pengguna_id" required class="form-select">
+              <select
+                v-model="form.pengguna_id"
+                required
+                class="form-select"
+                @change="onGuruSelect"
+              >
                 <option value="">Pilih Guru</option>
                 <option
                   v-for="guru in eligibleGuruList"
@@ -114,25 +114,26 @@
                   :value="guru.id"
                   :disabled="isAlreadyCandidate(guru.id)"
                 >
-                  {{ guru.nama_lengkap }} (NIP: {{ guru.nip }}) - Masa Kerja:
+                  {{ guru.nama_lengkap }} (NIP: {{ guru.nip }}) -
                   {{ hitungMasaKerja(guru.nip) }} tahun
                 </option>
               </select>
-              <p v-if="selectedGuru" class="guru-info">
-                <strong>Informasi Calon:</strong><br />
-                Nama: {{ selectedGuru.nama_lengkap }}<br />
-                NIP: {{ selectedGuru.nip }}<br />
-                Masa Kerja: {{ hitungMasaKerja(selectedGuru.nip) }} tahun<br />
-                <span v-if="hitungMasaKerja(selectedGuru.nip) >= 3" class="eligible-text">
-                  <span style="color: #10b981">✅</span> Memenuhi syarat (≥ 3 tahun)
-                </span>
-                <span v-else class="not-eligible-text">
-                  <span style="color: #ef4444">❌</span> Tidak memenuhi syarat (&lt; 3 tahun)
-                </span>
-              </p>
+              <div v-if="selectedGuru" class="guru-info">
+                <p><strong>Informasi Calon:</strong></p>
+                <p>Nama: {{ selectedGuru.nama_lengkap }}</p>
+                <p>NIP: {{ selectedGuru.nip }}</p>
+                <p>Masa Kerja: {{ selectedMasaKerja }} tahun</p>
+                <p :class="selectedMasaKerja >= 3 ? 'eligible-text' : 'not-eligible-text'">
+                  {{
+                    selectedMasaKerja >= 3
+                      ? '✅ Memenuhi syarat (≥ 3 tahun)'
+                      : '❌ Tidak memenuhi syarat (< 3 tahun)'
+                  }}
+                </p>
+              </div>
             </div>
 
-            <!-- POSITION SELECTION (HANYA JABATAN YANG BELUM DIDAFTARKAN) -->
+            <!-- POSITION SELECTION -->
             <div class="form-group">
               <label>Pilih Jabatan</label>
               <select v-model="form.jabatan" required class="form-select">
@@ -142,23 +143,6 @@
                 </option>
                 <option v-if="!myRegistrations.kesiswaan" value="kesiswaan">Waka Kesiswaan</option>
               </select>
-              <p class="position-help">
-                <span v-if="myRegistrations.sarpras" class="position-taken">
-                  ❌ Anda sudah mendaftarkan calon untuk Waka Sarpras </span
-                ><br />
-                <span v-if="myRegistrations.kesiswaan" class="position-taken">
-                  ❌ Anda sudah mendaftarkan calon untuk Waka Kesiswaan
-                </span>
-              </p>
-            </div>
-
-            <!-- PENDAFTAR INFO -->
-            <div class="registrant-info">
-              <p><strong>Anda sebagai pendaftar:</strong> {{ user.nama_lengkap }}</p>
-              <p><strong>Masa kerja Anda:</strong> {{ masaKerjaTahun }} tahun</p>
-              <p class="note-text">
-                <em>Catatan: Anda mendaftarkan calon, bukan diri sendiri.</em>
-              </p>
             </div>
 
             <!-- SUBMIT BUTTON -->
@@ -170,7 +154,7 @@
           </form>
         </div>
 
-        <!-- REGISTRATION STATUS -->
+        <!-- REGISTRATION RESULT -->
         <div v-if="registrationResult" class="registration-result" :class="registrationResult.type">
           <h4>{{ registrationResult.title }}</h4>
           <p>{{ registrationResult.message }}</p>
@@ -180,26 +164,12 @@
       <!-- CANNOT REGISTER -->
       <div v-else class="cannot-register card">
         <h3>Tidak Dapat Mendaftar</h3>
-        <div v-if="!activeSession">
-          <p><span style="color: #ef4444">❌</span> Tidak ada sesi pemilihan aktif saat ini</p>
-        </div>
+        <div v-if="!activeSession"><p>❌ Tidak ada sesi pemilihan aktif</p></div>
         <div v-else-if="activeSession.status !== 'pendaftaran'">
-          <p>
-            <span style="color: #ef4444">❌</span> Pendaftaran hanya bisa dilakukan saat sesi
-            PENDAFTARAN berlangsung
-          </p>
-          <p v-if="activeSession.status === 'voting'">
-            <em>Sesi saat ini: VOTING (tidak bisa tambah kandidat lagi)</em>
-          </p>
+          <p>❌ Pendaftaran hanya saat sesi PENDAFTARAN</p>
         </div>
         <div v-else-if="remainingQuota === 0">
-          <p>
-            <span style="color: #ef4444">❌</span> Anda sudah mendaftarkan calon untuk kedua jabatan
-          </p>
-          <p><strong>Waka Sarpras:</strong> {{ myRegistrations.sarpras?.nama_lengkap || '-' }}</p>
-          <p>
-            <strong>Waka Kesiswaan:</strong> {{ myRegistrations.kesiswaan?.nama_lengkap || '-' }}
-          </p>
+          <p>❌ Anda sudah mendaftarkan calon untuk kedua jabatan</p>
         </div>
       </div>
     </div>
@@ -207,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue' // HAPUS watch
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/utils/supabase'
@@ -223,8 +193,9 @@ const guruList = ref([])
 const currentCandidates = ref([])
 const submitting = ref(false)
 const registrationResult = ref(null)
+const selectedMasaKerja = ref(0)
 
-// Form data (TIDAK ADA VISI MISI LAGI)
+// Form
 const form = ref({
   pengguna_id: '',
   jabatan: '',
@@ -232,12 +203,8 @@ const form = ref({
 
 // Computed
 const user = computed(() => authStore.user || null)
+const masaKerjaTahun = computed(() => (user.value ? hitungMasaKerja(user.value.nip) : 0))
 
-const masaKerjaTahun = computed(() => {
-  return user.value ? hitungMasaKerja(user.value.nip) : 0
-})
-
-// BISA daftar jika: ada sesi + status pendaftaran + masih ada kuota
 const canRegister = computed(() => {
   if (!user.value) return false
   if (!activeSession.value) return false
@@ -245,15 +212,13 @@ const canRegister = computed(() => {
   return true
 })
 
-// Kuota tersisa
 const remainingQuota = computed(() => {
-  let count = 2 // maksimal 2 jabatan
+  let count = 2
   if (myRegistrations.value.sarpras) count--
   if (myRegistrations.value.kesiswaan) count--
   return count
 })
 
-// List guru yang eligible (≥3 tahun dan belum jadi kandidat)
 const eligibleGuruList = computed(() => {
   return guruList.value.filter((guru) => {
     const masaKerja = hitungMasaKerja(guru.nip)
@@ -262,30 +227,24 @@ const eligibleGuruList = computed(() => {
 })
 
 const selectedGuru = computed(() => {
-  if (!form.value.pengguna_id) return null
-  return guruList.value.find((g) => g.id === form.value.pengguna_id)
+  return form.value.pengguna_id ? guruList.value.find((g) => g.id === form.value.pengguna_id) : null
 })
 
 const canSubmit = computed(() => {
   if (!form.value.jabatan || !form.value.pengguna_id) return false
-
-  const guru = selectedGuru.value
-  if (!guru) return false
-
-  // Validasi: calon harus ≥3 tahun
-  return hitungMasaKerja(guru.nip) >= 3
+  if (selectedMasaKerja.value < 3) return false
+  return true
 })
 
-// Lifecycle
-onMounted(async () => {
-  if (!user.value) {
-    router.push('/login-calon')
-    return
+// Methods
+const onGuruSelect = () => {
+  if (selectedGuru.value) {
+    selectedMasaKerja.value = hitungMasaKerja(selectedGuru.value.nip)
+  } else {
+    selectedMasaKerja.value = 0
   }
-  await loadData()
-})
+}
 
-// Functions
 const loadData = async () => {
   loading.value = true
   try {
@@ -299,11 +258,7 @@ const loadData = async () => {
 
     if (sessions && sessions.length > 0) {
       activeSession.value = sessions[0]
-
-      // Load current candidates
       await loadCandidates()
-
-      // Load registrations saya
       await loadMyRegistrations()
     }
 
@@ -325,36 +280,33 @@ const loadData = async () => {
 
 const loadMyRegistrations = async () => {
   try {
-    // Ambil semua pendaftaran yang saya buat
-    // KOLOM didaftarkan_oleh harus ada di database
     const { data: registrations } = await supabase
-      .from('pendaftaran_kandidat')
+      .from('kandidat')
       .select(
         `
         *,
-        calon:pengguna_id (id, nama_lengkap)
+        calon:pengguna_id (id, nama_lengkap),
+        pendaftar:dibuat_oleh (nama_lengkap)
       `,
       )
       .eq('sesi_id', activeSession.value.id)
-      .eq('didaftarkan_oleh', user.value.id)
+      .eq('dibuat_oleh', user.value.id) // ← Cari kandidat yang USER daftarkan
+
+    myRegistrations.value = { sarpras: null, kesiswaan: null }
 
     if (registrations) {
-      // Reset
-      myRegistrations.value = { sarpras: null, kesiswaan: null }
-
-      // Pisahkan per jabatan
       registrations.forEach((reg) => {
-        if (reg.jabatan_diajukan === 'sarpras') {
+        if (reg.jabatan === 'sarpras') {
           myRegistrations.value.sarpras = {
             id: reg.calon.id,
-            nama_lengkap: reg.calon.nama_lengkap,
-            pendaftaran_id: reg.id,
+            nama: reg.calon.nama_lengkap,
+            kandidat_id: reg.id,
           }
-        } else if (reg.jabatan_diajukan === 'kesiswaan') {
+        } else if (reg.jabatan === 'kesiswaan') {
           myRegistrations.value.kesiswaan = {
             id: reg.calon.id,
-            nama_lengkap: reg.calon.nama_lengkap,
-            pendaftaran_id: reg.id,
+            nama: reg.calon.nama_lengkap,
+            kandidat_id: reg.id,
           }
         }
       })
@@ -366,17 +318,13 @@ const loadMyRegistrations = async () => {
 
 const loadCandidates = async () => {
   try {
-    // Query dengan join untuk dapatkan nama pendaftar
     const { data: candidates } = await supabase
       .from('kandidat')
       .select(
         `
         *,
         pengguna:pengguna_id (id, nama_lengkap, nip),
-        pendaftaran:pendaftaran_id (
-          didaftarkan_oleh,
-          pendaftar:pengguna!pendaftaran_kandidat_didaftarkan_oleh_fkey (nama_lengkap)
-        )
+        pendaftar:dibuat_oleh (nama_lengkap)
       `,
       )
       .eq('sesi_id', activeSession.value.id)
@@ -384,11 +332,11 @@ const loadCandidates = async () => {
       .order('nomor_urut')
 
     currentCandidates.value = (candidates || []).map((c) => ({
-      id: c.pengguna?.id || c.id,
-      nama_lengkap: c.pengguna?.nama_lengkap || 'Unknown',
+      id: c.id,
+      nama: c.pengguna?.nama_lengkap || 'Unknown',
       jabatan: c.jabatan,
       nomor_urut: c.nomor_urut,
-      didaftarkan_oleh: c.pendaftaran?.pendaftar?.nama_lengkap || 'Admin',
+      pendaftar: c.pendaftar?.nama_lengkap || 'Unknown',
     }))
   } catch (error) {
     console.error('Error loading candidates:', error)
@@ -423,10 +371,7 @@ const getInitials = (name) => {
 }
 
 const formatJabatan = (jabatan) => {
-  const map = {
-    sarpras: 'Waka Sarana Prasarana',
-    kesiswaan: 'Waka Kesiswaan',
-  }
+  const map = { sarpras: 'Waka Sarana Prasarana', kesiswaan: 'Waka Kesiswaan' }
   return map[jabatan] || jabatan
 }
 
@@ -447,14 +392,17 @@ const submitRegistration = async () => {
   registrationResult.value = null
 
   try {
-    // Validasi: calon harus ≥3 tahun
-    const candidateGuru = guruList.value.find((g) => g.id === form.value.pengguna_id)
-    const candidateMasaKerja = hitungMasaKerja(candidateGuru.nip)
-    if (candidateMasaKerja < 3) {
-      throw new Error('Calon tidak memenuhi syarat masa kerja (minimal 3 tahun)')
+    // Validasi masa kerja
+    if (selectedMasaKerja.value < 3) {
+      throw new Error('Calon harus memiliki masa kerja minimal 3 tahun')
     }
 
-    // Validasi: jabatan belum didaftarkan
+    // Validasi: user tidak bisa daftarkan diri sendiri
+    if (form.value.pengguna_id === user.value.id) {
+      throw new Error('Anda tidak bisa mendaftarkan diri sendiri')
+    }
+
+    // Validasi kuota per jabatan
     if (form.value.jabatan === 'sarpras' && myRegistrations.value.sarpras) {
       throw new Error('Anda sudah mendaftarkan calon untuk Waka Sarpras')
     }
@@ -462,7 +410,7 @@ const submitRegistration = async () => {
       throw new Error('Anda sudah mendaftarkan calon untuk Waka Kesiswaan')
     }
 
-    // Get last candidate number for this position
+    // Get last candidate number
     const { data: lastCandidate } = await supabase
       .from('kandidat')
       .select('nomor_urut')
@@ -473,48 +421,36 @@ const submitRegistration = async () => {
 
     const nomorUrut = lastCandidate?.length > 0 ? lastCandidate[0].nomor_urut + 1 : 1
 
-    // 1. Buat pendaftaran_kandidat (TANPA VISI MISI)
-    const { data: pendaftaran, error: pendaftaranError } = await supabase
-      .from('pendaftaran_kandidat')
-      .insert({
-        pengguna_id: form.value.pengguna_id,
-        sesi_id: activeSession.value.id,
-        jabatan_diajukan: form.value.jabatan,
-        visi_misi: '-', // Kosong atau placeholder
-        status: 'disetujui',
-        didaftarkan_oleh: user.value.id, // Track siapa yang daftarkan
-        dibuat_pada: new Date().toISOString(),
-        diperbarui_pada: new Date().toISOString(),
-      })
-      .select('id')
-      .single()
-
-    if (pendaftaranError) throw pendaftaranError
-
-    // 2. Buat kandidat (TANPA VISI MISI)
+    // SIMPLE INSERT langsung ke kandidat
     const { error: kandidatError } = await supabase.from('kandidat').insert({
-      pendaftaran_id: pendaftaran.id,
       pengguna_id: form.value.pengguna_id,
       sesi_id: activeSession.value.id,
       jabatan: form.value.jabatan,
       nomor_urut: nomorUrut,
-      visi_misi: '-',
+      dibuat_oleh: user.value.id,
       total_suara: 0,
       dibuat_pada: new Date().toISOString(),
     })
 
-    if (kandidatError) throw kandidatError
+    if (kandidatError) {
+      // Jika error karena unique constraint
+      if (kandidatError.code === '23505') {
+        throw new Error('Guru ini sudah terdaftar sebagai kandidat untuk jabatan ini')
+      }
+      throw kandidatError
+    }
 
     // Success
     registrationResult.value = {
       success: true,
       type: 'success',
       title: '✅ Pendaftaran Berhasil!',
-      message: `Anda berhasil mendaftarkan ${candidateGuru.nama_lengkap} sebagai calon ${formatJabatan(form.value.jabatan)} (No. ${nomorUrut})`,
+      message: `Anda berhasil mendaftarkan ${selectedGuru.value.nama_lengkap} sebagai calon ${formatJabatan(form.value.jabatan)} (No. ${nomorUrut})`,
     }
 
     // Reset form
     form.value = { pengguna_id: '', jabatan: '' }
+    selectedMasaKerja.value = 0
 
     // Reload data
     await loadData()
@@ -524,12 +460,21 @@ const submitRegistration = async () => {
       success: false,
       type: 'error',
       title: '❌ Gagal Mendaftarkan',
-      message: error.message || 'Terjadi kesalahan saat mendaftarkan',
+      message: error.message || 'Terjadi kesalahan',
     }
   } finally {
     submitting.value = false
   }
 }
+
+// Lifecycle
+onMounted(async () => {
+  if (!user.value) {
+    router.push('/login-calon')
+    return
+  }
+  await loadData()
+})
 </script>
 
 <style scoped>
