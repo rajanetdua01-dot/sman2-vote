@@ -36,13 +36,14 @@
     </div>
 
     <!-- Table -->
-    <div class="table-container">
+    <div class="table-compact">
       <table>
         <thead>
           <tr>
             <th>No</th>
             <th>Nama</th>
-            <th>NIP & TTL</th>
+            <th>NIP</th>
+            <th>TTL</th>
             <th>Status</th>
             <th>Voting</th>
             <th>Aksi</th>
@@ -50,41 +51,43 @@
         </thead>
         <tbody>
           <tr v-for="(guru, index) in filteredGuru" :key="guru.id">
-            <td class="text-bold">{{ index + 1 }}</td>
-            <td>
-              <div class="nama">
-                <div class="avatar">{{ getInitials(guru.nama_lengkap) }}</div>
-                <span class="nama-text text-bold">{{ guru.nama_lengkap }}</span>
-              </div>
+            <td class="text-bold td-no">{{ index + 1 }}</td>
+            <td class="td-nama">
+              <span class="nama-text">{{ guru.nama_lengkap }}</span>
             </td>
-            <td>
-              <div class="nip-ttl">
-                <code class="nip text-bold">{{ guru.nip }}</code>
-                <div class="ttl text-medium">
-                  {{ formatDate(guru.tanggal_lahir) }}
-                </div>
-              </div>
+            <td class="td-nip">
+              <code class="nip-code">{{ guru.nip }}</code>
             </td>
-            <td>
-              <span :class="['status', guru.is_active ? 'active' : 'inactive']">
-                {{ guru.is_active ? 'AKTIF' : 'NONAKTIF' }}
+            <td class="td-ttl">
+              <span class="ttl-text">{{ formatDate(guru.tanggal_lahir) }}</span>
+            </td>
+            <td class="td-status">
+              <span :class="['status-badge', guru.is_active ? 'active' : 'inactive']">
+                {{ guru.is_active ? 'AKTIF' : 'NON' }}
               </span>
             </td>
-            <td>
-              <span :class="['vote', hasVoted(guru.id) ? 'voted' : 'pending']">
+            <td class="td-vote">
+              <span :class="['vote-badge', hasVoted(guru.id) ? 'voted' : 'pending']">
                 {{ hasVoted(guru.id) ? '✅' : '⏳' }}
-                <span class="vote-text text-bold">{{ hasVoted(guru.id) ? 'Sudah' : 'Belum' }}</span>
+                <span class="vote-text">{{ hasVoted(guru.id) ? 'Sudah' : 'Belum' }}</span>
               </span>
             </td>
-            <td>
-              <button @click="editPeserta(guru)" class="btn-action" title="Edit">✏️</button>
-              <button
-                @click="toggleStatus(guru)"
-                class="btn-action"
-                :title="guru.is_active ? 'Nonaktifkan' : 'Aktifkan'"
-              >
-                {{ guru.is_active ? '⏸️' : '▶️' }}
-              </button>
+            <td class="td-actions">
+              <div class="action-buttons">
+                <button @click="editPeserta(guru)" class="btn-action-sm" title="Edit">
+                  <span class="action-icon">✏️</span>
+                </button>
+                <button
+                  @click="toggleStatus(guru)"
+                  class="btn-action-sm"
+                  :title="guru.is_active ? 'Nonaktifkan' : 'Aktifkan'"
+                >
+                  <span class="action-icon">{{ guru.is_active ? '⏸️' : '▶️' }}</span>
+                </button>
+                <button @click="deletePeserta(guru)" class="btn-action-sm btn-delete" title="Hapus">
+                  <span class="action-icon">🗑️</span>
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -92,7 +95,7 @@
 
       <!-- Empty State -->
       <div v-if="filteredGuru.length === 0" class="empty">
-        <p class="empty-text text-bold">Belum ada data guru</p>
+        <p class="empty-text">Belum ada data guru</p>
         <button @click="addPeserta" class="btn-add">+ Tambah Guru Pertama</button>
       </div>
     </div>
@@ -121,7 +124,7 @@
           <div class="form-row">
             <label class="checkbox-label">
               <input type="checkbox" v-model="form.is_active" class="checkbox" />
-              <span class="checkbox-text text-bold">Status Aktif</span>
+              <span class="checkbox-text">Status Aktif</span>
             </label>
           </div>
         </div>
@@ -147,6 +150,7 @@ const searchQuery = ref('')
 const showModal = ref(false)
 const editing = ref(false)
 const activeSession = ref(null)
+const votingStats = ref({}) // Cache untuk voting status
 
 // Form
 const form = ref({
@@ -159,14 +163,57 @@ const form = ref({
 
 // Load active session
 const loadActiveSession = async () => {
-  const { data } = await supabase
-    .from('sesi_pemilihan')
-    .select('*')
-    .order('dibuat_pada', { ascending: false })
-    .limit(1)
-    .single()
+  try {
+    const { data } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
+      .single()
 
-  activeSession.value = data
+    activeSession.value = data
+    console.log('Active session:', data?.nama_sesi || 'No session')
+  } catch (error) {
+    console.error('Error loading active session:', error)
+    activeSession.value = null
+  }
+}
+
+// Load voting stats untuk semua guru
+const loadVotingStats = async () => {
+  if (!activeSession.value?.id) {
+    console.log('No active session, skipping voting stats')
+    votingStats.value = {}
+    return
+  }
+
+  try {
+    console.log('Loading voting stats for session:', activeSession.value.id)
+
+    // Ambil semua pemilih yang sudah voting di sesi aktif
+    const { data, error } = await supabase
+      .from('suara')
+      .select('pemilih_id')
+      .eq('sesi_id', activeSession.value.id)
+      .eq('is_draft', false)
+
+    if (error) throw error
+
+    // Reset dan isi cache
+    votingStats.value = {}
+
+    if (data && data.length > 0) {
+      data.forEach((vote) => {
+        votingStats.value[vote.pemilih_id] = true
+      })
+      console.log(`Found ${data.length} votes for session`)
+    } else {
+      console.log('No votes found for current session')
+    }
+  } catch (error) {
+    console.error('Error loading voting stats:', error)
+    votingStats.value = {}
+  }
 }
 
 // Computed
@@ -184,58 +231,53 @@ const filteredGuru = computed(() => {
 
 const totalGuru = computed(() => guruList.value.length)
 const activeGuru = computed(() => guruList.value.filter((g) => g.is_active).length)
+
+// FIXED: Real data dari cache votingStats
 const sudahVoting = computed(() => {
-  return guruList.value.filter((g) => hasVoted(g.id)).length
+  return Object.keys(votingStats.value).length
 })
 
 // Methods
 const loadGuru = async () => {
-  const { data } = await supabase
-    .from('pengguna')
-    .select('*')
-    .eq('peran', 'guru')
-    .order('nama_lengkap')
-
-  guruList.value = data || []
-}
-
-const hasVoted = async (guruId) => {
-  if (!activeSession.value?.id) return false
-
   try {
-    const { data } = await supabase
-      .from('suara')
-      .select('id')
-      .eq('pemilih_id', guruId)
-      .eq('sesi_id', activeSession.value.id)
-      .eq('is_draft', false)
-      .limit(1)
+    console.log('Loading guru data...')
+    const { data, error } = await supabase
+      .from('pengguna')
+      .select('*')
+      .eq('peran', 'guru')
+      .order('nama_lengkap')
 
-    return (data?.length || 0) > 0
+    if (error) throw error
+
+    guruList.value = data || []
+    console.log(`Loaded ${guruList.value.length} guru`)
+
+    // Load voting stats setelah data guru dimuat
+    await loadVotingStats()
   } catch (error) {
-    console.error('Error checking vote:', error)
-    return false
+    console.error('Error loading guru:', error)
+    alert('Gagal memuat data guru: ' + error.message)
+    guruList.value = []
   }
 }
 
-const getInitials = (name) => {
-  if (!name) return '??'
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
+// Check voting status dari cache
+const hasVoted = (guruId) => {
+  return !!votingStats.value[guruId]
 }
 
 const formatDate = (dateString) => {
   if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  })
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return '-'
+  }
 }
 
 const addPeserta = () => {
@@ -252,10 +294,17 @@ const addPeserta = () => {
 
 const editPeserta = (guru) => {
   editing.value = true
-  // Format tanggal untuk input type="date"
-  const formattedDate = guru.tanggal_lahir
-    ? new Date(guru.tanggal_lahir).toISOString().split('T')[0]
-    : ''
+
+  // Format tanggal untuk input type="date" (YYYY-MM-DD)
+  let formattedDate = ''
+  if (guru.tanggal_lahir) {
+    try {
+      const date = new Date(guru.tanggal_lahir)
+      formattedDate = date.toISOString().split('T')[0]
+    } catch {
+      formattedDate = ''
+    }
+  }
 
   form.value = {
     ...guru,
@@ -264,56 +313,175 @@ const editPeserta = (guru) => {
   showModal.value = true
 }
 
+const deletePeserta = async (guru) => {
+  if (
+    !confirm(
+      `Yakin hapus guru ${guru.nama_lengkap} (${guru.nip})?\n\nAksi ini tidak dapat dibatalkan!`,
+    )
+  ) {
+    return
+  }
+
+  try {
+    // Check if guru has voting records
+    const { data: votingData, error: votingError } = await supabase
+      .from('suara')
+      .select('id')
+      .eq('pemilih_id', guru.id)
+      .limit(1)
+
+    if (votingError) throw votingError
+
+    if (votingData && votingData.length > 0) {
+      alert(
+        '❌ Guru tidak dapat dihapus karena sudah memiliki riwayat voting!\n\nGunakan fitur nonaktifkan saja.',
+      )
+      return
+    }
+
+    // Check if guru is registered as candidate
+    const { data: kandidatData, error: kandidatError } = await supabase
+      .from('kandidat')
+      .select('id')
+      .eq('pengguna_id', guru.id)
+      .limit(1)
+
+    if (kandidatError) throw kandidatError
+
+    if (kandidatData && kandidatData.length > 0) {
+      alert(
+        '❌ Guru tidak dapat dihapus karena terdaftar sebagai kandidat!\n\nGunakan fitur nonaktifkan saja.',
+      )
+      return
+    }
+
+    // Check if guru has token
+    const { data: tokenData, error: tokenError } = await supabase
+      .from('token_qr')
+      .select('id')
+      .eq('pengguna_id', guru.id)
+      .limit(1)
+
+    if (tokenError) throw tokenError
+
+    if (tokenData && tokenData.length > 0) {
+      alert(
+        '❌ Guru tidak dapat dihapus karena memiliki token voting!\n\nGunakan fitur nonaktifkan saja.',
+      )
+      return
+    }
+
+    // Delete the user
+    const { error: deleteError } = await supabase.from('pengguna').delete().eq('id', guru.id)
+
+    if (deleteError) throw deleteError
+
+    // Refresh data
+    await loadGuru()
+    alert(`✅ Guru ${guru.nama_lengkap} berhasil dihapus!`)
+  } catch (error) {
+    console.error('Delete error:', error)
+    alert('❌ Gagal menghapus guru: ' + error.message)
+  }
+}
+
 const savePeserta = async () => {
-  if (!form.value.nama_lengkap || !form.value.nip || !form.value.tanggal_lahir) {
-    alert('Nama, NIP, dan Tanggal Lahir wajib diisi!')
+  // Validasi required fields
+  if (!form.value.nama_lengkap.trim()) {
+    alert('Nama lengkap wajib diisi!')
+    return
+  }
+
+  if (!form.value.nip.trim()) {
+    alert('NIP wajib diisi!')
+    return
+  }
+
+  if (!form.value.tanggal_lahir) {
+    alert('Tanggal lahir wajib diisi!')
     return
   }
 
   try {
     // Check duplicate NIP (kecuali untuk edit)
     if (!editing.value) {
-      const { data: existing } = await supabase
+      const { data: existing, error: checkError } = await supabase
         .from('pengguna')
         .select('id')
         .eq('nip', form.value.nip)
         .single()
 
+      if (checkError && checkError.code !== 'PGRST116') throw checkError // PGRST116 = no rows returned
+
       if (existing) {
-        alert('NIP sudah terdaftar!')
+        alert('❌ NIP sudah terdaftar!')
+        return
+      }
+    } else {
+      // Untuk edit, check NIP duplikat kecuali untuk diri sendiri
+      const { data: existing, error: checkError } = await supabase
+        .from('pengguna')
+        .select('id')
+        .eq('nip', form.value.nip)
+        .neq('id', form.value.id)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') throw checkError
+
+      if (existing) {
+        alert('❌ NIP sudah digunakan oleh guru lain!')
         return
       }
     }
 
-    if (editing.value) {
-      await supabase.from('pengguna').update(form.value).eq('id', form.value.id)
-    } else {
-      await supabase.from('pengguna').insert([
-        {
-          ...form.value,
-          peran: 'guru',
-        },
-      ])
+    // Prepare data untuk save
+    const saveData = {
+      nama_lengkap: form.value.nama_lengkap.trim(),
+      nip: form.value.nip.trim(),
+      tanggal_lahir: form.value.tanggal_lahir,
+      email: form.value.email ? form.value.email.trim() : null,
+      is_active: form.value.is_active,
+      peran: 'guru',
     }
 
+    let result
+    if (editing.value) {
+      result = await supabase.from('pengguna').update(saveData).eq('id', form.value.id)
+    } else {
+      result = await supabase.from('pengguna').insert([saveData])
+    }
+
+    if (result.error) throw result.error
+
+    // Refresh data
     await loadGuru()
     closeModal()
-    alert(`Guru ${editing.value ? 'berhasil diupdate' : 'berhasil ditambahkan'}!`)
+    alert(`✅ Guru ${editing.value ? 'berhasil diupdate' : 'berhasil ditambahkan'}!`)
   } catch (error) {
-    alert('Error: ' + error.message)
+    console.error('Save error:', error)
+    alert('❌ Error: ' + error.message)
   }
 }
 
 const toggleStatus = async (guru) => {
-  if (!confirm(`Ubah status ${guru.nama_lengkap}?`)) return
+  const newStatus = !guru.is_active
+  const statusText = newStatus ? 'aktifkan' : 'nonaktifkan'
+
+  if (!confirm(`Yakin ${statusText} guru ${guru.nama_lengkap}?`)) return
 
   try {
-    await supabase.from('pengguna').update({ is_active: !guru.is_active }).eq('id', guru.id)
+    const { error } = await supabase
+      .from('pengguna')
+      .update({ is_active: newStatus })
+      .eq('id', guru.id)
+
+    if (error) throw error
 
     await loadGuru()
-    alert(`Status ${guru.nama_lengkap} berhasil diubah!`)
+    alert(`✅ Status ${guru.nama_lengkap} berhasil diubah!`)
   } catch (error) {
-    alert('Error: ' + error.message)
+    console.error('Toggle status error:', error)
+    alert('❌ Error: ' + error.message)
   }
 }
 
@@ -323,33 +491,27 @@ const closeModal = () => {
 
 // Lifecycle
 onMounted(async () => {
+  console.log('AdminPeserta mounted')
   await loadActiveSession()
   await loadGuru()
 })
-</script>
 
+// Expose untuk refresh dari luar jika perlu
+defineExpose({
+  refreshData: loadGuru,
+})
+</script>
 <style scoped>
 /* ============================================
-   EXTREME CONTRAST FIX - SEMUA TEXT HITAM/GELAP
+   ULTRA COMPACT CSS
    ============================================ */
 
-/* RESET DAN BASE STYLES */
 .simple-peserta {
-  padding: 1rem;
-  max-width: 1000px;
+  padding: 0.75rem;
+  max-width: 1200px;
   margin: 0 auto;
   background: #ffffff;
   min-height: 100vh;
-}
-
-/* TEXT CONTRAST UTILITY CLASSES */
-.text-bold {
-  font-weight: 700 !important;
-  color: #000000 !important;
-}
-
-.text-medium {
-  color: #374151 !important;
 }
 
 /* === HEADER === */
@@ -357,68 +519,69 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 2px solid #1e3a8a;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
 }
 
 .page-header h1 {
   color: #000000;
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .back-btn {
   background: #1e3a8a;
-  border: 2px solid #1e3a8a;
+  border: 1px solid #1e3a8a;
   color: #ffffff;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 /* === STATS === */
 .stats {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .stat {
   flex: 1;
   background: white;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 0.5rem;
+  border-radius: 4px;
   text-align: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 2px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
 }
 
 .stat-number {
-  font-size: 2.5rem;
-  font-weight: 900;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: #000000;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.15rem;
 }
 
 .stat-label {
   color: #374151;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 /* === ACTIONS === */
 .actions {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
   align-items: center;
 }
 
@@ -426,24 +589,25 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   background: white;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  border: 2px solid #374151;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
 }
 
 .search-input {
   flex: 1;
   border: none;
   outline: none;
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: #000000;
   font-weight: 500;
+  padding: 0.25rem;
 }
 
 .search-input::placeholder {
-  color: #6b7280;
+  color: #9ca3af;
   font-weight: 400;
 }
 
@@ -451,193 +615,239 @@ onMounted(async () => {
   background: #000000;
   color: #ffffff;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
   cursor: pointer;
-  font-weight: 800;
-  font-size: 1rem;
-  transition: all 0.2s;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
-.btn-add:hover {
-  background: #374151;
-  transform: translateY(-2px);
-}
-
-/* === TABLE === */
-.table-container {
+/* === ULTRA COMPACT TABLE === */
+.table-compact {
   background: white;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border: 2px solid #e5e7eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  font-size: 0.8rem;
 }
 
-table {
+.table-compact table {
   width: 100%;
   border-collapse: collapse;
 }
 
-thead {
-  background: #1e3a8a;
+.table-compact thead {
+  background: #f8fafc;
+  border-bottom: 2px solid #1e3a8a;
 }
 
-th {
-  padding: 1rem;
+.table-compact th {
+  padding: 0.35rem 0.5rem;
   text-align: left;
-  border-bottom: 3px solid #1e40af;
-  color: #ffffff;
-  font-weight: 800;
-  font-size: 1rem;
+  color: #000000;
+  font-weight: 700;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.2px;
+  border-right: 1px solid #e5e7eb;
 }
 
-td {
-  padding: 1rem;
-  border-bottom: 2px solid #f3f4f6;
-  vertical-align: middle;
+.table-compact th:last-child {
+  border-right: none;
+}
+
+.table-compact td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid #f3f4f6;
   color: #000000;
   font-weight: 500;
+  line-height: 1.2;
+  vertical-align: middle;
+  border-right: 1px solid #f3f4f6;
 }
 
-/* NAMA COLUMN */
-.nama {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.table-compact td:last-child {
+  border-right: none;
+}
+
+.table-compact tr:hover td {
+  background: #f8fafc;
+}
+
+/* Zebra striping */
+.table-compact tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+.table-compact tr:nth-child(even):hover td {
+  background: #f1f5f9;
+}
+
+/* COLUMN SPECIFIC STYLES */
+
+/* No Column */
+.td-no {
+  text-align: center;
+  font-weight: 700;
+  color: #1e3a8a;
+  width: 40px;
+  padding: 0.3rem 0.25rem !important;
+}
+
+/* Nama Column */
+.td-nama {
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 140px;
 }
 
 .nama-text {
-  color: #000000;
-  font-weight: 600;
-  font-size: 1rem;
+  font-size: 0.85rem;
 }
 
-.avatar {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #000000, #374151);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 1rem;
-  flex-shrink: 0;
-  border: 2px solid #1e3a8a;
+/* NIP Column */
+.td-nip {
+  min-width: 100px;
 }
 
-/* NIP & TTL COLUMN */
-.nip-ttl {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.nip {
-  background: #f3f4f6;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
+.nip-code {
   font-family: 'SF Mono', 'Courier New', monospace;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   color: #000000;
   font-weight: 600;
-  border: 1px solid #d1d5db;
+  background: #f8fafc;
+  padding: 0.15rem 0.3rem;
+  border-radius: 3px;
+  border: 1px solid #e2e8f0;
   display: inline-block;
-  width: fit-content;
 }
 
-.ttl {
-  font-size: 0.85rem;
-  margin-top: 0.25rem;
-  padding-left: 0.25rem;
-}
-
-/* STATUS BADGES */
-.status {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  display: inline-block;
+/* TTL Column */
+.td-ttl {
   min-width: 90px;
-  text-align: center;
-  border: 2px solid;
+}
+
+.ttl-text {
+  font-size: 0.75rem;
+  color: #4b5563;
+  white-space: nowrap;
+}
+
+/* Status Column */
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
+  border: 1px solid;
 }
 
-.status.active {
-  background: #10b981;
-  color: #000000;
-  border-color: #047857;
-  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+.status-badge.active {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
 }
 
-.status.inactive {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #b91c1c;
-  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+.status-badge.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
 }
 
-/* VOTE STATUS */
-.vote {
+/* Voting Column */
+.vote-badge {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1.2rem;
+  gap: 0.25rem;
+  font-size: 0.85rem;
 }
 
 .vote-text {
-  color: #000000;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
-.vote.voted .vote-text {
+.vote-badge.voted {
   color: #059669;
 }
 
-.vote.pending .vote-text {
+.vote-badge.pending {
   color: #d97706;
 }
 
-/* ACTION BUTTONS */
-.btn-action {
-  background: white;
-  border: 2px solid #374151;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  margin-right: 0.5rem;
-  color: #000000;
-  font-weight: 700;
-  font-size: 1rem;
-  transition: all 0.2s;
+/* Action Column */
+.td-actions {
+  width: 110px;
 }
 
-.btn-action:hover {
-  background: #1e3a8a;
+.action-buttons {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.btn-action-sm {
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #000000;
+  font-weight: 600;
+  transition: all 0.15s;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.btn-action-sm:hover {
+  transform: translateY(-1px);
+}
+
+.btn-action-sm:first-child:hover {
+  background: #3b82f6;
   color: white;
-  border-color: #1e3a8a;
-  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+.btn-action-sm:nth-child(2):hover {
+  background: #f59e0b;
+  color: white;
+  border-color: #f59e0b;
+}
+
+.btn-delete:hover {
+  background: #dc2626 !important;
+  color: white !important;
+  border-color: #dc2626 !important;
+}
+
+.action-icon {
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* === EMPTY STATE === */
 .empty {
-  padding: 3rem;
+  padding: 2rem;
   text-align: center;
-  border-top: 2px dashed #d1d5db;
+  border-top: 1px dashed #d1d5db;
 }
 
 .empty-text {
   color: #000000;
-  margin-bottom: 1.5rem;
-  font-size: 1.2rem;
-  font-weight: 700;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 /* === MODAL === */
@@ -647,47 +857,46 @@ td {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(8px);
 }
 
 .modal-content {
   background: white;
-  border-radius: 12px;
-  padding: 2rem;
+  border-radius: 6px;
+  padding: 1.25rem;
   width: 90%;
-  max-width: 500px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  border: 3px solid #1e3a8a;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #1e3a8a;
 }
 
 .modal-content h3 {
   margin-top: 0;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   color: #000000;
-  font-size: 1.5rem;
-  font-weight: 800;
-  border-bottom: 3px solid #1e3a8a;
+  font-size: 1.1rem;
+  font-weight: 700;
   padding-bottom: 0.5rem;
+  border-bottom: 2px solid #1e3a8a;
 }
 
 /* FORM INPUTS */
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  margin: 1.5rem 0;
+  gap: 0.75rem;
+  margin: 1rem 0;
 }
 
 .form-input {
-  padding: 1rem;
-  border: 2px solid #374151;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.85rem;
   color: #000000;
   background: white;
   font-weight: 500;
@@ -695,55 +904,50 @@ td {
 
 .form-input:focus {
   outline: none;
-  border-color: #000000;
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
-}
-
-.form-input::placeholder {
-  color: #6b7280;
-  font-weight: 400;
+  border-color: #1e3a8a;
+  box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.1);
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   cursor: pointer;
   color: #000000;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .checkbox {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
   accent-color: #1e3a8a;
 }
 
 .checkbox-text {
-  font-weight: 700;
-  color: #000000;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 /* MODAL ACTIONS */
 .modal-actions {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   justify-content: flex-end;
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 2px solid #e5e7eb;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
 }
 
 .btn-cancel {
   background: #ffffff;
-  border: 2px solid #dc2626;
+  border: 1px solid #dc2626;
   color: #dc2626;
-  padding: 0.75rem 2rem;
-  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
   cursor: pointer;
-  font-weight: 800;
-  transition: all 0.2s;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .btn-cancel:hover {
@@ -755,64 +959,77 @@ td {
   background: #000000;
   color: white;
   border: none;
-  padding: 0.75rem 2rem;
-  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
   cursor: pointer;
-  font-weight: 800;
-  transition: all 0.2s;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .btn-save:hover {
   background: #1e3a8a;
-  transform: translateY(-2px);
 }
 
 /* === RESPONSIVE === */
 @media (max-width: 768px) {
+  .simple-peserta {
+    padding: 0.5rem;
+  }
+
   .stats {
     flex-direction: column;
   }
 
   .actions {
     flex-direction: column;
-    align-items: stretch;
   }
 
   .search {
     width: 100%;
   }
 
-  .btn-add {
-    width: 100%;
+  .table-compact {
+    font-size: 0.75rem;
   }
 
-  table {
-    display: block;
-    overflow-x: auto;
+  .table-compact th,
+  .table-compact td {
+    padding: 0.25rem 0.35rem;
   }
 
-  th,
-  td {
-    padding: 0.75rem;
-    font-size: 0.9rem;
+  .td-nama {
+    min-width: 120px;
   }
 
-  .vote-text {
-    font-size: 0.8rem;
+  .td-nip {
+    min-width: 80px;
+  }
+
+  .td-actions {
+    width: 100px;
+  }
+
+  .btn-action-sm {
+    width: 26px;
+    height: 26px;
   }
 }
 
 @media (max-width: 480px) {
   .page-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
     align-items: stretch;
     text-align: center;
   }
 
+  .back-btn {
+    width: 100%;
+  }
+
   .modal-content {
-    margin: 1rem;
-    padding: 1.5rem;
+    margin: 0.5rem;
+    padding: 1rem;
   }
 
   .modal-actions {
@@ -833,18 +1050,18 @@ td {
 
   .page-header,
   .actions,
-  .btn-action {
+  .btn-action-sm {
     display: none;
   }
 
-  table {
-    border: 2px solid #000000;
+  .table-compact table {
+    border: 1px solid #000000;
   }
 
-  th {
+  .table-compact th {
     background: #ffffff !important;
     color: #000000 !important;
-    border-bottom: 2px solid #000000;
+    border-bottom: 1px solid #000000;
   }
 }
 </style>
