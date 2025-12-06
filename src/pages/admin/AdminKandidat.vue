@@ -173,7 +173,14 @@ const filteredKandidat = computed(() => {
 
 const availableGuru = computed(() => {
   const candidateIds = kandidatList.value.map((k) => k.pengguna_id)
-  return guruList.value.filter((g) => !candidateIds.includes(g.id))
+  return guruList.value.filter((g) => {
+    // Filter yang belum jadi kandidat
+    const belumKandidat = !candidateIds.includes(g.id)
+
+    // Filter masa kerja >= 3 tahun (validasi tambahan)
+    const masaKerja = calculateMasaKerja(g)
+    return belumKandidat && masaKerja >= 3
+  })
 })
 
 const formValid = computed(() => {
@@ -189,49 +196,7 @@ const emptyMessage = computed(() => {
   return 'Belum ada kandidat'
 })
 
-// Methods
-const loadData = async () => {
-  try {
-    // Load session
-    const { data: session } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
-      .single()
-    activeSession.value = session
-
-    // Load kandidat
-    const { data: kandidat } = await supabase
-      .from('kandidat')
-      .select(
-        `
-        *,
-        pengguna:pengguna_id (nama_lengkap, nip)
-      `,
-      )
-      .order('nomor_urut')
-
-    kandidatList.value = (kandidat || []).map((k) => ({
-      ...k,
-      nama: k.pengguna?.nama_lengkap || 'Unknown',
-      nip: k.pengguna?.nip || 'N/A',
-    }))
-
-    // Load guru
-    const { data: guru } = await supabase
-      .from('pengguna')
-      .select('*')
-      .eq('peran', 'guru')
-      .eq('is_active', true)
-      .order('nama_lengkap')
-
-    guruList.value = guru || []
-  } catch (error) {
-    console.error('Load error:', error)
-  }
-}
-
+// Helper Functions
 const getInitials = (name) => {
   if (!name) return '??'
   return name
@@ -249,60 +214,113 @@ const getPercentage = (kandidat) => {
   return total > 0 ? Math.round((kandidat.total_suara / total) * 100) : 0
 }
 
+const calculateMasaKerja = (guru) => {
+  // Asumsi: hitung dari tahun lahir (simplified)
+  // Idealnya ada field 'tanggal_mulai_kerja' di tabel pengguna
+  const today = new Date()
+  const lahir = new Date(guru.tanggal_lahir)
+
+  // Hitung usia
+  const usia = today.getFullYear() - lahir.getFullYear()
+
+  // Asumsi mulai kerja usia minimal 18 tahun
+  // Masa kerja = usia - 18
+  const masaKerja = Math.max(0, usia - 18)
+
+  return masaKerja
+}
+
+const getMasaKerjaText = (guru) => {
+  const masaKerja = calculateMasaKerja(guru)
+  return `${masaKerja} tahun`
+}
+
+// Load Data
+const loadData = async () => {
+  try {
+    // Load active session
+    const { data: session } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
+      .single()
+    activeSession.value = session
+
+    // Load kandidat dengan data pengguna
+    const { data: kandidat } = await supabase
+      .from('kandidat')
+      .select(
+        `
+        *,
+        pengguna:pengguna_id (
+          id,
+          nama_lengkap,
+          nip,
+          tanggal_lahir,
+          peran
+        )
+      `,
+      )
+      .eq('sesi_id', activeSession.value?.id || '')
+      .order('nomor_urut')
+
+    kandidatList.value = (kandidat || []).map((k) => ({
+      ...k,
+      nama: k.pengguna?.nama_lengkap || 'Unknown',
+      nip: k.pengguna?.nip || 'N/A',
+      tanggal_lahir: k.pengguna?.tanggal_lahir,
+    }))
+
+    // Load semua guru untuk dropdown
+    const { data: guru } = await supabase
+      .from('pengguna')
+      .select('*')
+      .eq('peran', 'guru')
+      .eq('is_active', true)
+      .order('nama_lengkap')
+
+    guruList.value = guru || []
+  } catch (error) {
+    console.error('Load error:', error)
+    // Set default empty arrays on error
+    kandidatList.value = []
+    guruList.value = []
+  }
+}
+
+// Modal Functions
 const addKandidat = () => {
   if (!canAdd.value) {
     alert('Hanya bisa menambah kandidat saat sesi PENDAFTARAN atau VOTING')
     return
   }
+
+  // Reset form untuk tambah baru
   editing.value = false
-  form.value = { jabatan: 'sarpras', pengguna_id: '', nomor_urut: kandidatList.value.length + 1 }
+  form.value = {
+    jabatan: 'sarpras',
+    pengguna_id: '',
+    nomor_urut: kandidatList.value.length + 1,
+  }
   showModal.value = true
 }
 
 const editKandidat = (k) => {
+  // Hanya bisa edit di sesi pendaftaran
+  if (activeSession.value?.status !== 'pendaftaran') {
+    alert('Hanya bisa mengedit kandidat saat sesi PENDAFTARAN')
+    return
+  }
+
   editing.value = true
   form.value = {
+    id: k.id,
     jabatan: k.jabatan,
     pengguna_id: k.pengguna_id,
     nomor_urut: k.nomor_urut,
-    id: k.id,
-    total_suara: k.total_suara,
   }
   showModal.value = true
-}
-
-const createPendaftaranDummy = async (penggunaId, sesiId, jabatan) => {
-  try {
-    // Cek apakah sudah ada pendaftaran
-    const { data: existing } = await supabase
-      .from('pendaftaran_kandidat')
-      .select('id')
-      .eq('pengguna_id', penggunaId)
-      .eq('sesi_id', sesiId)
-      .maybeSingle()
-
-    if (existing) return existing.id
-
-    // Buat pendaftaran baru
-    const { data: newPendaftaran } = await supabase
-      .from('pendaftaran_kandidat')
-      .insert([
-        {
-          pengguna_id: penggunaId,
-          sesi_id: sesiId,
-          jabatan_diajukan: jabatan,
-          visi_misi: 'Ditambahkan langsung oleh admin',
-          status: 'disetujui',
-        },
-      ])
-      .select('id')
-      .single()
-
-    return newPendaftaran?.id
-  } catch (error) {
-    console.error('Failed to create pendaftaran:', error)
-    return null
-  }
 }
 
 const saveKandidat = async () => {
@@ -312,62 +330,123 @@ const saveKandidat = async () => {
       return
     }
 
-    // Buat pendaftaran dummy
-    const pendaftaranId = await createPendaftaranDummy(
-      form.value.pengguna_id,
-      activeSession.value.id,
-      form.value.jabatan,
-    )
-
-    if (!pendaftaranId) {
-      alert('❌ Gagal membuat data pendaftaran')
+    // Validasi form
+    if (!form.value.pengguna_id) {
+      alert('Pilih guru terlebih dahulu!')
       return
     }
 
-    // Simpan kandidat
+    // Validasi masa kerja (wajib ≥3 tahun)
+    const selectedGuru = guruList.value.find((g) => g.id === form.value.pengguna_id)
+    if (selectedGuru) {
+      const masaKerja = calculateMasaKerja(selectedGuru)
+      if (masaKerja < 3) {
+        alert(`❌ ${selectedGuru.nama_lengkap} masa kerja ${masaKerja} tahun, minimal 3 tahun!`)
+        return
+      }
+    }
+
+    // Validasi nomor urut unik per jabatan dan sesi
+    const existingNomor = kandidatList.value.find(
+      (k) =>
+        k.jabatan === form.value.jabatan &&
+        k.nomor_urut === form.value.nomor_urut &&
+        (!editing.value || k.id !== form.value.id),
+    )
+
+    if (existingNomor) {
+      alert(
+        `❌ Nomor urut ${form.value.nomor_urut} sudah digunakan untuk jabatan ${form.value.jabatan}`,
+      )
+      return
+    }
+
+    // Data untuk disimpan
     const kandidatData = {
-      pendaftaran_id: pendaftaranId,
       pengguna_id: form.value.pengguna_id,
       sesi_id: activeSession.value.id,
       jabatan: form.value.jabatan,
       nomor_urut: form.value.nomor_urut,
-      visi_misi: '',
-      total_suara: editing.value ? form.value.total_suara || 0 : 0,
+      // Untuk edit, pertahankan total_suara yang ada
+      total_suara: editing.value
+        ? kandidatList.value.find((k) => k.id === form.value.id)?.total_suara || 0
+        : 0,
     }
 
+    // Simpan ke database
     if (editing.value) {
-      await supabase.from('kandidat').update(kandidatData).eq('id', form.value.id)
+      // Update existing
+      const { error } = await supabase.from('kandidat').update(kandidatData).eq('id', form.value.id)
+
+      if (error) throw error
     } else {
-      await supabase.from('kandidat').insert([kandidatData])
+      // Insert new
+      const { error } = await supabase.from('kandidat').insert([kandidatData])
+
+      if (error) throw error
     }
 
+    // Reload data
     await loadData()
+
+    // Close modal & show success
     closeModal()
-    alert('✅ Berhasil!')
+    alert(`✅ Kandidat ${editing.value ? 'diperbarui' : 'ditambahkan'}!`)
   } catch (error) {
     console.error('Save error:', error)
-    alert('❌ Gagal: ' + (error.message || 'Unknown error'))
+    alert('❌ Gagal menyimpan: ' + (error.message || 'Unknown error'))
   }
 }
 
 const deleteKandidat = async (k) => {
-  if (!confirm(`Hapus kandidat ${k.nama}?`)) return
+  // Hanya bisa delete di sesi pendaftaran
+  if (activeSession.value?.status !== 'pendaftaran') {
+    alert('Hanya bisa menghapus kandidat saat sesi PENDAFTARAN')
+    return
+  }
+
+  if (!confirm(`Hapus kandidat ${k.nama} (${k.jabatan})?`)) return
+
   try {
-    await supabase.from('kandidat').delete().eq('id', k.id)
+    const { error } = await supabase.from('kandidat').delete().eq('id', k.id)
+
+    if (error) throw error
+
     await loadData()
-    alert('✅ Dihapus!')
+    alert('✅ Kandidat dihapus!')
   } catch (error) {
-    alert('❌ Gagal: ' + error.message)
+    console.error('Delete error:', error)
+    alert('❌ Gagal menghapus: ' + error.message)
   }
 }
 
 const closeModal = () => {
   showModal.value = false
+  editing.value = false
+  form.value = {
+    jabatan: 'sarpras',
+    pengguna_id: '',
+    nomor_urut: kandidatList.value.length + 1,
+  }
 }
 
 // Lifecycle
 onMounted(async () => {
   await loadData()
+})
+
+// Auto-refresh setiap 30 detik jika sesi voting
+const startAutoRefresh = () => {
+  if (activeSession.value?.status === 'voting') {
+    setInterval(async () => {
+      await loadData()
+    }, 30000) // 30 detik
+  }
+}
+
+onMounted(() => {
+  loadData()
+  startAutoRefresh()
 })
 </script>
 
