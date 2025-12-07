@@ -584,7 +584,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/utils/supabase'
@@ -604,11 +604,8 @@ const submitting = ref(false)
 const registrationResult = ref(null)
 const confirmSelfRegistration = ref(false)
 const activeTab = ref('all')
-const lastUpdated = ref(null)
-const newCandidateNotification = ref(null)
-const kandidatSubscription = ref(null)
 
-// Form - HAPUS nomor_urut dari form
+// Form
 const form = ref({
   pengguna_id: '',
   jabatan: '',
@@ -617,7 +614,7 @@ const form = ref({
 // ==================== COMPUTED PROPERTIES ====================
 const user = computed(() => authStore.user || null)
 
-// SEMUA PESERTA BISA MENDAPATKAN
+// SEMUA PESERTA BISA MENDAFTARKAN
 const canRegister = computed(() => {
   if (!user.value) return false
   if (!activeSession.value) return false
@@ -918,7 +915,7 @@ const getOtherPositions = (kandidat) => {
   return positions
 }
 
-// Validasi form - HAPUS VALIDASI NOMOR URUT MANUAL
+// Validasi form
 const canSubmit = computed(() => {
   if (!form.value.jabatan || !form.value.pengguna_id) return false
   if (!selectedGuruDetail.value) return false
@@ -978,67 +975,6 @@ const formatJabatan = (jabatan) => {
   return map[jabatan] || jabatan
 }
 
-// ==================== REAL-TIME FUNCTIONS ====================
-const setupRealtimeUpdates = () => {
-  if (!activeSession.value) return
-
-  console.log('🔔 Setting up real-time updates for session:', activeSession.value.id)
-
-  // Subscribe ke perubahan tabel kandidat
-  kandidatSubscription.value = supabase
-    .channel('kandidat-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*', // INSERT, UPDATE, DELETE
-        schema: 'public',
-        table: 'kandidat',
-        filter: `sesi_id=eq.${activeSession.value.id}`,
-      },
-      async (payload) => {
-        console.log('🔔 Real-time update:', payload.event, payload.new)
-
-        // Jika ada INSERT baru (kandidat baru didaftarkan)
-        if (payload.event === 'INSERT') {
-          // Ambil detail kandidat
-          const { data: kandidatDetail } = await supabase
-            .from('kandidat')
-            .select(
-              `
-              *,
-              pengguna:pengguna_id (nama_lengkap)
-            `,
-            )
-            .eq('id', payload.new.id)
-            .single()
-
-          if (kandidatDetail && kandidatDetail.pengguna) {
-            newCandidateNotification.value = {
-              nama: kandidatDetail.pengguna.nama_lengkap,
-              jabatan: kandidatDetail.jabatan,
-              timestamp: new Date(),
-            }
-
-            // Auto-hide setelah 10 detik
-            setTimeout(() => {
-              newCandidateNotification.value = null
-            }, 10000)
-          }
-        }
-
-        // Refresh data
-        await loadKandidat()
-        await loadMyRegistrations()
-        lastUpdated.value = new Date().toLocaleTimeString()
-      },
-    )
-    .subscribe((status) => {
-      console.log('📡 Subscription status:', status)
-    })
-}
-
-// Removed: refreshKandidat function is not used and real-time updates are handled by setupRealtimeUpdates()
-
 // ==================== METHODS ====================
 const goToLogin = () => {
   router.push('/login-calon')
@@ -1059,7 +995,7 @@ const resetForm = () => {
   registrationResult.value = null
 }
 
-// ==================== DATA LOADING ====================
+// ==================== DATA LOADING (TANPA REAL-TIME) ====================
 const loadData = async () => {
   loading.value = true
   try {
@@ -1074,9 +1010,7 @@ const loadData = async () => {
       activeSession.value = sessions[0]
       await loadKandidat()
       await loadMyRegistrations()
-
-      // Setup real-time updates setelah data load
-      setupRealtimeUpdates()
+      // TIDAK ADA SETUP REALTIME
     } else {
       activeSession.value = null
     }
@@ -1096,8 +1030,6 @@ const loadData = async () => {
       .order('tahun_mulai', { ascending: false })
 
     periodeJabatanList.value = periode || []
-
-    lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error) {
     console.error('Error loading data:', error)
   } finally {
@@ -1208,7 +1140,7 @@ const handleLogout = async () => {
   }
 }
 
-// ==================== SUBMIT REGISTRATION DENGAN NOMOR URUT OTOMATIS ====================
+// ==================== SUBMIT REGISTRATION ====================
 const submitRegistration = async () => {
   if (!canSubmit.value) return
 
@@ -1240,12 +1172,6 @@ const submitRegistration = async () => {
       }
     }
 
-    // ✅ HITUNG NOMOR URUT OTOMATIS
-    console.log('🔍 Getting next nomor urut for:', {
-      sesi_id: activeSession.value.id,
-      jabatan: form.value.jabatan,
-    })
-
     // Get last nomor urut untuk posisi ini
     const { data: lastCandidate, error: lastError } = await supabase
       .from('kandidat')
@@ -1273,7 +1199,7 @@ const submitRegistration = async () => {
         pengguna_id: form.value.pengguna_id,
         sesi_id: activeSession.value.id,
         jabatan: form.value.jabatan,
-        nomor_urut: nextNomorUrut, // ✅ SISTEM OTOMATIS ASSIGN
+        nomor_urut: nextNomorUrut,
         dibuat_oleh: user.value.id,
         total_suara: 0,
         dibuat_pada: new Date().toISOString(),
@@ -1281,11 +1207,10 @@ const submitRegistration = async () => {
       .select()
       .single()
 
-    // ⚠️ **HANDLE CONSTRAINT ERRORS DENGAN TEPAT**
+    // Handle constraint errors
     if (kandidatError) {
       console.error('Database error:', kandidatError)
 
-      // 1. Error UNIQUE (sesi_id, pengguna_id, jabatan) - constraint: kandidat_sesi_jabatan_unique
       if (kandidatError.code === '23505') {
         if (kandidatError.message.includes('kandidat_sesi_jabatan_unique')) {
           throw new Error(
@@ -1293,21 +1218,17 @@ const submitRegistration = async () => {
           )
         }
 
-        // 2. Error UNIQUE (sesi_id, jabatan, nomor_urut) - constraint: kandidat_sesi_id_jabatan_nomor_urut_key
         if (kandidatError.message.includes('kandidat_sesi_id_jabatan_nomor_urut_key')) {
-          // Race condition: nomor urut sudah dipakai orang lain
           throw new Error(
             `⚠️ Nomor urut ${nextNomorUrut} sudah digunakan. Silakan refresh halaman dan coba lagi.`,
           )
         }
 
-        // 3. General unique error
         throw new Error(
           'Data sudah ada di database. Kemungkinan sudah didaftarkan oleh peserta lain.',
         )
       }
 
-      // Error lainnya
       if (kandidatError.code === '42501') {
         throw new Error('Tidak memiliki izin untuk menyimpan data. Hubungi administrator.')
       }
@@ -1338,7 +1259,7 @@ const submitRegistration = async () => {
       message: error.message || 'Terjadi kesalahan yang tidak diketahui',
     }
 
-    // ✅ AUTO-REFRESH SETELAH ERROR CONSTRAINT
+    // Auto-refresh setelah error constraint
     if (error.message.includes('sudah terdaftar') || error.message.includes('23505')) {
       console.log('🔄 Auto-refresh karena constraint error')
       await loadKandidat()
@@ -1381,14 +1302,6 @@ onMounted(async () => {
   }
 })
 
-// Unsubscribe saat komponen di-destroy
-onUnmounted(() => {
-  if (kandidatSubscription.value) {
-    supabase.removeChannel(kandidatSubscription.value)
-    console.log('🔕 Unsubscribed from real-time updates')
-  }
-})
-
 // Watch perubahan jabatan
 watch(
   () => form.value.jabatan,
@@ -1399,6 +1312,11 @@ watch(
   },
 )
 </script>
+
+<style scoped>
+/* CSS tetap sama seperti sebelumnya */
+/* ... semua style code tetap ... */
+</style>
 <style scoped>
 /* STYLE TAMBAHAN UNTUK PERUBAHAN */
 
