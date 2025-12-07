@@ -22,10 +22,22 @@
         </p>
         <p>NIP: {{ user.nip }}</p>
         <p>Status: {{ user.status_kepegawaian || 'Tidak tersedia' }}</p>
-        <p v-if="user.status_kepegawaian === 'PNS' || user.status_kepegawaian === 'PPPK'">
-          Hak: <span class="badge-success">Bisa mendaftarkan calon</span>
+
+        <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN CALON -->
+        <p>
+          <span class="badge-success">✅ Bisa mendaftarkan calon</span>
         </p>
-        <p v-else>Hak: <span class="badge-warning">Hanya bisa melihat</span></p>
+
+        <!-- Hanya PNS/PPPK yang bisa dicalonkan -->
+        <p v-if="user.can_be_candidate">
+          <span class="badge-info">🎯 Bisa dicalonkan sebagai kandidat</span>
+        </p>
+        <p v-else-if="user.peran === 'guru'">
+          <span class="badge-warning">👀 Bisa mendaftarkan, tapi tidak bisa dicalonkan</span>
+        </p>
+        <p v-else>
+          <span class="badge-secondary">📋 Tenaga Kependidikan: Hanya bisa mendaftarkan</span>
+        </p>
       </div>
 
       <!-- NO USER -->
@@ -119,6 +131,7 @@
 
           <div class="limit-info" v-if="activeSession.status === 'pendaftaran'">
             <p><strong>📋 Ketentuan Pendaftaran Calon:</strong></p>
+            <p>• <strong>Semua peserta</strong> boleh mendaftarkan calon</p>
             <p>• Setiap peserta boleh mendaftarkan <strong>1 calon per jabatan</strong></p>
             <p>
               • <strong>1 guru dapat menjadi kandidat di kedua posisi</strong> (Sarpras dan
@@ -270,6 +283,7 @@
         <h3>Daftarkan Calon Kandidat</h3>
 
         <div class="my-limit-info">
+          <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN -->
           <p v-if="remainingQuota === 0" class="limit-full">
             ⚠️ Anda sudah mendaftarkan calon untuk <strong>kedua jabatan</strong>.
           </p>
@@ -284,7 +298,8 @@
             <small
               >💡 <strong>Aturan:</strong> 1 guru dapat menjadi kandidat di
               <strong>kedua posisi</strong> (Sarpras dan Kesiswaan) secara bersamaan. Anda juga bisa
-              mendaftarkan diri sendiri.</small
+              mendaftarkan diri sendiri
+              <strong v-if="!user.can_be_candidate">(jika eligible)</strong>.</small
             >
           </p>
         </div>
@@ -331,11 +346,22 @@
                   v-for="guru in availableGuruForCurrentPosition"
                   :key="guru.id"
                   :value="guru.id"
-                  :class="{ 'self-option': guru.id === user.id }"
+                  :class="{
+                    'self-option': guru.id === user.id && user.can_be_candidate,
+                    'self-not-eligible': guru.id === user.id && !user.can_be_candidate,
+                  }"
                 >
                   {{ guru.nama_lengkap }}
                   ({{ guru.nip || 'No NIP' }}) - {{ calculateMasaKerja(guru) }}
-                  <span v-if="guru.id === user.id">👤 (Anda)</span>
+
+                  <!-- Label untuk diri sendiri -->
+                  <span v-if="guru.id === user.id && user.can_be_candidate"
+                    >👤 (Anda - Eligible)</span
+                  >
+                  <span v-if="guru.id === user.id && !user.can_be_candidate"
+                    >👤 (Anda - Tidak Eligible)</span
+                  >
+
                   <span
                     v-if="isGuruAlreadyCandidateInOtherPosition(guru, form.jabatan)"
                     class="already-candidate-info"
@@ -345,8 +371,27 @@
                 </option>
               </select>
 
+              <!-- WARNING UNTUK DIRI SENDIRI YANG TIDAK ELIGIBLE -->
+              <div
+                v-if="isSelfRegistration && !user.can_be_candidate"
+                class="self-not-eligible-warning"
+              >
+                <h4>⚠️ Anda Tidak Bisa Dicalonkan</h4>
+                <p>Anda tidak memenuhi syarat untuk menjadi kandidat karena:</p>
+                <ul>
+                  <li v-if="!['PNS', 'PPPK'].includes(user.status_kepegawaian)">
+                    ❌ Status kepegawaian: {{ user.status_kepegawaian }} (harus PNS/PPPK)
+                  </li>
+                  <li v-if="user.eligibility_message">❌ {{ user.eligibility_message }}</li>
+                </ul>
+                <p class="warning-note">Silakan pilih guru lain yang eligible.</p>
+              </div>
+
               <!-- GURU DETAIL -->
-              <div v-if="selectedGuruDetail" class="guru-detail">
+              <div
+                v-if="selectedGuruDetail && (!isSelfRegistration || user.can_be_candidate)"
+                class="guru-detail"
+              >
                 <h4>📋 Detail Guru Terpilih:</h4>
                 <div class="detail-grid">
                   <div class="detail-item">
@@ -427,8 +472,8 @@
                   <p>Guru ini memenuhi semua syarat untuk menjadi kandidat</p>
                 </div>
 
-                <!-- SELF-REGISTRATION WARNING -->
-                <div v-if="isSelfRegistration" class="self-warning-box">
+                <!-- SELF-REGISTRATION WARNING (hanya jika bisa dicalonkan) -->
+                <div v-if="isSelfRegistration && user.can_be_candidate" class="self-warning-box">
                   <h5>👤 Anda akan mendaftarkan diri sendiri</h5>
                   <div class="confirmation-checkbox">
                     <input type="checkbox" id="confirmSelf" v-model="confirmSelfRegistration" />
@@ -442,7 +487,10 @@
             </div>
 
             <!-- NOMOR URUT -->
-            <div class="form-group">
+            <div
+              class="form-group"
+              v-if="selectedGuruDetail && (!isSelfRegistration || user.can_be_candidate)"
+            >
               <label>Nomor Urut *</label>
               <input
                 v-model.number="form.nomor_urut"
@@ -462,7 +510,10 @@
             </div>
 
             <!-- SUBMIT BUTTON -->
-            <div class="form-actions">
+            <div
+              class="form-actions"
+              v-if="selectedGuruDetail && (!isSelfRegistration || user.can_be_candidate)"
+            >
               <button
                 type="submit"
                 :disabled="
@@ -499,9 +550,7 @@
         <div v-else-if="remainingQuota === 0">
           <p>❌ Anda sudah mendaftarkan calon untuk kedua jabatan</p>
         </div>
-        <div v-else-if="!user.can_register_candidate">
-          <p>❌ Anda tidak dapat mendaftarkan calon (hanya PNS/PPPK yang bisa)</p>
-        </div>
+        <!-- PERUBAHAN: HAPUS PENCEKAN can_register_candidate -->
       </div>
 
       <!-- INFO BOX -->
@@ -511,10 +560,27 @@
         <p>• Waka Sarana Prasarana (Sarpras)</p>
         <p>• Waka Kesiswaan</p>
         <p><strong>Status Anda:</strong> {{ user.status_kepegawaian }}</p>
+
+        <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN -->
         <p>
-          <strong>Hak Anda:</strong>
-          {{ user.can_register_candidate ? 'Bisa mendaftarkan calon' : 'Hanya bisa melihat' }}
+          <strong>Hak Anda:</strong> <span class="text-success">✅ Bisa mendaftarkan calon</span>
         </p>
+
+        <p v-if="user.can_be_candidate">
+          <strong>Status Kandidat:</strong> <span class="text-success">✅ Bisa dicalonkan</span>
+        </p>
+        <p v-else>
+          <strong>Status Kandidat:</strong>
+          <span class="text-warning">❌ Tidak bisa dicalonkan</span>
+          <small class="text-muted">
+            {{
+              user.peran !== 'guru'
+                ? '(Karena bukan guru)'
+                : '(Karena status kepegawaian bukan PNS/PPPK)'
+            }}
+          </small>
+        </p>
+
         <p><strong>Syarat Eligibility Calon:</strong></p>
         <ul>
           <li>✓ Status kepegawaian: PNS atau PPPK</li>
@@ -528,7 +594,7 @@
         <ul>
           <li>✓ 1 guru dapat menjadi kandidat di kedua posisi</li>
           <li>✓ 1 peserta boleh mendaftarkan 1 calon per jabatan</li>
-          <li>✓ Boleh mendaftarkan diri sendiri</li>
+          <li>✓ Boleh mendaftarkan diri sendiri (jika eligible)</li>
           <li>✓ Tidak boleh mendaftarkan guru yang sudah jadi kandidat di posisi yang sama</li>
         </ul>
       </div>
@@ -577,11 +643,12 @@ const form = ref({
 // ==================== COMPUTED PROPERTIES ====================
 const user = computed(() => authStore.user || null)
 
+// PERUBAHAN: SEMUA PESERTA BISA MENDAPATKAN
 const canRegister = computed(() => {
   if (!user.value) return false
   if (!activeSession.value) return false
   if (activeSession.value.status !== 'pendaftaran') return false
-  if (user.value.can_register_candidate === false) return false
+  // ✅ SEMUA PESERTA BISA, TIDAK ADA PENCEKAN can_register_candidate
   return true
 })
 
@@ -613,7 +680,7 @@ const emptyMessage = computed(() => {
   return 'Belum ada kandidat untuk sesi ini'
 })
 
-// ==================== FUNGSI PARSING NIP (SAMA DENGAN ADMIN) ====================
+// ==================== FUNGSI PARSING NIP ====================
 const parseNIP = (nip) => {
   if (!nip || typeof nip !== 'string') return null
   const nipStr = nip.trim()
@@ -672,7 +739,7 @@ const isValidDate = (dateStr) => {
 
 const isNIPValid = (nip) => parseNIP(nip) !== null
 
-// ==================== FUNGSI PERHITUNGAN (SAMA DENGAN ADMIN) ====================
+// ==================== FUNGSI PERHITUNGAN ====================
 const calculateMasaKerja = (guru) => {
   const parsed = parseNIP(guru?.nip)
   if (!parsed) return '?'
@@ -753,7 +820,7 @@ const getSisaPensiunStatus = (guru) => {
   return 'masih lama'
 }
 
-// ==================== FUNGSI ELIGIBILITY (SAMA DENGAN ADMIN) ====================
+// ==================== FUNGSI ELIGIBILITY ====================
 const isPNSatauPPPK = (status) => ['PNS', 'PPPK'].includes(status)
 
 const isEligible = (guru) => {
@@ -817,7 +884,7 @@ const eligibleBySisaPensiun = computed(
     }).length,
 )
 
-// ==================== FUNGSI UNTUK 1 GURU 2 POSISI (SAMA DENGAN ADMIN) ====================
+// ==================== FUNGSI UNTUK 1 GURU 2 POSISI ====================
 const isGuruAlreadyCandidateInThisPosition = (guru, position) => {
   return kandidatList.value.some((k) => k.pengguna_id === guru.id && k.jabatan === position)
 }
@@ -833,13 +900,13 @@ const getOtherPositionForGuru = (guru, currentPosition) => {
   return otherPosition ? (otherPosition.jabatan === 'sarpras' ? 'Sarpras' : 'Kesiswaan') : ''
 }
 
-// Available guru untuk posisi saat ini (tidak boleh sudah jadi kandidat di posisi ini)
+// PERUBAHAN: Available guru untuk semua peserta (tidak dibatasi)
 const availableGuruForCurrentPosition = computed(() => {
   const currentPosition = form.value.jabatan
   if (!currentPosition) return []
 
   return guruList.value.filter((g) => {
-    // Filter yang eligible
+    // Filter yang eligible sebagai CALON
     if (!isEligible(g)) return false
     // Filter yang aktif
     if (!g.is_active) return false
@@ -904,11 +971,13 @@ const canSubmit = computed(() => {
   if (!selectedGuruDetail.value) return false
   if (!isEligible(selectedGuruDetail.value)) return false
   if (needsJeda(selectedGuruDetail.value)) return false
+  // PERUBAHAN: Self-registration hanya jika bisa dicalonkan
+  if (isSelfRegistration.value && !user.value.can_be_candidate) return false
   if (isSelfRegistration.value && !confirmSelfRegistration.value) return false
   return true
 })
 
-// ==================== PERIODE JABATAN (SAMA DENGAN ADMIN) ====================
+// ==================== PERIODE JABATAN ====================
 const getJumlahPeriode = (guru) => {
   if (!guru?.id) return 0
   const periode = periodeJabatanList.value.filter((p) => p.pengguna_id === guru.id)
@@ -1256,6 +1325,91 @@ watch(
 </script>
 
 <style scoped>
+/* STYLE TAMBAHAN UNTUK PERUBAHAN */
+
+/* Badge baru */
+.badge-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #1e40af;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-secondary {
+  background: rgba(107, 114, 128, 0.2);
+  color: #374151;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.text-success {
+  color: #059669;
+  font-weight: 600;
+}
+
+.text-warning {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.text-muted {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+/* Warning untuk diri sendiri tidak eligible */
+.self-not-eligible-warning {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fee2e2;
+  border-radius: 8px;
+  border: 2px solid #fca5a5;
+}
+
+.self-not-eligible-warning h4 {
+  color: #dc2626;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.self-not-eligible-warning ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.self-not-eligible-warning li {
+  color: #991b1b;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.warning-note {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* Option untuk diri sendiri yang tidak eligible */
+.self-not-eligible {
+  background-color: #fef2f2;
+  color: #991b1b;
+  font-style: italic;
+}
+
+/* Tampilan form jika tidak eligible */
+.guru-detail {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+}
+
 .dashboard-calon {
   max-width: 1200px;
   margin: 0 auto;

@@ -152,7 +152,7 @@ export const useAuthStore = defineStore('auth', {
           throw new Error('Password tidak valid')
         }
 
-        // 5. CEK ELIGIBILITY FLAG (hanya untuk PNS/PPPK yang bisa jadi calon)
+        // 5. CEK ELIGIBILITY FLAG (hanya untuk PNS/PPPK yang bisa JADI CALON)
         let eligibilityMessage = null
         if (['PNS', 'PPPK'].includes(status)) {
           if (peserta.is_manual_noneligible) {
@@ -162,7 +162,7 @@ export const useAuthStore = defineStore('auth', {
           }
         }
 
-        // 6. Set user data
+        // 6. Set user data - PERUBAHAN PENTING DI SINI
         this.user = {
           id: peserta.id,
           nip: peserta.nip,
@@ -173,8 +173,13 @@ export const useAuthStore = defineStore('auth', {
           status_kepegawaian: peserta.status_kepegawaian,
           tanggal_lahir: tanggalLahirString,
           is_peserta: true,
-          can_register_candidate:
-            ['PNS', 'PPPK'].includes(status) && !peserta.is_manual_noneligible,
+
+          // ✅ PERUBAHAN: SEMUA PESERTA BISA MENDAPATKAN CALON
+          can_register_candidate: true, // SEMUA BISA MENDAPATKAN
+
+          // ✅ Syarat untuk BISA DICALONKAN (sebagai calon)
+          can_be_candidate: ['PNS', 'PPPK'].includes(status) && !peserta.is_manual_noneligible,
+
           can_vote: true, // Semua bisa voting (nanti pakai token QR)
           eligibility_message: eligibilityMessage,
           last_login: new Date().toISOString(),
@@ -294,20 +299,27 @@ export const useAuthStore = defineStore('auth', {
       return this.loginType === 'peserta'
     },
 
+    // ✅ PERUBAHAN: SEMUA PESERTA BISA MENDAPATKAN CALON
     canRegisterCandidate() {
-      return this.isPeserta() && this.user?.can_register_candidate === true
+      return this.isPeserta() // Semua peserta bisa
     },
 
     canVote() {
       return this.isPeserta() && this.user?.can_vote === true
     },
 
+    // ✅ PERUBAHAN: BEDA ANTARA "BISA MENDAPATKAN" vs "BISA DICALONKAN"
     isEligibleCandidate() {
       return (
-        this.canRegisterCandidate() &&
+        this.isPeserta() &&
         ['PNS', 'PPPK'].includes(this.user?.status_kepegawaian) &&
         !this.user?.eligibility_message
       )
+    },
+
+    // ✅ FUNGSI BARU: Apakah user bisa dicalonkan
+    canBeCandidate() {
+      return this.user?.can_be_candidate === true
     },
 
     // ==================== GET USER INFO ====================
@@ -422,6 +434,8 @@ export const useAuthStore = defineStore('auth', {
         pangkat: state.user.pangkat,
         golongan: state.user.golongan_ruang,
         peran: state.user.peran === 'guru' ? 'Guru' : 'Tenaga Kependidikan',
+        dapat_mendaftarkan: 'Ya', // ✅ Semua bisa mendaftarkan
+        dapat_dicalonkan: state.user.can_be_candidate ? 'Ya' : 'Tidak', // ✅ Hanya PNS/PPPK
       }
     },
 
