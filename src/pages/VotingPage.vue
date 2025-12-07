@@ -207,6 +207,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Debug Info (Hanya untuk development) -->
+    <div v-if="isDevelopment" class="debug-info">
+      <h4>Debug Info:</h4>
+      <p>Voter Session: {{ voterSessionExists ? 'Found' : 'Not Found' }}</p>
+      <p>Current Step: {{ currentStep }}</p>
+      <p>Session Age: {{ sessionAge }} ms</p>
+      <button @click="clearSessionAndRedirect" class="debug-btn">Clear Session & Redirect</button>
+    </div>
   </div>
 </template>
 
@@ -225,6 +234,7 @@ const submitting = ref(false)
 const error = ref('')
 const success = ref(false)
 const showConfirmModal = ref(false)
+const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost'
 
 // Candidates data - DIUBAH: Hanya 2 array
 const kesiswaanCandidates = ref([])
@@ -248,6 +258,15 @@ const isCurrentStepValid = computed(() => {
 
 const isAllStepsValid = computed(() => {
   return selectedKesiswaan.value !== null && selectedSarpras.value !== null
+})
+
+const voterSessionExists = computed(() => {
+  return !!localStorage.getItem('smanda_voter')
+})
+
+const sessionAge = computed(() => {
+  if (!voterData.value?.timestamp) return 0
+  return new Date() - new Date(voterData.value.timestamp)
 })
 
 // Methods
@@ -293,44 +312,94 @@ const prevStep = () => {
 
 // Load data
 const loadVoterData = () => {
+  console.log('🔍 Loading voter data from localStorage...')
   const voterSession = localStorage.getItem('smanda_voter')
+
   if (!voterSession) {
-    router.push('/scan')
+    console.error('❌ No voter session found in localStorage')
+    error.value = 'Session tidak ditemukan. Silakan scan token kembali.'
+
+    // Redirect setelah delay
+    setTimeout(() => {
+      router.push('/scan')
+    }, 2000)
     return
   }
 
   try {
+    console.log('📦 Parsing voter session:', voterSession)
     voterData.value = JSON.parse(voterSession)
+    console.log('✅ Voter data loaded:', voterData.value)
+
+    // Validasi struktur data
+    if (!voterData.value.token || !voterData.value.pengguna || !voterData.value.sesi_id) {
+      throw new Error('Data session tidak valid')
+    }
+
+    // Optional: Validasi session expiry (30 menit)
+    const maxAge = 30 * 60 * 1000 // 30 menit
+    if (sessionAge.value > maxAge) {
+      console.warn('⚠️ Voter session expired, clearing...')
+      localStorage.removeItem('smanda_voter')
+      error.value = 'Session telah kadaluarsa. Silakan scan token kembali.'
+
+      setTimeout(() => {
+        router.push('/scan')
+      }, 2000)
+      return
+    }
   } catch (err) {
-    console.error('Error parsing voter session:', err)
-    router.push('/scan')
+    console.error('❌ Error parsing voter session:', err)
+    localStorage.removeItem('smanda_voter')
+    error.value = 'Error memuat data session. Silakan scan token kembali.'
+
+    setTimeout(() => {
+      router.push('/scan')
+    }, 2000)
   }
 }
 
 const loadActiveSession = async () => {
   try {
+    console.log('🔍 Loading active session...')
     const { data, error: sessionError } = await supabase
       .from('sesi_pemilihan')
       .select('*')
       .order('dibuat_pada', { ascending: false })
       .limit(1)
 
-    if (sessionError) throw sessionError
+    if (sessionError) {
+      console.error('❌ Error loading session:', sessionError)
+      throw sessionError
+    }
+
     activeSession.value = data?.[0] || null
+    console.log('✅ Active session loaded:', activeSession.value)
 
     // Check if session is voting
-    if (!activeSession.value || activeSession.value.status !== 'voting') {
-      error.value = 'Sesi voting tidak aktif'
+    if (!activeSession.value) {
+      error.value = 'Tidak ada sesi pemilihan aktif'
+      return
+    }
+
+    if (activeSession.value.status !== 'voting') {
+      error.value = `Sesi voting tidak aktif. Status saat ini: ${activeSession.value.status.toUpperCase()}`
+      console.warn('⚠️ Session not in voting status:', activeSession.value.status)
     }
   } catch (err) {
-    console.error('Error loading session:', err)
-    error.value = 'Gagal memuat data sesi'
+    console.error('❌ Error loading session:', err)
+    error.value = 'Gagal memuat data sesi. Silakan coba lagi nanti.'
   }
 }
 
 const loadCandidates = async () => {
   try {
-    if (!activeSession.value?.id) return
+    if (!activeSession.value?.id) {
+      console.warn('⚠️ No active session ID, skipping candidates load')
+      return
+    }
+
+    console.log('🔍 Loading candidates for session:', activeSession.value.id)
 
     // Load all candidates for current session - DIUBAH: Filter hanya 2 jabatan
     const { data: candidates, error: candidatesError } = await supabase
@@ -349,13 +418,21 @@ const loadCandidates = async () => {
       .order('jabatan', { ascending: true })
       .order('nomor_urut', { ascending: true })
 
-    if (candidatesError) throw candidatesError
+    if (candidatesError) {
+      console.error('❌ Error loading candidates:', candidatesError)
+      throw candidatesError
+    }
+
+    console.log('✅ Candidates loaded:', candidates?.length || 0)
 
     // Filter by position - DIUBAH: Hanya 2 filter
     kesiswaanCandidates.value = candidates?.filter((c) => c.jabatan === 'kesiswaan') || []
     sarprasCandidates.value = candidates?.filter((c) => c.jabatan === 'sarpras') || []
+
+    console.log('🎯 Kesiswaan candidates:', kesiswaanCandidates.value.length)
+    console.log('🎯 Sarpras candidates:', sarprasCandidates.value.length)
   } catch (err) {
-    console.error('Error loading candidates:', err)
+    console.error('❌ Error loading candidates:', err)
     error.value = 'Gagal memuat data calon'
   }
 }
@@ -376,11 +453,22 @@ const confirmSubmit = async () => {
   success.value = false
 
   try {
+    console.log('🚀 Submitting vote...')
+
     // Validate session and voter
-    if (!activeSession.value || !voterData.value) {
-      throw new Error('Data sesi atau pemilih tidak valid')
+    if (!activeSession.value) {
+      throw new Error('Data sesi tidak valid')
     }
 
+    if (!voterData.value) {
+      throw new Error('Data pemilih tidak valid')
+    }
+
+    if (activeSession.value.status !== 'voting') {
+      throw new Error(`Sesi voting tidak aktif. Status: ${activeSession.value.status}`)
+    }
+
+    console.log('📝 Preparing votes data...')
     // Prepare votes data - DIUBAH: Hanya 2 vote
     const votes = []
 
@@ -410,27 +498,48 @@ const confirmSubmit = async () => {
       })
     }
 
+    console.log('💾 Inserting votes:', votes)
     // Insert votes
     const { error: insertError } = await supabase.from('suara').insert(votes)
 
-    if (insertError) throw insertError
+    if (insertError) {
+      console.error('❌ Error inserting votes:', insertError)
+      throw insertError
+    }
 
+    console.log('✅ Votes submitted successfully')
     // Success
     success.value = true
 
     // Clear voter session
     localStorage.removeItem('smanda_voter')
+    console.log('🗑️ Cleared voter session from localStorage')
 
     // Redirect after delay
     setTimeout(() => {
+      console.log('🔄 Redirecting to home page...')
       router.push('/')
     }, 3000)
   } catch (err) {
-    console.error('Error submitting vote:', err)
+    console.error('❌ Error submitting vote:', err)
     error.value = err.message || 'Gagal mengirim voting'
+
+    // Clear error after 5 seconds
+    setTimeout(() => {
+      if (error.value === err.message) {
+        error.value = ''
+      }
+    }, 5000)
   } finally {
     submitting.value = false
   }
+}
+
+// Debug utility
+const clearSessionAndRedirect = () => {
+  console.log('🧹 Clearing session and redirecting...')
+  localStorage.removeItem('smanda_voter')
+  router.push('/scan')
 }
 
 // Prevent accidental page leave
@@ -443,15 +552,23 @@ const beforeUnloadHandler = (event) => {
 
 // Lifecycle
 onMounted(async () => {
+  console.log('🚀 VotingPage mounted')
+
+  // Load voter data first
   loadVoterData()
-  await loadActiveSession()
-  await loadCandidates()
+
+  // Only load session and candidates if voter data is valid
+  if (voterData.value) {
+    await loadActiveSession()
+    await loadCandidates()
+  }
 
   // Add beforeunload listener
   window.addEventListener('beforeunload', beforeUnloadHandler)
 })
 
 onUnmounted(() => {
+  console.log('♻️ VotingPage unmounted')
   window.removeEventListener('beforeunload', beforeUnloadHandler)
 })
 </script>
@@ -1000,6 +1117,42 @@ onUnmounted(() => {
 
 .confirm-btn:hover {
   background: #1e40af;
+}
+
+/* Debug Info (Hanya untuk development) */
+.debug-info {
+  background: #f1f5f9;
+  border: 2px dashed #64748b;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 2rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.debug-info h4 {
+  color: #475569;
+  margin-bottom: 0.5rem;
+}
+
+.debug-info p {
+  color: #64748b;
+  margin: 0.25rem 0;
+}
+
+.debug-btn {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.debug-btn:hover {
+  background: #dc2626;
 }
 
 /* Responsive */

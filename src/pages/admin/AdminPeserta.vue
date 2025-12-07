@@ -1,139 +1,425 @@
 <template>
-  <div class="simple-peserta">
+  <div class="admin-peserta">
     <!-- Header -->
-    <div class="page-header">
-      <h1>👥 Data Guru</h1>
-      <button @click="$router.push('/admin')" class="back-btn">← Dashboard</button>
-    </div>
-
-    <!-- Quick Stats -->
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-number">{{ totalGuru }}</div>
-        <div class="stat-label">Total Guru</div>
+    <div class="header">
+      <div class="title-group">
+        <h1>👥 Data Peserta Pemilih</h1>
+        <p>Guru, Tendik & Honorer - Eligible hanya untuk Guru PNS/PPPK</p>
       </div>
-      <div class="stat">
-        <div class="stat-number">{{ activeGuru }}</div>
-        <div class="stat-label">Aktif</div>
-      </div>
-      <div class="stat">
-        <div class="stat-number">{{ sudahVoting }}</div>
-        <div class="stat-label">Sudah Voting</div>
+      <div class="header-actions">
+        <router-link to="/admin" class="btn btn-outline">← Dashboard</router-link>
+        <button @click="showAddModal" class="btn btn-primary">+ Tambah Peserta</button>
       </div>
     </div>
 
-    <!-- Search & Add -->
-    <div class="actions">
-      <div class="search">
-        <input
-          v-model="searchQuery"
-          placeholder="Cari nama, NIP, atau TTL..."
-          class="search-input"
-        />
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">{{ totalPeserta }}</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ activePesertaCount }}</div>
+        <div class="stat-label active-label">Aktif</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ guruCount }}</div>
+        <div class="stat-label">Guru</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ pnsCount }}</div>
+        <div class="stat-label pns-label">PNS</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ pppkCount }}</div>
+        <div class="stat-label pppk-label">PPPK</div>
+      </div>
+      <div class="stat-card highlight">
+        <div class="stat-value">{{ eligibleCount }}</div>
+        <div class="stat-label eligible-label">Eligible</div>
+      </div>
+    </div>
+
+    <!-- Tabs - Simplified -->
+    <div class="tabs">
+      <button @click="activeTab = 'all'" :class="['tab-btn', { active: activeTab === 'all' }]">
+        📋 Semua ({{ totalPeserta }})
+      </button>
+      <button
+        @click="activeTab = 'eligible'"
+        :class="['tab-btn', { active: activeTab === 'eligible' }]"
+      >
+        🏆 Eligible ({{ eligibleCount }})
+      </button>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="filters-section">
+      <div class="search-box">
         🔍
+        <input v-model="searchQuery" placeholder="Cari nama, NIP..." class="search-input" />
+        <div v-if="searchQuery" class="search-result-info">
+          Menampilkan {{ filteredPeserta.length }} dari {{ currentTabTotal }} peserta
+        </div>
       </div>
-      <button @click="addPeserta" class="btn-add">+ Tambah Guru</button>
+
+      <div class="status-filters">
+        <select v-model="statusFilter" class="filter-select">
+          <option value="">Semua Status</option>
+          <option value="PNS">PNS</option>
+          <option value="PPPK">PPPK</option>
+          <option value="GTT">GTT</option>
+          <option value="PTT">PTT</option>
+          <option value="Honorer">Honorer</option>
+        </select>
+
+        <select v-model="peranFilter" class="filter-select">
+          <option value="">Semua Peran</option>
+          <option value="guru">Guru</option>
+          <option value="tendik">Tendik</option>
+        </select>
+
+        <select v-model="aktifFilter" class="filter-select">
+          <option value="">Semua Status</option>
+          <option value="aktif">Aktif</option>
+          <option value="nonaktif">Non-Aktif</option>
+        </select>
+
+        <button @click="clearFilters" class="btn btn-outline btn-sm">❌ Clear</button>
+      </div>
     </div>
 
-    <!-- Table -->
-    <div class="table-compact">
-      <table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Nama</th>
-            <th>NIP</th>
-            <th>TTL</th>
-            <th>Status</th>
-            <th>Voting</th>
-            <th>Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(guru, index) in filteredGuru" :key="guru.id">
-            <td class="text-bold td-no">{{ index + 1 }}</td>
-            <td class="td-nama">
-              <span class="nama-text">{{ guru.nama_lengkap }}</span>
-            </td>
-            <td class="td-nip">
-              <code class="nip-code">{{ guru.nip }}</code>
-            </td>
-            <td class="td-ttl">
-              <span class="ttl-text">{{ formatDate(guru.tanggal_lahir) }}</span>
-            </td>
-            <td class="td-status">
-              <span :class="['status-badge', guru.is_active ? 'active' : 'inactive']">
-                {{ guru.is_active ? 'AKTIF' : 'NON' }}
-              </span>
-            </td>
-            <td class="td-vote">
-              <span :class="['vote-badge', hasVoted(guru.id) ? 'voted' : 'pending']">
-                {{ hasVoted(guru.id) ? '✅' : '⏳' }}
-                <span class="vote-text">{{ hasVoted(guru.id) ? 'Sudah' : 'Belum' }}</span>
-              </span>
-            </td>
-            <td class="td-actions">
-              <div class="action-buttons">
-                <button @click="editPeserta(guru)" class="btn-action-sm" title="Edit">
-                  <span class="action-icon">✏️</span>
-                </button>
-                <button
-                  @click="toggleStatus(guru)"
-                  class="btn-action-sm"
-                  :title="guru.is_active ? 'Nonaktifkan' : 'Aktifkan'"
-                >
-                  <span class="action-icon">{{ guru.is_active ? '⏸️' : '▶️' }}</span>
-                </button>
-                <button @click="deletePeserta(guru)" class="btn-action-sm btn-delete" title="Hapus">
-                  <span class="action-icon">🗑️</span>
-                </button>
+    <!-- TABLE -->
+    <div class="table-section">
+      <div class="table-header">
+        <h3>{{ getTableTitle() }}</h3>
+        <div class="table-info">
+          <span class="info-item">👨‍🏫 Guru: {{ currentGuruCount }}</span>
+          <span class="info-item">✅ Aktif: {{ currentAktifCount }}</span>
+          <span class="info-item" v-if="activeTab === 'all'">
+            🏆 Eligible: {{ currentEligibleCount }}
+          </span>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama</th>
+              <th>NIP</th>
+              <th>Status</th>
+              <th>Peran</th>
+              <th>Golongan</th>
+              <th>Masa Kerja*</th>
+              <th>Sisa Pensiun</th>
+              <th>Eligible</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(p, index) in filteredPeserta" :key="p.id" :class="getRowClass(p)">
+              <td class="text-center">{{ index + 1 }}</td>
+              <td>
+                <strong>{{ p.nama_lengkap }}</strong>
+                <div v-if="p.nip && !isNIPValid(p.nip)" class="nip-warning">⚠️ NIP tidak valid</div>
+                <div v-if="getWarningMessage(p)" class="warning-text small-text">
+                  ⚠️ {{ getWarningMessage(p) }}
+                </div>
+              </td>
+              <td>
+                <code>{{ p.nip || '-' }}</code>
+                <div class="nip-info">{{ getNIPInfo(p.nip) }}</div>
+              </td>
+              <td>
+                <span :class="['status-badge', getStatusClass(p.status_kepegawaian)]">
+                  {{ p.status_kepegawaian }}
+                </span>
+              </td>
+              <td>
+                <span :class="['peran-badge', p.peran]">
+                  {{ p.peran === 'guru' ? '👨‍🏫' : '👨‍💼' }} {{ p.peran }}
+                </span>
+              </td>
+              <td>{{ p.golongan_ruang || '-' }}</td>
+              <td>
+                {{ calculateMasaKerja(p.nip) }}
+                <div class="small-text" v-if="getTahunPengangkatan(p.nip)">
+                  sejak {{ getTahunPengangkatan(p.nip) }}
+                </div>
+              </td>
+              <td>
+                {{ calculateSisaMenujuPensiun(p.nip) }} thn
+                <div class="small-text" :class="getSisaPensiunClass(p.nip)">
+                  {{ getSisaPensiunStatus(p.nip) }}
+                </div>
+              </td>
+              <td class="text-center">
+                <div v-if="p.peran === 'guru'">
+                  <span v-if="isEligible(p)" class="eligible-badge">🏆 Eligible</span>
+                  <span v-else class="noneligible-badge">🚫 Non</span>
+                  <div class="small-text">
+                    <label class="checkbox-inline">
+                      <input
+                        type="checkbox"
+                        :checked="p.is_manual_noneligible"
+                        @change="toggleManualNonEligible(p, $event.target.checked)"
+                      />
+                      Manual Non
+                    </label>
+                  </div>
+                </div>
+                <span v-else class="not-applicable">-</span>
+              </td>
+              <td class="text-center">
+                <label class="toggle-switch">
+                  <input
+                    type="checkbox"
+                    :checked="p.is_active"
+                    @change="toggleStatusPeserta(p, $event.target.checked)"
+                  />
+                  <span class="toggle-slider"></span>
+                </label>
+                <div class="small-text">
+                  {{ p.is_active ? '✅ Aktif' : '❌ Non-Aktif' }}
+                </div>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button @click="editPeserta(p)" class="btn-icon" title="Edit">✏️</button>
+                  <button @click="showDetail(p)" class="btn-icon info" title="Detail">ℹ️</button>
+                  <button
+                    v-if="isEligible(p)"
+                    @click="navigateToKandidat(p)"
+                    class="btn-icon success"
+                    title="Jadikan Kandidat"
+                  >
+                    👤
+                  </button>
+                  <button @click="confirmDeletePeserta(p)" class="btn-icon danger" title="Hapus">
+                    🗑️
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="filteredPeserta.length === 0">
+              <td colspan="11" class="empty-state">📭 Tidak ada data peserta</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="table-footer">
+          <small
+            >*Eligible: Guru PNS/PPPK, Masa kerja ≥ 3thn, Sisa pensiun ≥ 3thn, Bukan manual
+            non</small
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Tambah/Edit Peserta -->
+    <div v-if="showFormModal" class="modal-overlay" @click.self="closeFormModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>{{ isEditing ? '✏️ Edit Peserta' : '➕ Tambah Peserta Baru' }}</h3>
+          <button @click="closeFormModal" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form @submit.prevent="savePeserta">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="nama_lengkap">Nama Lengkap *</label>
+                <input
+                  id="nama_lengkap"
+                  v-model="formData.nama_lengkap"
+                  type="text"
+                  placeholder="Nama lengkap"
+                  required
+                />
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
 
-      <!-- Empty State -->
-      <div v-if="filteredGuru.length === 0" class="empty">
-        <p class="empty-text">Belum ada data guru</p>
-        <button @click="addPeserta" class="btn-add">+ Tambah Guru Pertama</button>
+              <div class="form-group">
+                <label for="nip">NIP</label>
+                <input
+                  id="nip"
+                  v-model="formData.nip"
+                  type="text"
+                  placeholder="197711072014072001 (opsional)"
+                  @blur="validateNIP"
+                />
+                <div v-if="nipValidation.valid" class="success-text">
+                  ✓ Format NIP valid: {{ nipValidation.format }}
+                </div>
+                <div v-if="nipValidation.error" class="error-text">
+                  ❌ {{ nipValidation.error }}
+                </div>
+                <div class="small-text">Kosongkan untuk honorer/GTT/PTT</div>
+              </div>
+
+              <div class="form-group">
+                <label for="peran">Peran *</label>
+                <select id="peran" v-model="formData.peran" required>
+                  <option value="guru">Guru</option>
+                  <option value="tendik">Tenaga Kependidikan</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="status_kepegawaian">Status Kepegawaian *</label>
+                <select id="status_kepegawaian" v-model="formData.status_kepegawaian" required>
+                  <option value="PNS">PNS</option>
+                  <option value="PPPK">PPPK</option>
+                  <option value="GTT">Guru Tidak Tetap (GTT)</option>
+                  <option value="PTT">Pegawai Tidak Tetap (PTT)</option>
+                  <option value="Honorer">Honorer</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="golongan_ruang">Golongan/Ruang</label>
+                <input
+                  id="golongan_ruang"
+                  v-model="formData.golongan_ruang"
+                  type="text"
+                  placeholder="III/b, IV/a, IX, etc"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="pangkat">Pangkat/Jabatan</label>
+                <input
+                  id="pangkat"
+                  v-model="formData.pangkat"
+                  type="text"
+                  placeholder="Penata Muda Tk. I, dll"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="formData.is_active" />
+                  <span>Status Aktif</span>
+                </label>
+              </div>
+
+              <div class="form-group" v-if="isEditing">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="formData.is_manual_noneligible" />
+                  <span>Manual Non-Eligible</span>
+                </label>
+              </div>
+
+              <div class="form-group" v-if="isEditing && formData.is_manual_noneligible">
+                <label for="manual_noneligible_reason">Alasan Non-Eligible</label>
+                <textarea
+                  id="manual_noneligible_reason"
+                  v-model="formData.manual_noneligible_reason"
+                  placeholder="Alasan non-eligible..."
+                  rows="2"
+                ></textarea>
+              </div>
+            </div>
+
+            <div v-if="nipValidation.valid && nipValidation.parsed" class="info-box">
+              <h4>Info dari NIP:</h4>
+              <p>Format: {{ nipValidation.format }}</p>
+              <p v-if="nipValidation.parsed.tanggal_lahir">
+                Tanggal Lahir: {{ formatTanggal(nipValidation.parsed.tanggal_lahir) }}
+              </p>
+              <p v-if="nipValidation.parsed.tgl_pengangkatan">
+                Pengangkatan: {{ formatTanggal(nipValidation.parsed.tgl_pengangkatan) }}
+              </p>
+              <p>Usia: {{ calculateUsia(formData.nip) }} tahun</p>
+              <p>Masa Kerja: {{ calculateMasaKerja(formData.nip) }}</p>
+              <p>Pensiun: {{ calculateTahunPensiun(formData.nip) }} (usia 60)</p>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button @click="closeFormModal" class="btn btn-outline">Batal</button>
+          <button @click="savePeserta" class="btn btn-primary" :disabled="isSaving">
+            {{ isSaving ? 'Menyimpan...' : '💾 Simpan' }}
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Add/Edit Modal -->
-    <div v-if="showModal" class="modal">
-      <div class="modal-content">
-        <h3>{{ editing ? 'Edit Guru' : 'Tambah Guru Baru' }}</h3>
-
-        <div class="form">
-          <input
-            v-model="form.nama_lengkap"
-            placeholder="Nama lengkap *"
-            required
-            class="form-input"
-          />
-          <input v-model="form.nip" placeholder="NIP *" required class="form-input" />
-          <input v-model="form.tanggal_lahir" type="date" required class="form-input" />
-          <input
-            v-model="form.email"
-            placeholder="Email (opsional)"
-            type="email"
-            class="form-input"
-          />
-
-          <div class="form-row">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="form.is_active" class="checkbox" />
-              <span class="checkbox-text">Status Aktif</span>
-            </label>
+    <!-- Modal Detail -->
+    <div v-if="showDetailModal" class="modal-overlay" @click.self="closeDetailModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>📋 Detail Peserta</h3>
+          <button @click="closeDetailModal" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>Nama:</label>
+              <span>{{ selectedPeserta?.nama_lengkap }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Status Aktif:</label>
+              <span :class="selectedPeserta?.is_active ? 'active-text' : 'inactive-text'">
+                {{ selectedPeserta?.is_active ? '✅ AKTIF' : '❌ NON-AKTIF' }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <label>NIP:</label>
+              <span
+                ><code>{{ selectedPeserta?.nip || '-' }}</code></span
+              >
+              <div class="small-text">{{ getNIPInfo(selectedPeserta?.nip) }}</div>
+            </div>
+            <div class="detail-item">
+              <label>Peran:</label>
+              <span :class="['peran-badge', selectedPeserta?.peran]">
+                {{ selectedPeserta?.peran === 'guru' ? '👨‍🏫 Guru' : '👨‍💼 Tendik' }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <label>Status Kepegawaian:</label>
+              <span :class="['status-badge', getStatusClass(selectedPeserta?.status_kepegawaian)]">
+                {{ selectedPeserta?.status_kepegawaian }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <label>Golongan/Ruang:</label>
+              <span>{{ selectedPeserta?.golongan_ruang || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Usia Saat Ini:</label>
+              <span>{{ calculateUsia(selectedPeserta?.nip) }} tahun</span>
+            </div>
+            <div class="detail-item">
+              <label>Masa Kerja:</label>
+              <span>{{ calculateMasaKerja(selectedPeserta?.nip) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Sisa Menuju Pensiun:</label>
+              <span :class="getSisaPensiunClass(selectedPeserta?.nip)">
+                {{ calculateSisaMenujuPensiun(selectedPeserta?.nip) }} tahun -
+                {{ getSisaPensiunStatus(selectedPeserta?.nip) }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <label>Status Eligible:</label>
+              <span :class="isEligible(selectedPeserta) ? 'eligible-text' : 'noneligible-text'">
+                {{ isEligible(selectedPeserta) ? '🏆 ELIGIBLE' : '🚫 NON-ELIGIBLE' }}
+              </span>
+              <div v-if="!isEligible(selectedPeserta)" class="small-text error-text">
+                {{ getEligibilityReason(selectedPeserta) }}
+              </div>
+            </div>
+            <div class="detail-item" v-if="selectedPeserta?.is_manual_noneligible">
+              <label>Alasan Non-Eligible:</label>
+              <span>{{ selectedPeserta?.manual_noneligible_reason }}</span>
+            </div>
           </div>
         </div>
-
-        <div class="modal-actions">
-          <button @click="closeModal" class="btn-cancel">Batal</button>
-          <button @click="savePeserta" class="btn-save">
-            {{ editing ? 'Update' : 'Simpan' }}
-          </button>
+        <div class="modal-footer">
+          <button @click="closeDetailModal" class="btn btn-outline">Tutup</button>
+          <button @click="editPeserta(selectedPeserta)" class="btn btn-primary">✏️ Edit</button>
         </div>
       </div>
     </div>
@@ -141,717 +427,1107 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
-// Data
-const guruList = ref([])
+const router = useRouter()
+const pesertaList = ref([])
 const searchQuery = ref('')
-const showModal = ref(false)
-const editing = ref(false)
-const activeSession = ref(null)
-const votingStats = ref({}) // Cache untuk voting status
+const activeTab = ref('all')
+const statusFilter = ref('')
+const peranFilter = ref('')
+const aktifFilter = ref('')
 
-// Form
-const form = ref({
+// Modal states
+const showFormModal = ref(false)
+const showDetailModal = ref(false)
+const selectedPeserta = ref(null)
+const isEditing = ref(false)
+const isSaving = ref(false)
+
+// NIP validation state
+const nipValidation = reactive({
+  valid: false,
+  format: '',
+  error: '',
+  parsed: null,
+})
+
+// Form data
+const formData = ref({
   nama_lengkap: '',
   nip: '',
-  tanggal_lahir: '',
-  email: '',
+  peran: 'guru',
+  status_kepegawaian: 'PNS',
+  golongan_ruang: '',
+  pangkat: '',
   is_active: true,
+  is_manual_noneligible: false,
+  manual_noneligible_reason: '',
 })
 
-// Load active session
-const loadActiveSession = async () => {
-  try {
-    const { data } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
-      .single()
+// ==================== FUNGSI PARSING NIP ====================
+const parseNIP = (nip) => {
+  if (!nip || typeof nip !== 'string') return null
+  const nipStr = nip.trim()
+  if (nipStr.length !== 18) return null
 
-    activeSession.value = data
-    console.log('Active session:', data?.nama_sesi || 'No session')
+  try {
+    // Format PNS: tanggal lahir 8 digit + tanggal pengangkatan 8 digit
+    if (isValidDate(nipStr.substring(0, 8)) && isValidDate(nipStr.substring(8, 16))) {
+      return {
+        format: 'PNS',
+        tanggal_lahir: nipStr.substring(0, 8),
+        tgl_pengangkatan: nipStr.substring(8, 16),
+        jenis_kelamin: nipStr.substring(16, 17),
+        nomor_urut: nipStr.substring(17, 18),
+        tahun_lahir: parseInt(nipStr.substring(0, 4)),
+        bulan_lahir: parseInt(nipStr.substring(4, 6)),
+        hari_lahir: parseInt(nipStr.substring(6, 8)),
+        tahun_pengangkatan: parseInt(nipStr.substring(8, 12)),
+        bulan_pengangkatan: parseInt(nipStr.substring(12, 14)),
+        hari_pengangkatan: parseInt(nipStr.substring(14, 16)),
+      }
+    }
+    // Format PPPK: tanggal lahir 8 digit + tahun penetapan 6 digit
+    else if (isValidDate(nipStr.substring(0, 8))) {
+      return {
+        format: 'PPPK',
+        tanggal_lahir: nipStr.substring(0, 8),
+        tahun_penetapan: nipStr.substring(8, 14),
+        jenis_kelamin: nipStr.substring(14, 15),
+        nomor_urut: nipStr.substring(15, 18),
+        tahun_lahir: parseInt(nipStr.substring(0, 4)),
+        bulan_lahir: parseInt(nipStr.substring(4, 6)),
+        hari_lahir: parseInt(nipStr.substring(6, 8)),
+      }
+    }
+    return null
   } catch (error) {
-    console.error('Error loading active session:', error)
-    activeSession.value = null
+    console.error('Error parsing NIP:', error)
+    return null
   }
 }
 
-// Load voting stats untuk semua guru
-const loadVotingStats = async () => {
-  if (!activeSession.value?.id) {
-    console.log('No active session, skipping voting stats')
-    votingStats.value = {}
+const isValidDate = (dateStr) => {
+  if (dateStr.length !== 8) return false
+  const year = parseInt(dateStr.substring(0, 4))
+  const month = parseInt(dateStr.substring(4, 6))
+  const day = parseInt(dateStr.substring(6, 8))
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return false
+  if (month < 1 || month > 12) return false
+  if (day < 1 || day > 31) return false
+
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+}
+
+const validateNIP = () => {
+  const nip = formData.value.nip?.trim()
+
+  if (!nip) {
+    nipValidation.valid = false
+    nipValidation.format = ''
+    nipValidation.error = ''
+    nipValidation.parsed = null
     return
   }
 
-  try {
-    console.log('Loading voting stats for session:', activeSession.value.id)
+  if (nip.length !== 18) {
+    nipValidation.valid = false
+    nipValidation.error = 'NIP harus 18 digit'
+    nipValidation.parsed = null
+    return
+  }
 
-    // Ambil semua pemilih yang sudah voting di sesi aktif
-    const { data, error } = await supabase
-      .from('suara')
-      .select('pemilih_id')
-      .eq('sesi_id', activeSession.value.id)
-      .eq('is_draft', false)
+  const parsed = parseNIP(nip)
+  if (!parsed) {
+    nipValidation.valid = false
+    nipValidation.error = 'Format NIP tidak valid'
+    nipValidation.parsed = null
+    return
+  }
 
-    if (error) throw error
+  nipValidation.valid = true
+  nipValidation.format = parsed.format
+  nipValidation.error = ''
+  nipValidation.parsed = parsed
+}
 
-    // Reset dan isi cache
-    votingStats.value = {}
+// ==================== FUNGSI PERHITUNGAN ====================
+const isNIPValid = (nip) => parseNIP(nip) !== null
 
-    if (data && data.length > 0) {
-      data.forEach((vote) => {
-        votingStats.value[vote.pemilih_id] = true
-      })
-      console.log(`Found ${data.length} votes for session`)
-    } else {
-      console.log('No votes found for current session')
-    }
-  } catch (error) {
-    console.error('Error loading voting stats:', error)
-    votingStats.value = {}
+const getNIPInfo = (nip) => {
+  if (!nip) return 'NIP kosong'
+  const parsed = parseNIP(nip)
+  if (!parsed) return 'Format NIP tidak valid'
+
+  if (parsed.format === 'PNS') {
+    return `Lahir: ${formatTanggal(parsed.tanggal_lahir)} | CPNS: ${formatTanggal(parsed.tgl_pengangkatan)}`
+  } else {
+    return `Lahir: ${formatTanggal(parsed.tanggal_lahir)} | PPPK: ${parsed.tahun_penetapan.substring(0, 4)}`
   }
 }
 
-// Computed
-const filteredGuru = computed(() => {
-  if (!searchQuery.value) return guruList.value
+const formatTanggal = (dateStr) => {
+  if (!dateStr || dateStr.length !== 8) return '?'
+  const tahun = dateStr.substring(0, 4)
+  const bulan = dateStr.substring(4, 6)
+  const hari = dateStr.substring(6, 8)
+  return `${hari}/${bulan}/${tahun}`
+}
 
-  const query = searchQuery.value.toLowerCase()
-  return guruList.value.filter(
-    (guru) =>
-      guru.nama_lengkap.toLowerCase().includes(query) ||
-      guru.nip.toLowerCase().includes(query) ||
-      formatDate(guru.tanggal_lahir).toLowerCase().includes(query),
-  )
+const calculateUsia = (nip) => {
+  const parsed = parseNIP(nip)
+  if (!parsed) return '?'
+
+  const { tahun_lahir, bulan_lahir, hari_lahir } = parsed
+  const lahir = new Date(tahun_lahir, bulan_lahir - 1, hari_lahir)
+  const sekarang = new Date()
+
+  let usia = sekarang.getFullYear() - lahir.getFullYear()
+  const m = sekarang.getMonth() - lahir.getMonth()
+
+  if (m < 0 || (m === 0 && sekarang.getDate() < lahir.getDate())) {
+    usia--
+  }
+
+  return usia
+}
+
+const calculateMasaKerja = (nip) => {
+  const parsed = parseNIP(nip)
+  if (!parsed) return '?'
+
+  if (parsed.format === 'PPPK') {
+    const tahunPenetapan = parseInt(parsed.tahun_penetapan.substring(0, 4))
+    const sekarang = new Date().getFullYear()
+    const masaKerja = sekarang - tahunPenetapan
+    return masaKerja <= 0 ? '< 1 thn' : `${masaKerja} thn`
+  }
+
+  // Untuk PNS
+  const { tahun_pengangkatan, bulan_pengangkatan, hari_pengangkatan } = parsed
+  const sekarang = new Date()
+  const tglPengangkatan = new Date(tahun_pengangkatan, bulan_pengangkatan - 1, hari_pengangkatan)
+
+  let bulan = (sekarang.getFullYear() - tglPengangkatan.getFullYear()) * 12
+  bulan += sekarang.getMonth() - tglPengangkatan.getMonth()
+
+  if (sekarang.getDate() < tglPengangkatan.getDate()) {
+    bulan--
+  }
+
+  const tahun = Math.floor(bulan / 12)
+  const sisaBulan = bulan % 12
+
+  if (tahun === 0) return `${sisaBulan} bln`
+  if (sisaBulan === 0) return `${tahun} thn`
+  return `${tahun} thn ${sisaBulan} bln`
+}
+
+const calculateMasaKerjaTahun = (nip) => {
+  const masaKerja = calculateMasaKerja(nip)
+  if (masaKerja === '?') return 0
+  const tahunMatch = masaKerja.match(/(\d+)\s*thn/)
+  return tahunMatch ? parseInt(tahunMatch[1]) : 0
+}
+
+const calculateTahunPensiun = (nip) => {
+  const parsed = parseNIP(nip)
+  if (!parsed) return '?'
+  return parsed.tahun_lahir + 60
+}
+
+const calculateSisaMenujuPensiun = (nip) => {
+  const usia = calculateUsia(nip)
+  if (usia === '?') return '?'
+  const sisa = 60 - usia
+  return sisa > 0 ? sisa : 0
+}
+
+const getTahunPengangkatan = (nip) => {
+  const parsed = parseNIP(nip)
+  if (!parsed) return null
+  if (parsed.format === 'PNS') return parsed.tahun_pengangkatan
+  return parseInt(parsed.tahun_penetapan.substring(0, 4))
+}
+
+const getSisaPensiunClass = (nip) => {
+  const sisa = calculateSisaMenujuPensiun(nip)
+  if (sisa === '?') return ''
+  if (sisa < 3) return 'danger-text'
+  if (sisa < 5) return 'warning-text'
+  return 'success-text'
+}
+
+const getSisaPensiunStatus = (nip) => {
+  const sisa = calculateSisaMenujuPensiun(nip)
+  if (sisa === '?') return 'tidak diketahui'
+  if (sisa < 1) return 'sudah pensiun'
+  if (sisa < 3) return 'akan pensiun segera'
+  if (sisa < 5) return 'akan pensiun dalam 5 tahun'
+  return 'masih lama'
+}
+
+// ==================== FUNGSI ELIGIBLE ====================
+const isPNSatauPPPK = (status) => ['PNS', 'PPPK'].includes(status)
+
+const isEligible = (p) => {
+  if (!p) return false
+  if (p.peran !== 'guru') return false
+  if (!isPNSatauPPPK(p.status_kepegawaian)) return false
+  if (!p.nip || !isNIPValid(p.nip)) return false
+
+  // Masa kerja ≥ 3 tahun
+  if (calculateMasaKerjaTahun(p.nip) < 3) return false
+
+  // Sisa pensiun ≥ 3 tahun
+  const sisa = calculateSisaMenujuPensiun(p.nip)
+  if (sisa === '?' || sisa < 3) return false
+
+  // Bukan manual non-eligible
+  if (p.is_manual_noneligible) return false
+
+  return true
+}
+
+const getEligibilityReason = (p) => {
+  if (!p) return ''
+  if (p.peran !== 'guru') return 'Bukan guru'
+  if (!isPNSatauPPPK(p.status_kepegawaian)) return 'Bukan PNS/PPPK'
+  if (!p.nip) return 'NIP kosong'
+  if (!isNIPValid(p.nip)) return 'NIP tidak valid'
+  if (calculateMasaKerjaTahun(p.nip) < 3) return 'Masa kerja < 3 tahun'
+  const sisa = calculateSisaMenujuPensiun(p.nip)
+  if (sisa === '?' || sisa < 3) return 'Sisa pensiun < 3 tahun'
+  if (p.is_manual_noneligible) return 'Ditandai manual non-eligible'
+  return 'Tidak eligible'
+}
+
+const getWarningMessage = (p) => {
+  if (!p || p.peran !== 'guru') return ''
+  const warnings = []
+
+  if (!isPNSatauPPPK(p.status_kepegawaian)) warnings.push('Bukan PNS/PPPK')
+  if (!p.nip) warnings.push('NIP kosong')
+  else if (!isNIPValid(p.nip)) warnings.push('NIP tidak valid')
+  else {
+    if (calculateMasaKerjaTahun(p.nip) < 3) warnings.push('Masa kerja < 3thn')
+    const sisa = calculateSisaMenujuPensiun(p.nip)
+    if (sisa === '?' || sisa < 3) warnings.push('Sisa pensiun < 3thn')
+  }
+
+  return warnings.length > 0 ? warnings.join(', ') : ''
+}
+
+// ==================== COMPUTED PROPERTIES ====================
+const totalPeserta = computed(() => pesertaList.value.length)
+const activePesertaCount = computed(() => pesertaList.value.filter((p) => p.is_active).length)
+const guruCount = computed(() => pesertaList.value.filter((p) => p.peran === 'guru').length)
+const pnsCount = computed(
+  () => pesertaList.value.filter((p) => p.status_kepegawaian === 'PNS').length,
+)
+const pppkCount = computed(
+  () => pesertaList.value.filter((p) => p.status_kepegawaian === 'PPPK').length,
+)
+const eligibleCount = computed(() => pesertaList.value.filter((p) => isEligible(p)).length)
+
+// Filter data berdasarkan tab aktif
+const filteredByTab = computed(() => {
+  if (activeTab.value === 'eligible') {
+    return pesertaList.value.filter((p) => isEligible(p))
+  }
+  return pesertaList.value // 'all'
 })
 
-const totalGuru = computed(() => guruList.value.length)
-const activeGuru = computed(() => guruList.value.filter((g) => g.is_active).length)
+// Filter tambahan
+const filteredPeserta = computed(() => {
+  let data = filteredByTab.value
 
-// FIXED: Real data dari cache votingStats
-const sudahVoting = computed(() => {
-  return Object.keys(votingStats.value).length
+  // Search
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase().trim()
+    data = data.filter(
+      (p) => p.nama_lengkap.toLowerCase().includes(q) || (p.nip && p.nip.includes(q)),
+    )
+  }
+
+  // Status filter
+  if (statusFilter.value) {
+    data = data.filter((p) => p.status_kepegawaian === statusFilter.value)
+  }
+
+  // Peran filter
+  if (peranFilter.value) {
+    data = data.filter((p) => p.peran === peranFilter.value)
+  }
+
+  // Aktif filter
+  if (aktifFilter.value === 'aktif') {
+    data = data.filter((p) => p.is_active)
+  } else if (aktifFilter.value === 'nonaktif') {
+    data = data.filter((p) => !p.is_active)
+  }
+
+  return data
 })
 
-// Methods
-const loadGuru = async () => {
+// Stats untuk tab aktif
+const currentTabTotal = computed(() => filteredByTab.value.length)
+const currentGuruCount = computed(
+  () => filteredByTab.value.filter((p) => p.peran === 'guru').length,
+)
+const currentAktifCount = computed(() => filteredByTab.value.filter((p) => p.is_active).length)
+const currentEligibleCount = computed(() => filteredByTab.value.filter((p) => isEligible(p)).length)
+
+// ==================== FUNGSI UI HELPER ====================
+const getTableTitle = () => {
+  return activeTab.value === 'all' ? '📋 Semua Peserta' : '🏆 Calon Kandidat Eligible'
+}
+
+const getRowClass = (p) => {
+  if (!p.is_active) return 'inactive-row'
+  if (isEligible(p)) return 'eligible-row'
+  return ''
+}
+
+const getStatusClass = (status) => {
+  if (!status) return ''
+  const statusLower = status.toLowerCase()
+  if (statusLower === 'pns') return 'pns'
+  if (statusLower === 'pppk') return 'pppk'
+  if (statusLower === 'gtt' || statusLower === 'ptt') return 'gtt'
+  if (statusLower === 'honorer') return 'honorer'
+  return ''
+}
+
+// ==================== LOAD DATA ====================
+const loadPeserta = async () => {
   try {
-    console.log('Loading guru data...')
-    const { data, error } = await supabase
-      .from('pengguna')
-      .select('*')
-      .eq('peran', 'guru')
-      .order('nama_lengkap')
+    const { data, error } = await supabase.from('pengguna').select('*').order('nama_lengkap')
 
     if (error) throw error
-
-    guruList.value = data || []
-    console.log(`Loaded ${guruList.value.length} guru`)
-
-    // Load voting stats setelah data guru dimuat
-    await loadVotingStats()
+    pesertaList.value = data || []
   } catch (error) {
-    console.error('Error loading guru:', error)
-    alert('Gagal memuat data guru: ' + error.message)
-    guruList.value = []
+    console.error('Gagal load peserta:', error)
+    alert('Gagal memuat data peserta')
   }
 }
 
-// Check voting status dari cache
-const hasVoted = (guruId) => {
-  return !!votingStats.value[guruId]
-}
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    })
-  } catch {
-    return '-'
-  }
-}
-
-const addPeserta = () => {
-  editing.value = false
-  form.value = {
+// ==================== FORM FUNCTIONS ====================
+const showAddModal = () => {
+  isEditing.value = false
+  formData.value = {
     nama_lengkap: '',
     nip: '',
-    tanggal_lahir: '',
-    email: '',
+    peran: 'guru',
+    status_kepegawaian: 'PNS',
+    golongan_ruang: '',
+    pangkat: '',
     is_active: true,
+    is_manual_noneligible: false,
+    manual_noneligible_reason: '',
   }
-  showModal.value = true
+  nipValidation.valid = false
+  nipValidation.error = ''
+  showFormModal.value = true
 }
 
-const editPeserta = (guru) => {
-  editing.value = true
-
-  // Format tanggal untuk input type="date" (YYYY-MM-DD)
-  let formattedDate = ''
-  if (guru.tanggal_lahir) {
-    try {
-      const date = new Date(guru.tanggal_lahir)
-      formattedDate = date.toISOString().split('T')[0]
-    } catch {
-      formattedDate = ''
-    }
+const editPeserta = (p) => {
+  isEditing.value = true
+  selectedPeserta.value = p
+  formData.value = {
+    nama_lengkap: p.nama_lengkap,
+    nip: p.nip || '',
+    peran: p.peran,
+    status_kepegawaian: p.status_kepegawaian,
+    golongan_ruang: p.golongan_ruang || '',
+    pangkat: p.pangkat || '',
+    is_active: p.is_active,
+    is_manual_noneligible: p.is_manual_noneligible || false,
+    manual_noneligible_reason: p.manual_noneligible_reason || '',
   }
-
-  form.value = {
-    ...guru,
-    tanggal_lahir: formattedDate,
-  }
-  showModal.value = true
-}
-
-const deletePeserta = async (guru) => {
-  if (
-    !confirm(
-      `Yakin hapus guru ${guru.nama_lengkap} (${guru.nip})?\n\nAksi ini tidak dapat dibatalkan!`,
-    )
-  ) {
-    return
-  }
-
-  try {
-    // Check if guru has voting records
-    const { data: votingData, error: votingError } = await supabase
-      .from('suara')
-      .select('id')
-      .eq('pemilih_id', guru.id)
-      .limit(1)
-
-    if (votingError) throw votingError
-
-    if (votingData && votingData.length > 0) {
-      alert(
-        '❌ Guru tidak dapat dihapus karena sudah memiliki riwayat voting!\n\nGunakan fitur nonaktifkan saja.',
-      )
-      return
-    }
-
-    // Check if guru is registered as candidate
-    const { data: kandidatData, error: kandidatError } = await supabase
-      .from('kandidat')
-      .select('id')
-      .eq('pengguna_id', guru.id)
-      .limit(1)
-
-    if (kandidatError) throw kandidatError
-
-    if (kandidatData && kandidatData.length > 0) {
-      alert(
-        '❌ Guru tidak dapat dihapus karena terdaftar sebagai kandidat!\n\nGunakan fitur nonaktifkan saja.',
-      )
-      return
-    }
-
-    // Check if guru has token
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('token_qr')
-      .select('id')
-      .eq('pengguna_id', guru.id)
-      .limit(1)
-
-    if (tokenError) throw tokenError
-
-    if (tokenData && tokenData.length > 0) {
-      alert(
-        '❌ Guru tidak dapat dihapus karena memiliki token voting!\n\nGunakan fitur nonaktifkan saja.',
-      )
-      return
-    }
-
-    // Delete the user
-    const { error: deleteError } = await supabase.from('pengguna').delete().eq('id', guru.id)
-
-    if (deleteError) throw deleteError
-
-    // Refresh data
-    await loadGuru()
-    alert(`✅ Guru ${guru.nama_lengkap} berhasil dihapus!`)
-  } catch (error) {
-    console.error('Delete error:', error)
-    alert('❌ Gagal menghapus guru: ' + error.message)
-  }
+  validateNIP()
+  showFormModal.value = true
 }
 
 const savePeserta = async () => {
-  // Validasi required fields
-  if (!form.value.nama_lengkap.trim()) {
-    alert('Nama lengkap wajib diisi!')
+  if (!formData.value.nama_lengkap.trim()) {
+    alert('Nama lengkap harus diisi')
     return
   }
 
-  if (!form.value.nip.trim()) {
-    alert('NIP wajib diisi!')
-    return
-  }
+  isSaving.value = true
 
-  if (!form.value.tanggal_lahir) {
-    alert('Tanggal lahir wajib diisi!')
+  try {
+    const dataToSave = {
+      nama_lengkap: formData.value.nama_lengkap.trim(),
+      nip: formData.value.nip?.trim() || null,
+      peran: formData.value.peran,
+      status_kepegawaian: formData.value.status_kepegawaian,
+      golongan_ruang: formData.value.golongan_ruang?.trim() || null,
+      pangkat: formData.value.pangkat?.trim() || null,
+      is_active: formData.value.is_active,
+      is_manual_noneligible: formData.value.is_manual_noneligible || false,
+      manual_noneligible_reason: formData.value.manual_noneligible_reason?.trim() || null,
+      // FIX: Gunakan 'diperbarui_pada' bukan 'updated_at'
+      diperbarui_pada: new Date().toISOString(),
+    }
+
+    if (isEditing.value && selectedPeserta.value) {
+      const { error } = await supabase
+        .from('pengguna')
+        .update(dataToSave)
+        .eq('id', selectedPeserta.value.id)
+
+      if (error) {
+        console.error('Supabase update error:', error)
+        throw new Error(`Gagal update: ${error.message}`)
+      }
+      alert('✅ Data peserta berhasil diperbarui!')
+    } else {
+      const { error } = await supabase.from('pengguna').insert([dataToSave])
+      if (error) {
+        console.error('Supabase insert error:', error)
+        throw new Error(`Gagal insert: ${error.message}`)
+      }
+      alert('✅ Peserta baru berhasil ditambahkan!')
+    }
+
+    await loadPeserta()
+    closeFormModal()
+  } catch (error) {
+    console.error('Gagal menyimpan peserta:', error)
+    alert(`Gagal menyimpan: ${error.message}`)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const closeFormModal = () => {
+  showFormModal.value = false
+  isEditing.value = false
+  selectedPeserta.value = null
+}
+
+// ==================== TOGGLE STATUS AKTIF - FIXED ====================
+const toggleStatusPeserta = async (p, checked) => {
+  if (!confirm(`Ubah status aktif ${p.nama_lengkap} menjadi ${checked ? 'AKTIF' : 'NON-AKTIF'}?`)) {
     return
   }
 
   try {
-    // Check duplicate NIP (kecuali untuk edit)
-    if (!editing.value) {
-      const { data: existing, error: checkError } = await supabase
-        .from('pengguna')
-        .select('id')
-        .eq('nip', form.value.nip)
-        .single()
-
-      if (checkError && checkError.code !== 'PGRST116') throw checkError // PGRST116 = no rows returned
-
-      if (existing) {
-        alert('❌ NIP sudah terdaftar!')
-        return
-      }
-    } else {
-      // Untuk edit, check NIP duplikat kecuali untuk diri sendiri
-      const { data: existing, error: checkError } = await supabase
-        .from('pengguna')
-        .select('id')
-        .eq('nip', form.value.nip)
-        .neq('id', form.value.id)
-        .single()
-
-      if (checkError && checkError.code !== 'PGRST116') throw checkError
-
-      if (existing) {
-        alert('❌ NIP sudah digunakan oleh guru lain!')
-        return
-      }
+    // FIX: Gunakan 'diperbarui_pada' bukan 'updated_at'
+    const updateData = {
+      is_active: checked,
+      diperbarui_pada: new Date().toISOString(),
     }
 
-    // Prepare data untuk save
-    const saveData = {
-      nama_lengkap: form.value.nama_lengkap.trim(),
-      nip: form.value.nip.trim(),
-      tanggal_lahir: form.value.tanggal_lahir,
-      email: form.value.email ? form.value.email.trim() : null,
-      is_active: form.value.is_active,
-      peran: 'guru',
+    console.log('Mengupdate peserta:', p.id, 'dengan data:', updateData)
+
+    const { error } = await supabase.from('pengguna').update(updateData).eq('id', p.id)
+
+    if (error) {
+      console.error('Supabase error detail:', error)
+      throw new Error(`Database error: ${error.message} (code: ${error.code})`)
     }
 
-    let result
-    if (editing.value) {
-      result = await supabase.from('pengguna').update(saveData).eq('id', form.value.id)
-    } else {
-      result = await supabase.from('pengguna').insert([saveData])
-    }
-
-    if (result.error) throw result.error
-
-    // Refresh data
-    await loadGuru()
-    closeModal()
-    alert(`✅ Guru ${editing.value ? 'berhasil diupdate' : 'berhasil ditambahkan'}!`)
+    await loadPeserta()
+    alert(`✅ Status peserta berhasil diubah!`)
   } catch (error) {
-    console.error('Save error:', error)
-    alert('❌ Error: ' + error.message)
+    console.error('Gagal mengubah status peserta:', error)
+    alert(`Gagal mengubah status: ${error.message}`)
+
+    // Revert toggle di UI jika gagal
+    await loadPeserta()
   }
 }
 
-const toggleStatus = async (guru) => {
-  const newStatus = !guru.is_active
-  const statusText = newStatus ? 'aktifkan' : 'nonaktifkan'
+// ==================== DELETE PESERTA ====================
+const confirmDeletePeserta = (p) => {
+  if (!confirm(`Hapus ${p.nama_lengkap}? Tindakan ini tidak dapat dibatalkan.`)) return
+  deletePeserta(p)
+}
 
-  if (!confirm(`Yakin ${statusText} guru ${guru.nama_lengkap}?`)) return
+const deletePeserta = async (p) => {
+  try {
+    const { error } = await supabase.from('pengguna').delete().eq('id', p.id)
+    if (error) {
+      console.error('Supabase delete error:', error)
+      throw new Error(`Gagal hapus: ${error.message}`)
+    }
+
+    await loadPeserta()
+    alert('✅ Data peserta berhasil dihapus!')
+  } catch (error) {
+    console.error('Gagal menghapus peserta:', error)
+    alert(`Gagal menghapus: ${error.message}`)
+  }
+}
+
+// ==================== NON-ELIGIBLE FUNCTIONS - FIXED ====================
+const toggleManualNonEligible = async (p, checked) => {
+  if (p.peran !== 'guru') {
+    alert('Non-eligible hanya bisa ditandai untuk guru')
+    return
+  }
+
+  const reason = prompt(
+    `Alasan menandai ${p.nama_lengkap} sebagai non-eligible:`,
+    p.manual_noneligible_reason || '',
+  )
+  if (reason === null) return
 
   try {
-    const { error } = await supabase
-      .from('pengguna')
-      .update({ is_active: newStatus })
-      .eq('id', guru.id)
+    const updateData = {
+      is_manual_noneligible: checked,
+      manual_noneligible_reason: checked ? reason.trim() : null,
+      // FIX: Gunakan 'diperbarui_pada'
+      diperbarui_pada: new Date().toISOString(),
+    }
 
-    if (error) throw error
+    const { error } = await supabase.from('pengguna').update(updateData).eq('id', p.id)
 
-    await loadGuru()
-    alert(`✅ Status ${guru.nama_lengkap} berhasil diubah!`)
+    if (error) {
+      console.error('Supabase error:', error)
+      throw new Error(`Gagal update: ${error.message}`)
+    }
+
+    await loadPeserta()
+    alert(`✅ Peserta berhasil ${checked ? 'ditandai' : 'dihapus dari'} non-eligible!`)
   } catch (error) {
-    console.error('Toggle status error:', error)
-    alert('❌ Error: ' + error.message)
+    console.error('Gagal mengubah status non-eligible:', error)
+    alert(`Gagal mengubah: ${error.message}`)
   }
 }
 
-const closeModal = () => {
-  showModal.value = false
+// ==================== DETAIL MODAL ====================
+const showDetail = (p) => {
+  selectedPeserta.value = p
+  showDetailModal.value = true
 }
 
-// Lifecycle
-onMounted(async () => {
-  console.log('AdminPeserta mounted')
-  await loadActiveSession()
-  await loadGuru()
-})
+const navigateToKandidat = (p) => {
+  if (!isEligible(p)) {
+    alert('Peserta tidak eligible untuk dijadikan kandidat')
+    return
+  }
+  router.push(`/admin/kandidat?peserta_id=${p.id}&nama=${encodeURIComponent(p.nama_lengkap)}`)
+}
 
-// Expose untuk refresh dari luar jika perlu
-defineExpose({
-  refreshData: loadGuru,
+const clearFilters = () => {
+  statusFilter.value = ''
+  peranFilter.value = ''
+  aktifFilter.value = ''
+}
+
+const closeDetailModal = () => {
+  showDetailModal.value = false
+  selectedPeserta.value = null
+}
+
+// ==================== INIT ====================
+onMounted(() => {
+  loadPeserta()
 })
 </script>
-<style scoped>
-/* ============================================
-   ULTRA COMPACT CSS
-   ============================================ */
 
-.simple-peserta {
-  padding: 0.75rem;
-  max-width: 1200px;
+<style scoped>
+/* CSS tetap sama seperti sebelumnya */
+.admin-peserta {
+  padding: 1rem;
+  max-width: 1400px;
   margin: 0 auto;
-  background: #ffffff;
-  min-height: 100vh;
 }
 
-/* === HEADER === */
-.page-header {
+.header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  background: white;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.page-header h1 {
-  color: #000000;
+.title-group h1 {
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  color: #1e3a8a;
 }
 
-.back-btn {
-  background: #1e3a8a;
-  border: 1px solid #1e3a8a;
-  color: #ffffff;
-  padding: 0.35rem 0.75rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
+.title-group p {
+  margin: 0.25rem 0 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
 }
 
-/* === STATS === */
-.stats {
+.header-actions {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  gap: 0.75rem;
 }
 
-.stat {
-  flex: 1;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
   background: white;
-  padding: 0.5rem;
-  border-radius: 4px;
+  border-radius: 8px;
+  padding: 1rem;
   text-align: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   border: 1px solid #e5e7eb;
 }
 
-.stat-number {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #000000;
-  margin-bottom: 0.15rem;
+.stat-card.highlight {
+  border: 2px solid #10b981;
+  background: #f0fdf4;
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: bold;
+  color: #1e3a8a;
+  margin-bottom: 0.25rem;
 }
 
 .stat-label {
-  color: #374151;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  color: #6b7280;
+  font-size: 0.85rem;
 }
 
-/* === ACTIONS === */
-.actions {
+.eligible-label {
+  color: #10b981 !important;
+}
+.pns-label {
+  color: #1e40af !important;
+}
+.pppk-label {
+  color: #92400e !important;
+}
+.active-label {
+  color: #10b981 !important;
+}
+
+.tabs {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  align-items: center;
+  margin-bottom: 1rem;
 }
 
-.search {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: white;
-  padding: 0.35rem 0.5rem;
-  border-radius: 4px;
+.tab-btn {
+  padding: 0.5rem 1rem;
   border: 1px solid #d1d5db;
-}
-
-.search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  font-size: 0.85rem;
-  color: #000000;
-  font-weight: 500;
-  padding: 0.25rem;
-}
-
-.search-input::placeholder {
-  color: #9ca3af;
-  font-weight: 400;
-}
-
-.btn-add {
-  background: #000000;
-  color: #ffffff;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-
-/* === ULTRA COMPACT TABLE === */
-.table-compact {
   background: white;
-  border-radius: 4px;
-  overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e5e7eb;
-  font-size: 0.8rem;
-}
-
-.table-compact table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table-compact thead {
-  background: #f8fafc;
-  border-bottom: 2px solid #1e3a8a;
-}
-
-.table-compact th {
-  padding: 0.35rem 0.5rem;
-  text-align: left;
-  color: #000000;
-  font-weight: 700;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.2px;
-  border-right: 1px solid #e5e7eb;
-}
-
-.table-compact th:last-child {
-  border-right: none;
-}
-
-.table-compact td {
-  padding: 0.3rem 0.5rem;
-  border-bottom: 1px solid #f3f4f6;
-  color: #000000;
-  font-weight: 500;
-  line-height: 1.2;
-  vertical-align: middle;
-  border-right: 1px solid #f3f4f6;
-}
-
-.table-compact td:last-child {
-  border-right: none;
-}
-
-.table-compact tr:hover td {
-  background: #f8fafc;
-}
-
-/* Zebra striping */
-.table-compact tr:nth-child(even) td {
-  background: #fafafa;
-}
-
-.table-compact tr:nth-child(even):hover td {
-  background: #f1f5f9;
-}
-
-/* COLUMN SPECIFIC STYLES */
-
-/* No Column */
-.td-no {
-  text-align: center;
-  font-weight: 700;
-  color: #1e3a8a;
-  width: 40px;
-  padding: 0.3rem 0.25rem !important;
-}
-
-/* Nama Column */
-.td-nama {
-  font-weight: 600;
-  white-space: nowrap;
-  min-width: 140px;
-}
-
-.nama-text {
-  font-size: 0.85rem;
-}
-
-/* NIP Column */
-.td-nip {
-  min-width: 100px;
-}
-
-.nip-code {
-  font-family: 'SF Mono', 'Courier New', monospace;
-  font-size: 0.75rem;
-  color: #000000;
-  font-weight: 600;
-  background: #f8fafc;
-  padding: 0.15rem 0.3rem;
-  border-radius: 3px;
-  border: 1px solid #e2e8f0;
-  display: inline-block;
-}
-
-/* TTL Column */
-.td-ttl {
-  min-width: 90px;
-}
-
-.ttl-text {
-  font-size: 0.75rem;
-  color: #4b5563;
-  white-space: nowrap;
-}
-
-/* Status Column */
-.status-badge {
-  display: inline-block;
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  border: 1px solid;
-}
-
-.status-badge.active {
-  background: #dcfce7;
-  color: #166534;
-  border-color: #86efac;
-}
-
-.status-badge.inactive {
-  background: #fee2e2;
-  color: #991b1b;
-  border-color: #fca5a5;
-}
-
-/* Voting Column */
-.vote-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-}
-
-.vote-text {
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.vote-badge.voted {
-  color: #059669;
-}
-
-.vote-badge.pending {
-  color: #d97706;
-}
-
-/* Action Column */
-.td-actions {
-  width: 110px;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.25rem;
-  justify-content: center;
-}
-
-.btn-action-sm {
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 3px;
+  border-radius: 6px;
   cursor: pointer;
-  color: #000000;
-  font-weight: 600;
-  transition: all 0.15s;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
-.btn-action-sm:hover {
-  transform: translateY(-1px);
+.tab-btn:hover {
+  background: #f9fafb;
 }
-
-.btn-action-sm:first-child:hover {
+.tab-btn.active {
   background: #3b82f6;
   color: white;
   border-color: #3b82f6;
 }
 
-.btn-action-sm:nth-child(2):hover {
-  background: #f59e0b;
-  color: white;
-  border-color: #f59e0b;
+.filters-section {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e5e7eb;
 }
 
-.btn-delete:hover {
-  background: #dc2626 !important;
-  color: white !important;
-  border-color: #dc2626 !important;
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
-.action-icon {
+.search-input {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+}
+
+.search-result-info {
   font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.status-filters {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 0.9rem;
+  min-width: 150px;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-outline {
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #374151;
+}
+
+.btn-outline:hover {
+  background: #f9fafb;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.table-section {
+  margin-bottom: 2rem;
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.table-header h3 {
+  margin: 0;
+  color: #374151;
+  font-size: 1.25rem;
+}
+
+.table-info {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.table-wrapper {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.table-footer {
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table thead {
+  background: #f3f4f6;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.data-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.data-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.eligible-row {
+  background: #f0fdf4 !important;
+}
+.eligible-row:hover {
+  background: #dcfce7 !important;
+}
+
+.inactive-row {
+  background: #f9fafb !important;
+  opacity: 0.7;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-badge.pns {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.pppk {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.gtt,
+.status-badge.ptt {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.status-badge.honorer {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.peran-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.peran-badge.guru {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.peran-badge.tendik {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.eligible-badge {
+  display: inline-block;
+  background: #10b981;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.noneligible-badge {
+  display: inline-block;
+  background: #ef4444;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.not-applicable {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.nip-warning {
+  color: #dc2626;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.warning-text {
+  color: #d97706;
+}
+.small-text {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
+}
+.nip-info {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.danger-text {
+  color: #dc2626;
+  font-weight: 500;
+}
+.warning-text {
+  color: #d97706;
+  font-weight: 500;
+}
+.success-text {
+  color: #059669;
+  font-weight: 500;
+}
+.error-text {
+  color: #dc2626;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+}
+
+.checkbox-inline input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: '';
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #10b981;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(26px);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: #f3f4f6;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* === EMPTY STATE === */
-.empty {
-  padding: 2rem;
+.btn-icon:hover {
+  transform: translateY(-1px);
+}
+.btn-icon.danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.btn-icon.danger:hover {
+  background: #fecaca;
+}
+.btn-icon.success {
+  background: #d1fae5;
+  color: #065f46;
+}
+.btn-icon.success:hover {
+  background: #a7f3d0;
+}
+.btn-icon.info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.btn-icon.info:hover {
+  background: #bfdbfe;
+}
+
+.empty-state {
   text-align: center;
-  border-top: 1px dashed #d1d5db;
+  padding: 2rem;
+  color: #6b7280;
+  font-style: italic;
 }
 
-.empty-text {
-  color: #000000;
-  margin-bottom: 0.75rem;
-  font-size: 0.9rem;
-  font-weight: 600;
+.text-center {
+  text-align: center;
 }
 
-/* === MODAL === */
-.modal {
+/* Modal styles */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -862,50 +1538,129 @@ defineExpose({
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 1rem;
 }
 
-.modal-content {
+.modal {
   background: white;
-  border-radius: 6px;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 1.25rem;
-  width: 90%;
-  max-width: 400px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #1e3a8a;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
 }
 
-.modal-content h3 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  color: #000000;
-  font-size: 1.1rem;
-  font-weight: 700;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #1e3a8a;
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1f2937;
 }
 
-/* FORM INPUTS */
-.form {
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close:hover {
+  background: #e5e7eb;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.detail-item {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin: 1rem 0;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
 }
 
-.form-input {
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.detail-item span {
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+.eligible-text {
+  color: #10b981;
+  font-weight: bold;
+}
+.noneligible-text {
+  color: #ef4444;
+  font-weight: bold;
+}
+.active-text {
+  color: #10b981;
+  font-weight: bold;
+}
+.inactive-text {
+  color: #6b7280;
+  font-weight: bold;
+}
+
+/* Form Modal */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  color: #000000;
-  background: white;
-  font-weight: 500;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #1e3a8a;
-  box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.1);
+  border-radius: 6px;
+  font-size: 0.9rem;
 }
 
 .checkbox-label {
@@ -913,155 +1668,131 @@ defineExpose({
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
-  color: #000000;
-  font-weight: 500;
 }
 
-.checkbox {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: #1e3a8a;
+  accent-color: #3b82f6;
 }
 
-.checkbox-text {
-  font-weight: 600;
+.info-box {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.info-box h4 {
+  margin: 0 0 0.5rem 0;
+  color: #0369a1;
+}
+.info-box p {
+  margin: 0.25rem 0;
   font-size: 0.85rem;
+  color: #0c4a6e;
 }
 
-/* MODAL ACTIONS */
-.modal-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
+.success-text {
+  color: #059669;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+.modal-footer {
+  padding: 1.25rem;
   border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  background: #f9fafb;
 }
 
-.btn-cancel {
-  background: #ffffff;
-  border: 1px solid #dc2626;
-  color: #dc2626;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.btn-cancel:hover {
-  background: #dc2626;
-  color: white;
-}
-
-.btn-save {
-  background: #000000;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.btn-save:hover {
-  background: #1e3a8a;
-}
-
-/* === RESPONSIVE === */
+/* Responsive */
 @media (max-width: 768px) {
-  .simple-peserta {
-    padding: 0.5rem;
-  }
-
-  .stats {
+  .header {
     flex-direction: column;
+    align-items: stretch;
+  }
+  .header-actions {
+    justify-content: flex-start;
   }
 
-  .actions {
-    flex-direction: column;
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
-  .search {
-    width: 100%;
+  .tabs {
+    flex-wrap: wrap;
   }
-
-  .table-compact {
-    font-size: 0.75rem;
-  }
-
-  .table-compact th,
-  .table-compact td {
-    padding: 0.25rem 0.35rem;
-  }
-
-  .td-nama {
+  .tab-btn {
+    flex: 1;
     min-width: 120px;
   }
 
-  .td-nip {
-    min-width: 80px;
-  }
-
-  .td-actions {
-    width: 100px;
-  }
-
-  .btn-action-sm {
-    width: 26px;
-    height: 26px;
-  }
-}
-
-@media (max-width: 480px) {
-  .page-header {
+  .status-filters {
     flex-direction: column;
-    gap: 0.5rem;
     align-items: stretch;
-    text-align: center;
   }
-
-  .back-btn {
+  .filter-select {
     width: 100%;
   }
 
-  .modal-content {
-    margin: 0.5rem;
-    padding: 1rem;
+  .data-table {
+    display: block;
+    overflow-x: auto;
   }
 
-  .modal-actions {
+  .table-header {
     flex-direction: column;
+    align-items: flex-start;
+  }
+  .table-info {
+    width: 100%;
+    justify-content: space-between;
   }
 
-  .btn-cancel,
-  .btn-save {
-    width: 100%;
+  .modal {
+    max-width: 95%;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-/* PRINT STYLES */
-@media print {
-  .simple-peserta {
-    background: white;
-  }
-
-  .page-header,
-  .actions,
-  .btn-action-sm {
+@media (max-width: 640px) {
+  .data-table thead {
     display: none;
   }
 
-  .table-compact table {
-    border: 1px solid #000000;
+  .data-table tbody tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
   }
 
-  .table-compact th {
-    background: #ffffff !important;
-    color: #000000 !important;
-    border-bottom: 1px solid #000000;
+  .data-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.5rem 0;
+    border: none;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #374151;
+    min-width: 120px;
+    margin-right: 1rem;
+  }
+
+  .action-buttons {
+    justify-content: flex-start;
   }
 }
 </style>

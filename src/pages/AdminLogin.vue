@@ -1,265 +1,209 @@
 <template>
-  <div class="admin-login">
-    <div class="login-container">
-      <div class="login-header">
-        <h1>Panel Admin/Panitia</h1>
-        <p>Sistem Voting SMAN 2 Bandar Lampung</p>
-      </div>
+  <div class="login-page">
+    <div class="login-card">
+      <h1>🔐 Login Admin</h1>
 
-      <div class="login-card">
-        <h2>Login Admin</h2>
+      <form @submit.prevent="login">
+        <div class="input-group">
+          <label>Email</label>
+          <input type="email" v-model="email" placeholder="admin@example.com" required />
+        </div>
 
-        <form @submit.prevent="handleLogin">
-          <div class="form-group">
-            <label for="nip">NIP Admin</label>
-            <input type="text" id="nip" v-model="nip" placeholder="Masukkan NIP admin" required />
-          </div>
-
-          <div class="form-group">
-            <label for="password">Password</label>
+        <div class="input-group">
+          <label>Password</label>
+          <div class="password-wrap">
             <input
-              type="password"
-              id="password"
+              :type="showPassword ? 'text' : 'password'"
               v-model="password"
-              placeholder="Password (DDMMYYYY)"
+              placeholder="********"
               required
             />
-            <small>Format: DDMMYYYY (Tanggal Lahir)</small>
+            <button type="button" @click="showPassword = !showPassword" class="eye-btn">
+              {{ showPassword ? '🙈' : '👁️' }}
+            </button>
           </div>
-
-          <button type="submit" :disabled="loading" class="login-btn">
-            {{ loading ? 'Memproses...' : 'Login sebagai Admin' }}
-          </button>
-
-          <div v-if="error" class="error-message">❌ {{ error }}</div>
-        </form>
-
-        <div class="login-footer">
-          <p>
-            Bukan admin?
-            <router-link to="/login-calon">Login sebagai Calon</router-link> |
-            <router-link to="/">Kembali ke Home</router-link>
-          </p>
-          <p class="hint">
-            <strong>Default Admin:</strong><br />
-            NIP: <code>19771107201407001</code><br />
-            Password: <code>07111977</code> (07 November 1977)
-          </p>
         </div>
-      </div>
+
+        <button type="submit" :disabled="loading" class="login-btn">
+          {{ loading ? 'Loading...' : 'Login Admin' }}
+        </button>
+
+        <div v-if="error" class="error-box">{{ error }}</div>
+      </form>
+
+      <div class="demo-info" v-if="isDev"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
 const router = useRouter()
 
-const nip = ref('')
+const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
+const isDev = import.meta.env.DEV
 
-const handleLogin = async () => {
-  if (!nip.value || !password.value) {
-    error.value = 'NIP dan Password harus diisi'
-    return
-  }
-
+const login = async () => {
   loading.value = true
   error.value = ''
 
   try {
-    // 1. Cek user di database
-    const { data: user, error: userError } = await supabase
-      .from('pengguna')
-      .select('*')
-      .eq('nip', nip.value)
-      .eq('peran', 'admin')
-      .single()
-
-    if (userError || !user) {
-      throw new Error('NIP admin tidak ditemukan')
-    }
-
-    // 2. Validasi password (tanggal lahir DDMMYYYY)
-    const birthDate = new Date(user.tanggal_lahir)
-    const day = String(birthDate.getDate()).padStart(2, '0')
-    const month = String(birthDate.getMonth() + 1).padStart(2, '0')
-    const year = birthDate.getFullYear()
-    const birthPassword = `${day}${month}${year}`
-
-    console.log('Login attempt:', {
-      input: password.value,
-      expected: birthPassword,
-      tanggal_lahir: user.tanggal_lahir,
+    // 1. LOGIN KE SUPABASE
+    const { data, error: loginError } = await supabase.auth.signInWithPassword({
+      email: email.value,
+      password: password.value,
     })
 
-    if (password.value !== birthPassword) {
-      throw new Error('Password salah. Format: DDMMYYYY dari tanggal lahir')
-    }
+    if (loginError) throw loginError
 
-    // 3. Simpan session admin
-    const adminSession = {
-      user,
-      type: 'admin',
-      role: user.peran,
-      timestamp: new Date().toISOString(),
-    }
+    console.log('✅ Login berhasil:', data.user.email)
 
-    localStorage.setItem('smanda_admin', JSON.stringify(adminSession))
-
-    // 4. Redirect ke admin dashboard
-    router.push('/admin-dashboard')
+    // 2. LANGSUNG KE ADMIN DASHBOARD
+    router.push('/admin')
   } catch (err) {
-    console.error('Login error:', err)
-    error.value = err.message
+    console.error('❌ Login gagal:', err)
+    error.value = err.message || 'Login gagal. Cek email/password.'
   } finally {
     loading.value = false
   }
 }
+
+// Auto redirect kalo udah login
+onMounted(async () => {
+  const { data } = await supabase.auth.getSession()
+
+  if (data.session) {
+    console.log('📱 Session ditemukan, redirect ke admin')
+    router.push('/admin')
+  }
+})
 </script>
 
 <style scoped>
-.admin-login {
+.login-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
-}
-
-.login-container {
-  width: 100%;
-  max-width: 500px;
-}
-
-.login-header {
-  text-align: center;
-  color: white;
-  margin-bottom: 2rem;
-}
-
-.login-header h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.login-header p {
-  font-size: 1.2rem;
-  opacity: 0.9;
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  padding: 20px;
 }
 
 .login-card {
   background: white;
+  padding: 40px;
   border-radius: 12px;
-  padding: 2.5rem;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 400px;
 }
 
-.login-card h2 {
+h1 {
   color: #1e3a8a;
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 30px;
   font-size: 1.8rem;
 }
 
-.form-group {
-  margin-bottom: 1.5rem;
+.input-group {
+  margin-bottom: 20px;
 }
 
-.form-group label {
+.input-group label {
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
   font-weight: 600;
   color: #333;
 }
 
-.form-group input {
+.input-group input {
   width: 100%;
-  padding: 0.75rem;
+  padding: 12px 15px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 1rem;
 }
 
-.form-group input:focus {
+.input-group input:focus {
   outline: none;
   border-color: #1e3a8a;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
 }
 
-.form-group small {
-  display: block;
-  margin-top: 0.25rem;
-  color: #666;
-  font-size: 0.85rem;
+.password-wrap {
+  position: relative;
+}
+
+.eye-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
 }
 
 .login-btn {
   width: 100%;
-  padding: 0.75rem;
-  background-color: #1e3a8a;
+  padding: 14px;
+  background: #1e3a8a;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s;
-  margin-top: 1rem;
+  margin-top: 10px;
+  transition: 0.3s;
 }
 
 .login-btn:hover:not(:disabled) {
-  background-color: #1e40af;
+  background: #1e40af;
 }
 
 .login-btn:disabled {
-  background-color: #94a3b8;
+  background: #94a3b8;
   cursor: not-allowed;
 }
 
-.error-message {
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: #fee;
+.error-box {
+  margin-top: 15px;
+  padding: 12px;
+  background: #fee;
   color: #c00;
-  border-radius: 4px;
-  text-align: center;
-}
-
-.login-footer {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #eee;
-  text-align: center;
-  color: #666;
-}
-
-.login-footer a {
-  color: #1e3a8a;
-  text-decoration: none;
-}
-
-.login-footer a:hover {
-  text-decoration: underline;
-}
-
-.hint {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: #f8f9fa;
   border-radius: 6px;
-  font-size: 0.9rem;
+  text-align: center;
+  border-left: 4px solid #c00;
 }
 
-.hint code {
-  background: #e2e8f0;
-  padding: 0.2rem 0.4rem;
-  border-radius: 3px;
-  font-family: monospace;
+.demo-info {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+@media (max-width: 500px) {
+  .login-card {
+    padding: 30px 20px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
 }
 </style>

@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { supabase } from '@/utils/supabase'
+import { useAuthStore } from '@/stores/auth'
 
 // Lazy load components
 const HomeView = () => import('@/views/HomeView.vue')
@@ -58,38 +60,36 @@ const router = createRouter({
       meta: { title: 'Login Admin/Panitia' },
     },
 
-    // ===== USER ROUTES =====
+    // ===== PESERTA/CALON ROUTES =====
     {
       path: '/dashboard-calon',
       name: 'dashboardCalon',
       component: DashboardCalon,
       meta: {
         title: 'Dashboard Calon',
-        requiresAuth: true,
-        allowedRoles: ['calon'],
+        requiresPesertaAuth: true,
       },
     },
+
+    // ===== VOTER ROUTES (pakai token QR) =====
     {
       path: '/voting',
       name: 'voting',
       component: VotingPage,
       meta: {
         title: 'Voting Page',
-        requiresAuth: true,
-        allowedRoles: ['pemilih'],
+        requiresTokenAuth: true, // ← Untuk voter dengan token QR
       },
     },
 
     // ===== ADMIN ROUTES =====
-    // ✅ ROUTE UTAMA BARU
     {
       path: '/admin',
       name: 'admin',
       component: AdminDashboard,
       meta: {
         title: 'Dashboard Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
+        requiresAdminAuth: true,
       },
     },
 
@@ -100,8 +100,7 @@ const router = createRouter({
       component: AdminPeserta,
       meta: {
         title: 'Data Peserta - Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
+        requiresAdminAuth: true,
       },
     },
     {
@@ -110,8 +109,7 @@ const router = createRouter({
       component: AdminToken,
       meta: {
         title: 'Token Voting - Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
+        requiresAdminAuth: true,
       },
     },
     {
@@ -120,20 +118,7 @@ const router = createRouter({
       component: AdminKandidat,
       meta: {
         title: 'Data Kandidat - Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
-      },
-    },
-
-    // ✅ BACKWARD COMPATIBILITY - route lama tetap bekerja
-    {
-      path: '/admin-dashboard',
-      name: 'adminDashboard',
-      component: AdminDashboard,
-      meta: {
-        title: 'Dashboard Admin',
-        requiresAuth: true,
-        allowedRoles: ['admin', 'panitia'],
+        requiresAdminAuth: true,
       },
     },
 
@@ -147,133 +132,115 @@ const router = createRouter({
   ],
 })
 
-// Enhanced navigation guard dengan debug logging
-router.beforeEach((to, from, next) => {
-  console.log('🛡️ Router Guard:', {
-    from: from.name,
-    to: to.name,
-    requiresAuth: to.meta?.requiresAuth,
-  })
+// ✅ ENHANCED ROUTER GUARD
+router.beforeEach(async (to, from, next) => {
+  console.log('🛡️ Route:', to.path, to.meta)
 
   // Set page title
   document.title = to.meta?.title || 'SMANDA VOTE'
 
-  // Skip auth check untuk public routes
-  if (!to.meta?.requiresAuth) {
-    console.log('✅ Public route, allowing access')
+  // 1. PUBLIC ROUTES - langsung lewat
+  const publicRoutes = ['/', '/test', '/login-calon', '/scan', '/live-results', '/admin-login']
+
+  if (publicRoutes.includes(to.path)) {
+    console.log('✅ Public route')
     next()
     return
   }
 
-  // Check authentication
-  const adminSession = localStorage.getItem('smanda_admin')
-  const userSession = localStorage.getItem('smanda_user')
-  const voterSession = localStorage.getItem('smanda_voter')
+  // 2. GUARD UNTUK ROUTE KHUSUS
+  // Import auth store di sini (harus setelah router dibuat)
+  const authStore = useAuthStore()
 
-  console.log('🔐 Auth Check:', {
-    hasAdminSession: !!adminSession,
-    hasUserSession: !!userSession,
-    hasVoterSession: !!voterSession,
-  })
+  // A. ROUTE PESERTA/CALON
+  if (to.meta.requiresPesertaAuth) {
+    console.log('🔐 Checking peserta auth...')
 
-  // ✅ Admin bisa akses semua admin pages
-  if (adminSession) {
-    try {
-      const session = JSON.parse(adminSession)
-      const adminName = session.user?.nama_lengkap || 'Admin'
-      console.log(`👑 Admin session detected: ${adminName}`)
+    // Cek session peserta dari auth store (localStorage)
+    const user = await authStore.checkSession()
+    const isPeserta = authStore.isPeserta()
 
-      // Admin bisa akses SEMUA routes admin
-      if (to.path.startsWith('/admin')) {
-        console.log('✅ Admin accessing admin route, allowing')
-        next()
-        return
-      }
+    console.log('Peserta check:', { user, isPeserta })
 
-      // Admin bisa test voting/scan
-      if (to.name === 'voting' || to.name === 'scan') {
-        console.log('👑 Admin testing voting/scan, allowing')
-        next()
-        return
-      }
-    } catch (error) {
-      console.error('❌ Error parsing admin session:', error)
-      localStorage.removeItem('smanda_admin')
-      next({ name: 'adminLogin' })
-      return
+    if (!user || !isPeserta) {
+      console.log('❌ Not authenticated as peserta, redirecting to login-calon')
+      return next({ name: 'loginCalon' })
     }
-  }
 
-  // ✅ Check voter session for voting page
-  if (to.name === 'voting' && voterSession) {
-    try {
-      const voterData = JSON.parse(voterSession)
-      console.log('✅ Voter session valid, token:', voterData.token)
-      next()
-      return
-    } catch {
-      console.log('❌ Invalid voter session, clearing')
-      localStorage.removeItem('smanda_voter')
-    }
-  }
-
-  // Jika tidak ada session sama sekali
-  if (!adminSession && !userSession && !voterSession) {
-    console.log('❌ No session found, redirecting to login')
-
-    // Redirect berdasarkan tipe route
-    if (to.path.startsWith('/admin')) {
-      next({ name: 'adminLogin' })
-    } else if (to.meta.allowedRoles?.includes('calon')) {
-      next({ name: 'loginCalon' })
-    } else if (to.meta.allowedRoles?.includes('pemilih')) {
-      next({ name: 'scan' })
-    } else {
-      next({ name: 'home' })
-    }
+    console.log('✅ Peserta authenticated')
+    next()
     return
   }
 
-  // Jika ada session tapi bukan admin
-  if (userSession) {
+  // B. ROUTE ADMIN
+  if (to.meta.requiresAdminAuth) {
+    console.log('🔐 Checking admin auth...')
+
+    // Cek session admin dari Supabase Auth
+    const { data } = await supabase.auth.getSession()
+    const hasAdminSession = !!data.session
+
+    console.log('Admin session:', hasAdminSession)
+
+    if (!hasAdminSession) {
+      console.log('❌ Not authenticated as admin, redirecting to admin-login')
+      return next({ name: 'adminLogin' })
+    }
+
+    console.log('✅ Admin authenticated')
+    next()
+    return
+  }
+
+  // C. ROUTE VOTER (token QR) - ✅ DIIMPLEMENTASIKAN
+  if (to.meta.requiresTokenAuth) {
+    console.log('🔐 Checking token auth...')
+
+    // Cek apakah ada session voter di localStorage
+    const voterSession = localStorage.getItem('smanda_voter')
+
+    console.log('🔍 Voter session from localStorage:', voterSession)
+
+    if (!voterSession) {
+      console.log('❌ No voter session found, redirecting to scan')
+      return next({ name: 'scan' })
+    }
+
     try {
-      const user = JSON.parse(userSession)
-      console.log('👤 User session detected, role:', user.peran)
+      const voterData = JSON.parse(voterSession)
 
-      // User bisa akses calon routes
-      if (to.meta.allowedRoles?.includes('calon') && user.peran === 'guru') {
-        console.log('✅ User accessing calon route, allowing')
-        next()
-        return
+      // Validasi struktur data
+      if (!voterData.token || !voterData.pengguna || !voterData.sesi_id) {
+        console.log('❌ Invalid voter session data structure')
+        localStorage.removeItem('smanda_voter')
+        return next({ name: 'scan' })
       }
 
-      // User dengan voter session bisa akses voting
-      if (to.meta.allowedRoles?.includes('pemilih') && voterSession) {
-        console.log('✅ User with voter session accessing voting, allowing')
-        next()
-        return
+      // Optional: Validasi waktu token (jika ada timestamp di voterData)
+      if (voterData.timestamp) {
+        const sessionAge = new Date() - new Date(voterData.timestamp)
+        const maxAge = 30 * 60 * 1000 // 30 menit
+
+        if (sessionAge > maxAge) {
+          console.log('❌ Voter session expired (30 minutes)')
+          localStorage.removeItem('smanda_voter')
+          return next({ name: 'scan' })
+        }
       }
-    } catch (error) {
-      console.error('❌ Error parsing user session:', error)
-      localStorage.removeItem('smanda_user')
-      localStorage.removeItem('smanda_session')
-      next({ name: 'loginCalon' })
+
+      console.log('✅ Voter authenticated with token:', voterData.token.substring(0, 3) + '***')
+      next()
       return
+    } catch (err) {
+      console.error('❌ Error parsing voter session:', err)
+      localStorage.removeItem('smanda_voter')
+      return next({ name: 'scan' })
     }
   }
 
-  // Jika sampai sini berarti gak punya akses
-  console.log('❌ Access denied, redirecting based on session')
-
-  if (adminSession) {
-    next({ name: 'admin' })
-  } else if (userSession) {
-    next({ name: 'dashboardCalon' })
-  } else if (voterSession) {
-    next({ name: 'voting' })
-  } else {
-    next({ name: 'home' })
-  }
+  // 3. DEFAULT: lanjutkan
+  console.log('✅ Route allowed')
+  next()
 })
 
 // Global error handler

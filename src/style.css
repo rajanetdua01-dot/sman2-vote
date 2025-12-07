@@ -3,9 +3,45 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  color: #000000 !important; /* TAMBAH: Force hitam global */
 }
 
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.6;
+  color: #000000 !important;
+  background: #f8fafc !important;
+}
+
+/* TAMBAH: Untuk halaman admin */
+.admin-page * {
+  color: #000000 !important;
+}
+
+/* TAMBAH: Exception untuk elemen tertentu */
+.btn-primary,
+.btn-success,
+.btn-danger,
+.btn-warning,
+.btn-info {
+  color: #ffffff !important;
+}
+
+th {
+  background: #1e3a8a !important; /* Biru tua tetap */
+  color: #ffffff !important; /* PUTIH MUTLAK */
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #3b82f6;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Override untuk dark mode */
+:global(.dark-mode) th {
+  background: #1e293b !important; /* Biru tua gelap */
+  color: #ffffff !important; /* Tetap putih */
+  border-bottom-color: #334155;
 }
