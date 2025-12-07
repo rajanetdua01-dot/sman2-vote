@@ -3,10 +3,33 @@
     id="app"
     :class="{ 'dark-mode': isDarkMode, 'admin-page': $route.path.startsWith('/admin') }"
   >
+    <!-- HIDDEN CREDIT - ONLY VISIBLE IN DEV TOOLS -->
+    <div
+      class="hidden-credit"
+      style="display: none !important; position: absolute; top: -9999px; left: -9999px"
+    >
+      <!-- rajanet-2 Bandar Lampung - The Real MVP 😎 -->
+      <!-- 🚀 Built with passion by the admin team -->
+      <!-- ⚡ Vue.js + Supabase + Vercel = 🔥 -->
+      <!-- 💻 rajanet-2 - Making democracy digital since 2025 -->
+      <!-- 👨‍💻 Tech Stack: Vue 3, Vite, Pinia, Vue Router, Supabase, PostgreSQL -->
+      <!-- 🎨 Design System: Custom CSS with Dark/Light mode -->
+      <!-- 🏆 Real-time voting system for SMAN 2 Bandar Lampung -->
+    </div>
+
     <!-- Responsive Header dengan Toggle Mode -->
     <header>
       <div class="header-container">
-        <h1>🗳️ SMANDA VOTE</h1>
+        <!-- UPDATED: App Name dengan Tagline -->
+        <div class="app-branding">
+          <div class="app-logo-title">
+            <h1 class="app-title">
+              <span class="app-icon">🗳️</span>
+              <span class="app-name">SMANDA VOTE</span>
+            </h1>
+            <div class="app-tagline">Aplikasi Digital Real-Time Voting SMAN 2 Bandar Lampung</div>
+          </div>
+        </div>
 
         <!-- Desktop Navigation & Toggle -->
         <div class="header-right">
@@ -15,7 +38,6 @@
             <router-link to="/login-calon">Pendaftaran Calon</router-link>
             <router-link to="/scan">Voting</router-link>
             <router-link to="/live-results">Hasil</router-link>
-            <router-link to="/admin-login">Admin</router-link>
           </nav>
 
           <!-- Dark/Light Mode Toggle -->
@@ -37,6 +59,15 @@
 
       <!-- Mobile Navigation -->
       <nav class="mobile-nav" :class="{ show: menuOpen }">
+        <!-- Mobile Branding -->
+        <div class="mobile-branding">
+          <div class="mobile-app-title">
+            <span class="mobile-app-icon">🗳️</span>
+            <span class="mobile-app-name">SMANDA VOTE</span>
+          </div>
+          <div class="mobile-tagline">Sistem Digital Real Time Voting SMAN 2 Bandar Lampung</div>
+        </div>
+
         <router-link to="/" @click="closeMenu">🏠 Home</router-link>
         <router-link to="/login-calon" @click="closeMenu">👤 Daftar Calon</router-link>
         <router-link to="/scan" @click="closeMenu">🎫 Voting</router-link>
@@ -59,42 +90,70 @@
     <!-- Footer dengan Jam WIB & Links -->
     <footer>
       <div class="footer-content">
-        <!-- Web Sekolah -->
-        <div class="school-website">
-          <a href="https://smandabdl.sch.id" target="_blank" class="school-link">
-            <span class="school-icon">🌐</span>
-            <span class="school-text">Website Sekolah</span>
+        <!-- Quick Links Bar (Website + Navigation Links) -->
+        <div class="footer-links-bar">
+          <!-- Website Sekolah -->
+          <a href="https://smandabdl.sch.id" target="_blank" class="footer-link-item">
+            <span class="link-icon">🌐</span>
+            <span class="link-text">Website Sekolah</span>
           </a>
-        </div>
 
-        <!-- Jam WIB Real-time -->
-        <div class="time-widget">
-          <span class="time-icon">🕐</span>
-          <span class="time-value">{{ currentTime }}</span>
-        </div>
+          <span class="separator">•</span>
 
-        <!-- Quick Links -->
-        <div class="footer-links">
-          <router-link to="/live-results" class="footer-link" @click="closeMenu">
+          <router-link to="/live-results" class="footer-link-item" @click="closeMenu">
             <span class="link-icon">📊</span>
             <span class="link-text">Hasil Live</span>
           </router-link>
+
           <span class="separator">•</span>
-          <router-link to="/scan" class="footer-link" @click="closeMenu">
+
+          <router-link to="/scan" class="footer-link-item" @click="closeMenu">
             <span class="link-icon">🎫</span>
             <span class="link-text">Voting</span>
           </router-link>
+
           <span class="separator">•</span>
-          <router-link to="/login-calon" class="footer-link" @click="closeMenu">
+
+          <router-link to="/login-calon" class="footer-link-item" @click="closeMenu">
             <span class="link-icon">👥</span>
             <span class="link-text">Daftar</span>
           </router-link>
         </div>
 
-        <!-- Copyright -->
-        <p class="copyright">
-          © 2025 Tenaga Administrasi SMAN 2 Bandar Lampung. All rights reserved.
-        </p>
+        <!-- Enhanced Credit Section - MULTI LINE -->
+        <div class="footer-credit">
+          <!-- Line 1: App Name • Dev by -->
+          <div class="credit-line-1">
+            <span class="app-name">App Name: SMANDA VOTE</span>
+            <span class="separator-small">•</span>
+            <span class="dev-by">
+              <span class="dev-text">Dev by: Tim Tenaga Administrasi Sekolah - 2025</span>
+            </span>
+          </div>
+
+          <!-- Line 2: School & Year -->
+          <div class="credit-line-2">
+            <span class="school-year">@ SMA Negeri 2 Bandar Lampung</span>
+          </div>
+
+          <!-- Line 3: Description -->
+          <div class="credit-description">
+            This real-time voting system was developed by the School Administration Staff of SMA
+            Negeri 2 Bandar Lampung to support and enhance the democratic process within the school.
+          </div>
+
+          <!-- Line 4: Tech Stack -->
+          <div class="tech-stack">
+            <span class="tech-label">Tech Stack:</span>
+            <div class="tech-items">
+              <span class="tech-item">⚡ Vue.js • Vite</span>
+              <span class="tech-separator">•</span>
+              <span class="tech-item">🔗 PostgreSQL</span>
+              <span class="tech-separator">•</span>
+              <span class="tech-item">☁️ Cloud Hosting</span>
+            </div>
+          </div>
+        </div>
       </div>
     </footer>
   </div>
@@ -108,6 +167,7 @@ export default {
       currentTime: '',
       menuOpen: false,
       isDarkMode: false,
+      isMobile: false,
     }
   },
   mounted() {
@@ -119,11 +179,16 @@ export default {
 
     // Apply initial mode
     this.applyDarkMode()
+
+    // Check if mobile
+    this.checkMobile()
+    window.addEventListener('resize', this.checkMobile)
   },
   beforeUnmount() {
     if (this.timeInterval) {
       clearInterval(this.timeInterval)
     }
+    window.removeEventListener('resize', this.checkMobile)
   },
   methods: {
     updateTime() {
@@ -168,11 +233,39 @@ export default {
         document.documentElement.classList.remove('dark')
       }
     },
+    checkMobile() {
+      this.isMobile = window.innerWidth <= 768
+    },
   },
 }
 </script>
 
 <style>
+/* ============================================
+   HIDDEN EASTER EGG FOR DEVELOPERS 😎
+   ============================================ */
+.hidden-credit {
+  /* Ini cuma untuk yang buka F12 aja wkwk */
+  font-family: 'Courier New', monospace;
+  white-space: pre;
+  color: #3b82f6;
+  background: #0f172a;
+  padding: 10px;
+  border: 1px dashed #3b82f6;
+  border-radius: 5px;
+  max-width: 400px;
+}
+
+.hidden-credit::before {
+  content: '🚀 Hidden Credit - F12 Crew Only';
+  display: block;
+  font-weight: bold;
+  color: #fbbf24;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #3b82f6;
+  padding-bottom: 5px;
+}
+
 /* ============================================
    VARIABLES FOR LIGHT & DARK MODE
    ============================================ */
@@ -260,10 +353,11 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--color-bg);
+  position: relative;
 }
 
 /* ============================================
-   HEADER STYLES
+   HEADER STYLES - UPDATED WITH TAGLINE
    ============================================ */
 header {
   background: var(--color-header-bg);
@@ -284,19 +378,62 @@ header {
   width: 100%;
 }
 
+/* App Branding - New */
+.app-branding {
+  display: flex;
+  align-items: center;
+}
+
+.app-logo-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  line-height: 1;
+}
+
+.app-icon {
+  font-size: 1.5rem;
+}
+
+.app-name {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.app-tagline {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  max-width: 320px; /* Diperbesar untuk text lebih panjang */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark-mode .app-tagline {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .header-right {
   display: flex;
   align-items: center;
   gap: 1rem;
-}
-
-/* Logo */
-header h1 {
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-  color: white;
 }
 
 /* Mode Toggle */
@@ -339,6 +476,39 @@ header h1 {
 
 .toggle-slider.dark .toggle-knob {
   transform: translateX(30px);
+}
+
+/* Mobile Branding */
+.mobile-branding {
+  padding: 0.8rem 1rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.5rem;
+}
+
+.mobile-app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mobile-app-icon {
+  font-size: 1.5rem;
+}
+
+.mobile-app-name {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: white;
+}
+
+.mobile-tagline {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.3;
+  max-width: 280px;
+  white-space: normal;
+  text-align: center;
 }
 
 .mobile-mode-toggle {
@@ -436,25 +606,6 @@ header h1 {
   }
 }
 
-.mobile-nav a {
-  color: white !important;
-  text-decoration: none;
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  margin-bottom: 0.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.mobile-nav a:active {
-  background: rgba(255, 255, 255, 0.2);
-}
-
 /* ============================================
    MAIN CONTENT
    ============================================ */
@@ -469,134 +620,206 @@ main {
 }
 
 /* ============================================
-   FOOTER
+   FOOTER - MULTI LINE VERSION
    ============================================ */
 footer {
   background: var(--color-footer-bg);
   color: var(--color-text-soft);
-  padding: 1.2rem 1rem;
+  padding: 1.2rem 1rem 1rem;
   margin-top: auto;
-  border-top: 3px solid var(--color-primary);
+  border-top: 2px solid rgba(59, 130, 246, 0.5);
 }
 
 .footer-content {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 1.2rem;
   align-items: center;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-/* School Website */
-.school-website {
-  width: 100%;
-}
-
-.school-link {
+/* Footer Links Bar */
+.footer-links-bar {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  color: #93c5fd !important;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 0.95rem;
-  padding: 0.7rem;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s;
-}
-
-.school-link:active {
-  background: rgba(255, 255, 255, 0.1);
-  transform: scale(0.98);
-}
-
-.school-icon {
-  font-size: 1.2rem;
-}
-
-/* Time Widget */
-.time-widget {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0.7rem 1rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  font-family: 'SF Mono', 'Courier New', monospace;
-  font-weight: 600;
-  font-size: 0.95rem;
-  letter-spacing: 0.5px;
-}
-
-.time-icon {
-  font-size: 1.1rem;
-}
-
-.time-value {
-  color: #f1f5f9;
-}
-
-/* Footer Links */
-.footer-links {
-  display: flex;
   gap: 0.8rem;
-  align-items: center;
-  margin: 0.3rem 0;
   flex-wrap: wrap;
-  justify-content: center;
+  padding: 0.5rem;
+  width: 100%;
+  max-width: 650px;
 }
 
-.footer-link {
+.footer-link-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   color: #cbd5e1 !important;
   text-decoration: none;
-  font-size: 0.9rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: 8px;
-  transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.03);
-  min-width: 100px;
-  justify-content: center;
-}
-
-.footer-link:active {
-  background: rgba(255, 255, 255, 0.08);
-  transform: scale(0.98);
-}
-
-.link-icon {
-  font-size: 1.1rem;
-}
-
-.link-text {
+  font-size: 0.85rem;
   font-weight: 500;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer-link-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.footer-link-item:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.footer-link-item .link-icon {
+  font-size: 1rem;
 }
 
 .separator {
   color: #64748b;
   font-size: 1.1rem;
-  opacity: 0.5;
+  opacity: 0.3;
+  margin: 0 0.2rem;
 }
 
-/* Copyright */
-.copyright {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-top: 0.3rem;
-  color: #94a3b8;
+/* Footer Credit - MULTI LINE */
+.footer-credit {
+  width: 100%;
+  max-width: 900px;
+  padding: 1rem;
   text-align: center;
-  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Line 1: App Name • Dev by */
+.credit-line-1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.app-name {
+  color: #f8fafc !important; /* PUTIH CERAH */
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.separator-small {
+  color: #64748b;
+  font-size: 0.9rem;
+  opacity: 0.4;
+}
+
+.dev-by {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dev-icon {
+  color: #fbbf24; /* KUNING EMAS */
+  font-size: 0.9rem;
+}
+
+.dev-text {
+  color: #ffd700 !important; /* EMAS MURNI */
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+/* Line 2: School & Year */
+.credit-line-2 {
+  margin-bottom: 0.8rem;
+}
+
+.school-year {
+  color: #22c55e !important; /* HIJAU CERAH */
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  display: inline-block;
+}
+
+/* Line 3: Description */
+.credit-description {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: 0.8rem;
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-left: 2px solid #3b82f6;
+  font-style: italic;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Line 4: Tech Stack */
+.tech-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.tech-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #cbd5e1;
+  font-size: 0.8rem;
+}
+
+.tech-items {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tech-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #cbd5e1;
+  padding: 0.3rem 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.tech-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #60a5fa;
+}
+
+.tech-separator {
+  color: #64748b;
+  opacity: 0.3;
+  font-size: 0.9rem;
 }
 
 /* ============================================
-   ADMIN PAGE OVERRIDES (ALWAYS LIGHT MODE)
+   ADMIN PAGE OVERRIDES
    ============================================ */
 .admin-page {
   /* Admin pages selalu light mode */
@@ -612,7 +835,6 @@ footer {
   --color-border-hover: #bdc1c6 !important;
 }
 
-/* Force admin pages to use light colors */
 .admin-page main * {
   color: #000000 !important;
 }
@@ -685,7 +907,12 @@ footer {
     padding: 0.7rem 1rem;
   }
 
-  header h1 {
+  /* Responsive tagline */
+  .app-tagline {
+    display: none; /* Sembunyikan di tablet/mobile */
+  }
+
+  .app-name {
     font-size: 1.2rem;
   }
 
@@ -693,18 +920,54 @@ footer {
     padding: 0.8rem;
   }
 
-  .footer-links {
-    gap: 0.5rem;
+  /* Footer Mobile */
+  footer {
+    padding: 1rem 0.8rem 0.8rem;
   }
 
-  .footer-link {
-    min-width: 90px;
-    padding: 0.6rem;
-    font-size: 0.85rem;
+  .footer-links-bar {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .footer-link-item {
+    width: 100%;
+    max-width: 220px;
+    padding: 0.5rem 0.7rem;
   }
 
   .separator {
-    font-size: 1rem;
+    display: none;
+  }
+
+  .footer-credit {
+    padding: 0.8rem;
+  }
+
+  .credit-line-1 {
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+  }
+
+  .separator-small {
+    display: none;
+  }
+
+  .credit-description {
+    font-size: 0.75rem;
+    padding: 0.5rem;
+    line-height: 1.4;
+  }
+
+  .tech-items {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .tech-separator {
+    display: none;
   }
 }
 
@@ -718,7 +981,7 @@ footer {
     padding: 0.6rem 0.8rem;
   }
 
-  header h1 {
+  .app-name {
     font-size: 1.1rem;
   }
 
@@ -732,66 +995,91 @@ footer {
     font-size: 0.95rem;
   }
 
+  .mobile-tagline {
+    font-size: 0.65rem;
+    max-width: 250px;
+  }
+
   main {
     padding: 0.6rem;
   }
 
+  /* Footer Small Mobile */
   footer {
-    padding: 1rem 0.8rem;
+    padding: 0.8rem 0.6rem 0.6rem;
   }
 
-  .school-link {
-    padding: 0.6rem;
-    font-size: 0.9rem;
-  }
-
-  .time-widget {
-    padding: 0.6rem 0.8rem;
-    font-size: 0.9rem;
-    flex-direction: row;
+  .footer-links-bar {
     gap: 0.4rem;
+    padding: 0.4rem;
   }
 
-  .time-value {
-    font-size: 0.9rem;
-  }
-
-  .footer-links {
-    flex-direction: row;
-    gap: 0.5rem;
-  }
-
-  .footer-link {
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 80px;
-    padding: 0.5rem;
+  .footer-link-item {
+    padding: 0.4rem 0.6rem;
     font-size: 0.8rem;
   }
 
-  .link-icon {
-    font-size: 1.2rem;
+  .footer-link-item .link-icon {
+    font-size: 0.9rem;
   }
 
-  .link-text {
+  .footer-credit {
+    padding: 0.6rem;
+  }
+
+  .credit-line-1 {
+    font-size: 0.8rem;
+  }
+
+  .app-name {
+    font-size: 0.85rem;
+  }
+
+  .dev-text {
+    font-size: 0.8rem;
+  }
+
+  .school-year {
+    font-size: 0.8rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .credit-description {
+    font-size: 0.7rem;
+    padding: 0.4rem;
+    line-height: 1.4;
+  }
+
+  .tech-stack {
+    font-size: 0.7rem;
+  }
+
+  .tech-item {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* Desktop Lebar (1024px+) - Show full tagline */
+@media (min-width: 1024px) {
+  .app-tagline {
+    max-width: 350px;
     font-size: 0.75rem;
   }
+}
 
-  .separator {
-    display: none;
-  }
-
-  .copyright {
-    font-size: 0.75rem;
-    padding: 0 0.5rem;
+/* Desktop Lebar Sekali (1200px+) */
+@media (min-width: 1200px) {
+  .app-tagline {
+    max-width: 400px;
+    font-size: 0.8rem;
   }
 }
 
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
   .desktop-nav a,
-  .footer-link,
-  .school-link,
+  .footer-link-item,
   .mobile-mode-toggle {
     min-height: 44px;
     display: flex;
@@ -806,6 +1094,10 @@ footer {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .footer-link-item {
+    min-height: 40px;
   }
 }
 

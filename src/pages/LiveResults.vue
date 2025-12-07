@@ -5,7 +5,10 @@
       <button class="back-button" @click="goToHome" title="Kembali ke Home">← HOME</button>
 
       <div class="header-center">
-        <div class="session-name">{{ sessionName }}</div>
+        <div class="session-name">
+          <div class="main-title">SISTEM HITUNG CEPAT</div>
+          <div class="sub-title">Pemilihan Wakil Kepala Sekolah SMA Negeri 2 Bandar Lampung</div>
+        </div>
         <div class="round-info">PUTARAN {{ votingRound }}</div>
         <div class="status-indicator" :class="{ connected: isConnected }"></div>
       </div>
@@ -51,15 +54,20 @@
         <div class="stat-card">
           <div class="stat-icon">👥</div>
           <div class="stat-content">
-            <div class="stat-value">{{ totalVoters }}</div>
-            <div class="stat-label">Total Pemilih</div>
+            <div class="stat-value" :class="{ loading: isLoading.totalVoters }">
+              {{ isLoading.totalVoters ? '...' : totalVoters }}
+            </div>
+            <div class="stat-label">Total Peserta</div>
+            <div v-if="isLoading.totalVoters" class="stat-loading">Memuat...</div>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon">🗳️</div>
           <div class="stat-content">
-            <div class="stat-value">{{ votedCount }}</div>
+            <div class="stat-value" :class="{ loading: isLoading.votes }">
+              {{ isLoading.votes ? '...' : votedCount }}
+            </div>
             <div class="stat-label">Sudah Voting</div>
           </div>
         </div>
@@ -67,9 +75,16 @@
         <div class="stat-card">
           <div class="stat-icon">📊</div>
           <div class="stat-content">
-            <!-- Partisipasi juga pakai 2 desimal -->
-            <div class="stat-value">{{ formatPercentage(participationRate) }}%</div>
+            <div class="stat-value" :class="{ loading: isLoading.totalVoters || isLoading.votes }">
+              {{
+                isLoading.totalVoters || isLoading.votes
+                  ? '...'
+                  : formatPercentage(participationRate)
+              }}%
+            </div>
             <div class="stat-label">Partisipasi</div>
+            <div v-if="participationRate >= 75" class="participation-high">🎯 Tinggi</div>
+            <div v-else-if="participationRate >= 50" class="participation-medium">📈 Sedang</div>
           </div>
         </div>
 
@@ -78,6 +93,7 @@
           <div class="stat-content">
             <div class="stat-value">{{ currentTime }}</div>
             <div class="stat-label">Waktu WIB</div>
+            <div v-if="timeRemaining" class="time-remaining">{{ timeRemaining }}</div>
           </div>
         </div>
       </div>
@@ -99,7 +115,6 @@
             <div class="winner-name">{{ winner.name }}</div>
             <div class="winner-stats">
               <span class="stat-votes">{{ winner.votes }} suara</span>
-              <!-- Persentase pemenang juga 2 desimal -->
               <span class="stat-percentage">{{ formatPercentage(winner.percentage) }}%</span>
             </div>
           </div>
@@ -113,6 +128,11 @@
           <div class="runoff-content">
             <h4 class="runoff-title">PERLU RUN-OFF</h4>
             <p class="runoff-description">{{ runoffs.length }} posisi belum ada pemenang >50%</p>
+            <div class="runoff-details">
+              <div v-for="position in runoffs" :key="position" class="runoff-position">
+                {{ getPositionName(position) }}
+              </div>
+            </div>
           </div>
           <button v-if="isAdmin" @click="startRunoff" class="runoff-button">MULAI PUTARAN 2</button>
         </div>
@@ -149,7 +169,6 @@
             </h3>
             <div class="candidates-stats">
               <span class="stat">{{ getCandidates(activePosition).length }} Kandidat</span>
-              <!-- Partisipasi posisi juga 2 desimal -->
               <span class="stat"
                 >{{ formatPercentage(getPositionParticipation(activePosition)) }}% Partisipasi</span
               >
@@ -157,8 +176,14 @@
           </div>
 
           <div class="candidates-ranking">
+            <div v-if="isLoading.candidates" class="loading-candidates">
+              <div class="loading-spinner"></div>
+              <p>Memuat data kandidat...</p>
+            </div>
+
             <div
               v-for="(candidate, index) in getCandidates(activePosition)"
+              v-else
               :key="candidate.id"
               class="candidate-item"
               :class="{
@@ -171,6 +196,7 @@
             >
               <div class="candidate-rank">
                 <span class="rank-number">#{{ index + 1 }}</span>
+                <div v-if="index === 0 && candidate.percentage > 50" class="winner-badge">🏆</div>
               </div>
 
               <div class="candidate-info">
@@ -180,7 +206,6 @@
                   <div class="candidate-meta">
                     <span class="meta-votes">{{ candidate.votes }} suara</span>
                     <span class="meta-separator">•</span>
-                    <!-- Persentase kandidat 2 desimal -->
                     <span class="meta-percentage"
                       >{{ formatPercentage(candidate.percentage) }}%</span
                     >
@@ -197,7 +222,6 @@
                   ></div>
                 </div>
                 <div class="progress-text">
-                  <!-- Progress text juga 2 desimal -->
                   {{ formatPercentage(candidate.percentage) }}%
                   <span v-if="candidate.percentage > 50" class="supermajority-indicator"
                     >(>50%)</span
@@ -215,6 +239,7 @@
               <span class="activity-icon">🔄</span>
               AKTIVITAS TERBARU
             </h3>
+            <button @click="refreshAllData" class="refresh-btn" title="Refresh data">🔄</button>
           </div>
           <div class="activity-feed">
             <div v-if="activityLog.length === 0" class="empty-activity">
@@ -245,6 +270,11 @@
         <div class="update-info">
           <span class="update-label">Update Terakhir:</span>
           <span class="update-time">{{ lastUpdateTime }}</span>
+          <button @click="refreshAllData" class="refresh-mini-btn" title="Refresh">↻</button>
+        </div>
+        <div class="session-info" v-if="sessionData">
+          <span class="session-status">{{ sessionData.status }}</span>
+          <span class="session-period">{{ formatSessionPeriod(sessionData) }}</span>
         </div>
         <div class="connection-info" :class="{ connected: isConnected }">
           <div class="connection-dot"></div>
@@ -258,7 +288,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
@@ -276,7 +306,22 @@ const activePosition = ref('kesiswaan')
 const candidatesData = ref([])
 const votesData = ref(0)
 const sessionData = ref(null)
+const totalVotersData = ref(0) // Data total peserta (semua pengguna aktif)
 const activityLog = ref([])
+const realtimeChannel = ref(null)
+
+// Loading states
+const isLoading = ref({
+  totalVoters: true,
+  votes: true,
+  candidates: true,
+  session: true,
+})
+
+// Time
+const currentTime = ref('')
+const timeRemaining = ref('')
+const lastUpdateTime = ref('')
 
 // Live Alert
 const showVoteAlert = ref(false)
@@ -298,33 +343,52 @@ const formatPercentage = (value) => {
   return parseFloat(value).toFixed(2).replace('.', ',')
 }
 
+// Format periode sesi
+const formatSessionPeriod = (session) => {
+  if (!session) return ''
+  const start = new Date(session.waktu_mulai_voting).toLocaleDateString('id-ID')
+  const end = new Date(session.waktu_selesai_voting).toLocaleDateString('id-ID')
+  return `${start} - ${end}`
+}
+
+// ===== QUERY FUNCTIONS =====
+// FUNGSI UNTUK MENGHITUNG TOTAL PESERTA (semua pengguna aktif)
+const loadTotalVoters = async () => {
+  try {
+    isLoading.value.totalVoters = true
+
+    const { count, error } = await supabase
+      .from('pengguna')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true) // Hanya pengguna aktif
+
+    if (error) {
+      console.error('❌ Error load total peserta:', error)
+      totalVotersData.value = 0
+      addActivity('❌ Gagal memuat total peserta', 'error')
+    } else {
+      totalVotersData.value = count || 0
+      addActivity(`✅ Total peserta: ${count}`, 'info')
+    }
+  } catch (err) {
+    console.error('❌ Load total peserta error:', err)
+    totalVotersData.value = 0
+  } finally {
+    isLoading.value.totalVoters = false
+  }
+}
+
 // ===== COMPUTED =====
-const totalVoters = computed(() => sessionData.value?.total_pemilih || 150)
+// Total peserta berdasarkan query database
+const totalVoters = computed(() => totalVotersData.value)
+
 const votedCount = computed(() => votesData.value)
 
 // Partisipasi dengan 2 desimal
 const participationRate = computed(() => {
-  return totalVoters.value > 0 ? (votedCount.value / totalVoters.value) * 100 : 0
+  if (totalVoters.value === 0 || isLoading.value.totalVoters || isLoading.value.votes) return 0
+  return (votedCount.value / totalVoters.value) * 100
 })
-
-const currentTime = computed(() => {
-  return new Date().toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZone: 'Asia/Jakarta',
-  })
-})
-
-const lastUpdateTime = computed(() => {
-  return new Date().toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Jakarta',
-  })
-})
-
-const sessionName = computed(() => sessionData.value?.nama_sesi || 'PEMILIHAN WAKA 2025')
 
 const recentActivities = computed(() => {
   return activityLog.value.slice(0, 3)
@@ -347,7 +411,6 @@ const winners = computed(() => {
           jabatan: position.id,
           name: candidate.name,
           votes: candidate.votes,
-          // Simpan persentase asli, tidak dibulatkan
           percentage: percentage,
         })
       }
@@ -411,7 +474,6 @@ const getCandidates = (positionId) => {
   const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
   candidates = candidates.map((c) => ({
     ...c,
-    // Simpan persentase asli dengan desimal
     percentage: totalVotes > 0 ? (c.votes / totalVotes) * 100 : 0,
   }))
 
@@ -505,9 +567,10 @@ const showNotification = (type, candidate) => {
   }, 3000)
 }
 
-// ===== REALTIME FUNCTIONS =====
+// ===== ENHANCED REALTIME FUNCTIONS =====
 const setupRealtime = async () => {
   try {
+    // Load session data first
     const { data: session, error: sessionError } = await supabase
       .from('sesi_pemilihan')
       .select('*')
@@ -522,13 +585,21 @@ const setupRealtime = async () => {
     }
 
     sessionData.value = session
+    isLoading.value.session = false
 
-    await loadCandidates()
-    await loadVotesCount()
+    // Initial data load - SEMUA DATA termasuk total peserta
+    await Promise.all([
+      loadTotalVoters(), // Load total peserta (semua pengguna aktif)
+      loadCandidates(),
+      loadVotesCount(),
+    ])
 
-    const channel = supabase.channel('live-voting')
+    // Setup real-time subscription
+    const channelName = `live-voting-${session.id}-${Date.now()}`
+    realtimeChannel.value = supabase.channel(channelName)
 
-    channel.on(
+    // Subscribe ke INSERT suara
+    realtimeChannel.value.on(
       'postgres_changes',
       {
         event: 'INSERT',
@@ -541,7 +612,8 @@ const setupRealtime = async () => {
       },
     )
 
-    channel.on(
+    // Subscribe ke UPDATE kandidat
+    realtimeChannel.value.on(
       'postgres_changes',
       {
         event: 'UPDATE',
@@ -554,11 +626,64 @@ const setupRealtime = async () => {
       },
     )
 
-    channel.subscribe((status) => {
+    // Subscribe ke UPDATE sesi
+    realtimeChannel.value.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sesi_pemilihan',
+        filter: `id=eq.${session.id}`,
+      },
+      (payload) => {
+        handleSessionUpdate(payload.new)
+      },
+    )
+
+    // Subscribe ke UPDATE pengguna (jika ada perubahan status aktif)
+    realtimeChannel.value.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'pengguna',
+      },
+      async (payload) => {
+        // Jika ada perubahan status aktif, refresh total peserta
+        if (payload.new.is_active !== payload.old?.is_active) {
+          console.log('🔄 Status pengguna berubah, refresh total peserta')
+          await loadTotalVoters()
+        }
+      },
+    )
+
+    // Subscribe ke INSERT pengguna (penambahan peserta baru)
+    realtimeChannel.value.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pengguna',
+      },
+      async () => {
+        console.log('🔄 Peserta baru ditambahkan, refresh total peserta')
+        await loadTotalVoters()
+      },
+    )
+
+    // Status subscription
+    realtimeChannel.value.subscribe((status) => {
+      console.log('🔔 Realtime status:', status)
       isConnected.value = status === 'SUBSCRIBED'
 
       if (status === 'SUBSCRIBED') {
         addActivity('✅ Terhubung ke sistem realtime', 'connection')
+
+        // Mulai auto-refresh data
+        startPeriodicRefresh()
+      } else if (status === 'CHANNEL_ERROR') {
+        addActivity('❌ Koneksi realtime terganggu', 'error')
+        isConnected.value = false
       }
     })
   } catch (err) {
@@ -567,9 +692,26 @@ const setupRealtime = async () => {
   }
 }
 
+// PERIODIC REFRESH FALLBACK
+let periodicRefreshInterval = null
+const startPeriodicRefresh = () => {
+  if (periodicRefreshInterval) {
+    clearInterval(periodicRefreshInterval)
+  }
+
+  // Refresh setiap 30 detik sebagai backup
+  periodicRefreshInterval = setInterval(async () => {
+    if (isConnected.value) {
+      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+    }
+  }, 30000)
+}
+
 const loadCandidates = async () => {
   try {
     if (!sessionData.value?.id) return
+
+    isLoading.value.candidates = true
 
     const { data: candidates, error } = await supabase
       .from('kandidat')
@@ -591,15 +733,19 @@ const loadCandidates = async () => {
       hasUpdate: false,
     }))
 
-    addActivity(`📊 ${candidatesData.value.length} kandidat dimuat`, 'info')
+    console.log(`📊 ${candidatesData.value.length} kandidat dimuat`)
   } catch (err) {
     console.error('❌ Load candidates error:', err)
+  } finally {
+    isLoading.value.candidates = false
   }
 }
 
 const loadVotesCount = async () => {
   try {
     if (!sessionData.value?.id) return
+
+    isLoading.value.votes = true
 
     const { count, error } = await supabase
       .from('suara')
@@ -615,6 +761,8 @@ const loadVotesCount = async () => {
     votesData.value = count || 0
   } catch (err) {
     console.error('❌ Load votes count error:', err)
+  } finally {
+    isLoading.value.votes = false
   }
 }
 
@@ -628,10 +776,25 @@ const handleNewVote = async (vote) => {
 
     const candidateName = candidate?.pengguna?.nama_lengkap || 'Unknown'
 
+    // Update UI
     showNotification('vote', candidateName)
     votesData.value++
 
+    // Tambahkan ke activity log
     addActivity(`🗳️ Vote baru untuk ${candidateName}`, 'vote')
+
+    // Update data kandidat
+    const candidateIndex = candidatesData.value.findIndex((c) => c.id === vote.kandidat_id)
+    if (candidateIndex !== -1) {
+      candidatesData.value[candidateIndex].votes++
+      candidatesData.value[candidateIndex].hasUpdate = true
+
+      setTimeout(() => {
+        if (candidatesData.value[candidateIndex]) {
+          candidatesData.value[candidateIndex].hasUpdate = false
+        }
+      }, 1500)
+    }
   } catch (err) {
     console.error('❌ Handle new vote error:', err)
   }
@@ -644,11 +807,17 @@ const handleCandidateUpdate = (candidate) => {
       const oldVotes = candidatesData.value[index].votes
       const newVotes = candidate.total_suara || 0
 
-      if (newVotes > oldVotes) {
+      if (newVotes !== oldVotes) {
         candidatesData.value[index] = {
           ...candidatesData.value[index],
           votes: newVotes,
           hasUpdate: true,
+        }
+
+        if (Math.abs(newVotes - oldVotes) > 0) {
+          console.log(
+            `📈 Kandidat ${candidatesData.value[index].name} update: ${oldVotes} → ${newVotes}`,
+          )
         }
 
         setTimeout(() => {
@@ -660,6 +829,22 @@ const handleCandidateUpdate = (candidate) => {
     }
   } catch (err) {
     console.error('❌ Handle candidate update error:', err)
+  }
+}
+
+const handleSessionUpdate = (session) => {
+  try {
+    console.log('🔄 Session updated:', session.status)
+    sessionData.value = { ...sessionData.value, ...session }
+
+    if (session.status === 'voting') {
+      addActivity('🚀 Voting dimulai!', 'info')
+    } else if (session.status === 'selesai') {
+      addActivity('🏁 Voting selesai!', 'info')
+      showNotification('winner', '')
+    }
+  } catch (err) {
+    console.error('❌ Handle session update error:', err)
   }
 }
 
@@ -689,22 +874,142 @@ const startRunoff = () => {
   }
 }
 
+// Refresh semua data
+const refreshAllData = async () => {
+  try {
+    addActivity('🔄 Memuat ulang semua data...', 'info')
+
+    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+
+    addActivity('✅ Data berhasil dimuat ulang', 'info')
+
+    // Update waktu terakhir
+    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    })
+  } catch (err) {
+    console.error('❌ Refresh data error:', err)
+    addActivity('❌ Gagal memuat ulang data', 'error')
+  }
+}
+
+// ===== RECONNECTION LOGIC =====
+const reconnectToRealtime = async () => {
+  try {
+    console.log('🔄 Attempting to reconnect...')
+    addActivity('🔄 Mencoba menyambung ulang...', 'connection')
+
+    if (realtimeChannel.value) {
+      await supabase.removeChannel(realtimeChannel.value)
+    }
+
+    await setupRealtime()
+  } catch (err) {
+    console.error('❌ Reconnection failed:', err)
+    setTimeout(() => {
+      if (!isConnected.value) {
+        reconnectToRealtime()
+      }
+    }, 5000)
+  }
+}
+
+// ===== TIME FUNCTIONS =====
+const updateCurrentTime = () => {
+  const now = new Date()
+  currentTime.value = now.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'Asia/Jakarta',
+  })
+
+  // Update last update time setiap menit
+  const minutes = now.getMinutes()
+  if (minutes !== lastMinutes.value) {
+    lastUpdateTime.value = now.toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    })
+    lastMinutes.value = minutes
+  }
+
+  // Hitung waktu tersisa jika ada sesi aktif
+  if (sessionData.value?.waktu_selesai_voting) {
+    const endTime = new Date(sessionData.value.waktu_selesai_voting)
+    const diffMs = endTime - now
+    if (diffMs > 0) {
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+      const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+      timeRemaining.value = `${diffHours}j ${diffMinutes}m`
+    } else {
+      timeRemaining.value = 'Selesai'
+    }
+  }
+}
+
+let lastMinutes = ref(null)
+
 // ===== LIFECYCLE =====
 onMounted(async () => {
+  // Auto fullscreen untuk layar besar
   if (window.innerWidth > 1024) {
     isFullscreen.value = true
   }
 
+  // Setup waktu real-time
+  updateCurrentTime()
+  const timeInterval = setInterval(updateCurrentTime, 1000)
+
+  // Setup realtime
   await setupRealtime()
 
-  setInterval(() => {
-    currentTime.value
-  }, 1000)
+  // Setup reconnection checker
+  const reconnectionInterval = setInterval(() => {
+    if (!isConnected.value && sessionData.value) {
+      console.log('⚠️ Connection lost, attempting to reconnect...')
+      reconnectToRealtime()
+    }
+  }, 10000)
+
+  // Listen for fullscreen changes
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement
+  })
+
+  // Cleanup intervals on unmount
+  onUnmounted(() => {
+    clearInterval(timeInterval)
+    clearInterval(reconnectionInterval)
+  })
 })
 
 onUnmounted(() => {
+  if (realtimeChannel.value) {
+    supabase.removeChannel(realtimeChannel.value)
+    console.log('🔕 Realtime channel cleaned up')
+  }
+
+  if (periodicRefreshInterval) {
+    clearInterval(periodicRefreshInterval)
+  }
+
   if (document.fullscreenElement) {
     document.exitFullscreen()
+  }
+
+  document.removeEventListener('fullscreenchange', () => {})
+})
+
+// Watch untuk koneksi status changes
+watch(isConnected, (newVal) => {
+  if (newVal) {
+    console.log('✅ Realtime connected')
+  } else {
+    console.log('❌ Realtime disconnected')
   }
 })
 </script>
@@ -761,9 +1066,30 @@ onUnmounted(() => {
 }
 
 .session-name {
-  font-size: 16px;
-  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.main-title {
+  font-size: 18px;
+  font-weight: 800;
   color: white;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sub-title {
+  font-size: 12px;
+  color: #cbd5e1;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.3;
 }
 
 .round-info {
@@ -953,6 +1279,46 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
+/* Loading States */
+.stat-value.loading {
+  color: #94a3b8 !important;
+  animation: pulse 1.5s infinite;
+}
+
+.stat-loading {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Participation indicators */
+.participation-high,
+.participation-medium {
+  font-size: 10px;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.participation-high {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.participation-medium {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+/* Time remaining */
+.time-remaining {
+  font-size: 10px;
+  color: #fbbf24;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
 /* ===== WINNERS SECTION ===== */
 .winners-section {
   background: rgba(34, 197, 94, 0.1);
@@ -1022,7 +1388,7 @@ onUnmounted(() => {
   font-size: 20px;
   font-weight: bold;
   color: #22c55e;
-  font-family: 'Courier New', monospace; /* Untuk angka desimal yang rapi */
+  font-family: 'Courier New', monospace;
 }
 
 .winner-card.supermajority .stat-percentage {
@@ -1061,6 +1427,22 @@ onUnmounted(() => {
   margin: 0;
   color: #cbd5e1;
   font-size: 14px;
+}
+
+.runoff-details {
+  margin-top: 8px;
+}
+
+.runoff-position {
+  display: inline-block;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .runoff-button {
@@ -1189,7 +1571,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.05);
   padding: 4px 8px;
   border-radius: 6px;
-  font-family: 'Courier New', monospace; /* Untuk angka desimal */
+  font-family: 'Courier New', monospace;
 }
 
 /* ===== CANDIDATES RANKING ===== */
@@ -1197,6 +1579,27 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.loading-candidates {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .candidate-item {
@@ -1259,12 +1662,21 @@ onUnmounted(() => {
 
 .candidate-rank {
   min-width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .rank-number {
   font-size: 20px;
   font-weight: bold;
   color: #94a3b8;
+}
+
+.winner-badge {
+  font-size: 14px;
+  margin-top: 2px;
 }
 
 .candidate-info {
@@ -1307,7 +1719,7 @@ onUnmounted(() => {
 }
 
 .meta-percentage {
-  font-family: 'Courier New', monospace; /* Untuk angka desimal */
+  font-family: 'Courier New', monospace;
   font-weight: 600;
 }
 
@@ -1339,7 +1751,7 @@ onUnmounted(() => {
   text-align: center;
   font-size: 12px;
   color: #94a3b8;
-  font-family: 'Courier New', monospace; /* Untuk angka desimal */
+  font-family: 'Courier New', monospace;
 }
 
 .supermajority-indicator {
@@ -1355,6 +1767,9 @@ onUnmounted(() => {
 }
 
 .activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 16px;
 }
 
@@ -1369,6 +1784,25 @@ onUnmounted(() => {
 
 .activity-icon {
   font-size: 18px;
+}
+
+.refresh-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(180deg);
 }
 
 .activity-feed {
@@ -1485,6 +1919,45 @@ onUnmounted(() => {
   font-family: 'Courier New', monospace;
 }
 
+.refresh-mini-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: #94a3b8;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 8px;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.refresh-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Session info */
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.session-status {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.session-period {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
 .connection-info {
   display: flex;
   align-items: center;
@@ -1559,6 +2032,16 @@ onUnmounted(() => {
     width: 100%;
   }
 
+  .main-title {
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .sub-title {
+    font-size: 10px;
+    max-width: 280px;
+  }
+
   .header-controls {
     align-self: flex-end;
   }
@@ -1602,12 +2085,28 @@ onUnmounted(() => {
     gap: 8px;
     text-align: center;
   }
+
+  .session-info {
+    display: none;
+  }
+
+  .refresh-mini-btn {
+    margin-left: 4px;
+  }
 }
 
 /* Tablet: 481px-768px */
 @media (min-width: 481px) and (max-width: 768px) {
   .minimal-header {
     padding: 12px 16px;
+  }
+
+  .main-title {
+    font-size: 16px;
+  }
+
+  .sub-title {
+    font-size: 11px;
   }
 
   .summary-row {
@@ -1697,8 +2196,14 @@ onUnmounted(() => {
     padding: 20px 40px;
   }
 
-  .session-name {
-    font-size: 20px;
+  .main-title {
+    font-size: 24px;
+    letter-spacing: 1px;
+  }
+
+  .sub-title {
+    font-size: 16px;
+    max-width: 600px;
   }
 
   .round-info {

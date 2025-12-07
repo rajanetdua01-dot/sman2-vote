@@ -20,10 +20,8 @@
         <p>
           Selamat datang, <strong>{{ user.nama_lengkap }}</strong>
         </p>
-        <p>NIP: {{ user.nip }}</p>
-        <p>Status: {{ user.status_kepegawaian || 'Tidak tersedia' }}</p>
 
-        <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN CALON -->
+        <!-- SEMUA BISA MENDAPATKAN CALON -->
         <p>
           <span class="badge-success">✅ Bisa mendaftarkan calon</span>
         </p>
@@ -131,19 +129,23 @@
 
           <div class="limit-info" v-if="activeSession.status === 'pendaftaran'">
             <p><strong>📋 Ketentuan Pendaftaran Calon:</strong></p>
-            <p>• <strong>Semua peserta</strong> boleh mendaftarkan calon</p>
-            <p>• Setiap peserta boleh mendaftarkan <strong>1 calon per jabatan</strong></p>
-            <p>
-              • <strong>1 guru dapat menjadi kandidat di kedua posisi</strong> (Sarpras dan
-              Kesiswaan)
-            </p>
-            <p>• Calon harus memenuhi semua syarat eligibility:</p>
+            <p><strong>Syarat Eligibility Calon:</strong></p>
             <ul>
-              <li>✅ Status PNS atau PPPK</li>
-              <li>✅ Masa kerja minimal 3 tahun</li>
-              <li>✅ Sisa pensiun minimal 3 tahun</li>
-              <li>✅ Jeda periode (jika pernah menjabat)</li>
-              <li>✅ NIP valid (18 digit)</li>
+              <li>✓ Status kepegawaian: PNS atau PPPK</li>
+              <li>✓ Masa kerja minimal: 3 tahun</li>
+              <li>✓ Sisa pensiun minimal: 3 tahun</li>
+              <li>✓ Jeda periode (jika pernah menjabat)</li>
+              <li>
+                ✓ Tidak ditandai manual non-eligible( mis, jabatan sekarang Kepala Sekoklah, atau
+                karena alasan lain)
+              </li>
+            </ul>
+            <p><strong>Aturan Khusus:</strong></p>
+            <ul>
+              <li>✓ 1 guru dapat menjadi kandidat di kedua posisi</li>
+              <li>✓ 1 peserta boleh mendaftarkan 1 calon per jabatan</li>
+              <li>✓ Boleh mendaftarkan diri sendiri (jika eligible)</li>
+              <li>✓ Tidak boleh mendaftarkan guru yang sudah jadi kandidat di posisi yang sama</li>
             </ul>
             <p>• Anda sudah mendaftarkan:</p>
             <ul>
@@ -212,13 +214,9 @@
               >
                 <td class="nomor-urut">{{ candidate.nomor_urut }}</td>
                 <td>
-                  <div class="candidate-avatar">{{ getInitials(candidate.nama) }}</div>
                   <div class="candidate-details">
                     <p class="candidate-name">{{ candidate.nama }}</p>
                     <p class="pangkat">{{ candidate.golongan_ruang || 'Tidak ada pangkat' }}</p>
-                    <p v-if="candidate.pendaftar" class="registered-by">
-                      <small>Didaftarkan oleh: {{ candidate.pendaftar }}</small>
-                    </p>
                     <div v-if="getOtherPositions(candidate).length > 0" class="other-position-info">
                       <small
                         >👥 Juga kandidat di: {{ getOtherPositions(candidate).join(', ') }}</small
@@ -283,7 +281,7 @@
         <h3>Daftarkan Calon Kandidat</h3>
 
         <div class="my-limit-info">
-          <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN -->
+          <!-- SEMUA BISA MENDAPATKAN -->
           <p v-if="remainingQuota === 0" class="limit-full">
             ⚠️ Anda sudah mendaftarkan calon untuk <strong>kedua jabatan</strong>.
           </p>
@@ -486,29 +484,6 @@
               </div>
             </div>
 
-            <!-- NOMOR URUT -->
-            <div
-              class="form-group"
-              v-if="selectedGuruDetail && (!isSelfRegistration || user.can_be_candidate)"
-            >
-              <label>Nomor Urut *</label>
-              <input
-                v-model.number="form.nomor_urut"
-                type="number"
-                min="1"
-                required
-                class="form-input"
-                placeholder="1, 2, 3, ..."
-                :disabled="!form.pengguna_id"
-              />
-              <p class="form-hint">
-                <small
-                  >Nomor urut untuk posisi ini. Akan otomatis diisi dengan nomor berikutnya.</small
-                >
-              </p>
-              <div v-if="nomorUrutError" class="error-text">{{ nomorUrutError }}</div>
-            </div>
-
             <!-- SUBMIT BUTTON -->
             <div
               class="form-actions"
@@ -533,7 +508,28 @@
         <!-- REGISTRATION RESULT -->
         <div v-if="registrationResult" class="registration-result" :class="registrationResult.type">
           <h4>{{ registrationResult.title }}</h4>
-          <p>{{ registrationResult.message }}</p>
+
+          <!-- Tampilkan pesan error dengan styling khusus -->
+          <div v-if="registrationResult.type === 'error'" class="error-details">
+            <p>{{ registrationResult.message }}</p>
+
+            <!-- Advice khusus untuk constraint errors -->
+            <div
+              v-if="registrationResult.message.includes('sudah terdaftar')"
+              class="constraint-advice"
+            >
+              <p><small>💡 Guru ini sudah didaftarkan oleh peserta lain.</small></p>
+            </div>
+
+            <div v-if="registrationResult.message.includes('Nomor urut')" class="constraint-advice">
+              <p><small>💡 Silakan refresh halaman untuk mendapatkan nomor urut terbaru.</small></p>
+            </div>
+          </div>
+
+          <div v-else>
+            <p>{{ registrationResult.message }}</p>
+          </div>
+
           <button v-if="registrationResult.success" @click="resetForm" class="btn-again">
             Daftarkan Calon Lain
           </button>
@@ -550,18 +546,11 @@
         <div v-else-if="remainingQuota === 0">
           <p>❌ Anda sudah mendaftarkan calon untuk kedua jabatan</p>
         </div>
-        <!-- PERUBAHAN: HAPUS PENCEKAN can_register_candidate -->
       </div>
 
       <!-- INFO BOX -->
       <div class="info-box card">
-        <h3>📋 Informasi Penting</h3>
-        <p><strong>Posisi yang dipilih:</strong></p>
-        <p>• Waka Sarana Prasarana (Sarpras)</p>
-        <p>• Waka Kesiswaan</p>
-        <p><strong>Status Anda:</strong> {{ user.status_kepegawaian }}</p>
-
-        <!-- PERUBAHAN: SEMUA BISA MENDAPATKAN -->
+        <!-- SEMUA BISA MENDAPATKAN -->
         <p>
           <strong>Hak Anda:</strong> <span class="text-success">✅ Bisa mendaftarkan calon</span>
         </p>
@@ -580,23 +569,6 @@
             }}
           </small>
         </p>
-
-        <p><strong>Syarat Eligibility Calon:</strong></p>
-        <ul>
-          <li>✓ Status kepegawaian: PNS atau PPPK</li>
-          <li>✓ Masa kerja minimal: 3 tahun</li>
-          <li>✓ Sisa pensiun minimal: 3 tahun</li>
-          <li>✓ NIP valid (18 digit, format benar)</li>
-          <li>✓ Jeda periode (jika pernah menjabat)</li>
-          <li>✓ Tidak ditandai manual non-eligible</li>
-        </ul>
-        <p><strong>Aturan Khusus:</strong></p>
-        <ul>
-          <li>✓ 1 guru dapat menjadi kandidat di kedua posisi</li>
-          <li>✓ 1 peserta boleh mendaftarkan 1 calon per jabatan</li>
-          <li>✓ Boleh mendaftarkan diri sendiri (jika eligible)</li>
-          <li>✓ Tidak boleh mendaftarkan guru yang sudah jadi kandidat di posisi yang sama</li>
-        </ul>
       </div>
     </div>
 
@@ -612,7 +584,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/utils/supabase'
@@ -632,23 +604,24 @@ const submitting = ref(false)
 const registrationResult = ref(null)
 const confirmSelfRegistration = ref(false)
 const activeTab = ref('all')
+const lastUpdated = ref(null)
+const newCandidateNotification = ref(null)
+const kandidatSubscription = ref(null)
 
-// Form
+// Form - HAPUS nomor_urut dari form
 const form = ref({
   pengguna_id: '',
   jabatan: '',
-  nomor_urut: 1,
 })
 
 // ==================== COMPUTED PROPERTIES ====================
 const user = computed(() => authStore.user || null)
 
-// PERUBAHAN: SEMUA PESERTA BISA MENDAPATKAN
+// SEMUA PESERTA BISA MENDAPATKAN
 const canRegister = computed(() => {
   if (!user.value) return false
   if (!activeSession.value) return false
   if (activeSession.value.status !== 'pendaftaran') return false
-  // ✅ SEMUA PESERTA BISA, TIDAK ADA PENCEKAN can_register_candidate
   return true
 })
 
@@ -687,7 +660,6 @@ const parseNIP = (nip) => {
   if (nipStr.length !== 18) return null
 
   try {
-    // Format PNS: tanggal lahir 8 digit + tanggal pengangkatan 8 digit
     if (isValidDate(nipStr.substring(0, 8)) && isValidDate(nipStr.substring(8, 16))) {
       return {
         format: 'PNS',
@@ -702,9 +674,7 @@ const parseNIP = (nip) => {
         bulan_pengangkatan: parseInt(nipStr.substring(12, 14)),
         hari_pengangkatan: parseInt(nipStr.substring(14, 16)),
       }
-    }
-    // Format PPPK: tanggal lahir 8 digit + tahun penetapan 6 digit
-    else if (isValidDate(nipStr.substring(0, 8))) {
+    } else if (isValidDate(nipStr.substring(0, 8))) {
       return {
         format: 'PPPK',
         tanggal_lahir: nipStr.substring(0, 8),
@@ -751,7 +721,6 @@ const calculateMasaKerja = (guru) => {
     return masaKerja <= 0 ? '< 1 thn' : `${masaKerja} thn`
   }
 
-  // Untuk PNS
   const { tahun_pengangkatan, bulan_pengangkatan, hari_pengangkatan } = parsed
   const sekarang = new Date()
   const tglPengangkatan = new Date(tahun_pengangkatan, bulan_pengangkatan - 1, hari_pengangkatan)
@@ -900,20 +869,15 @@ const getOtherPositionForGuru = (guru, currentPosition) => {
   return otherPosition ? (otherPosition.jabatan === 'sarpras' ? 'Sarpras' : 'Kesiswaan') : ''
 }
 
-// PERUBAHAN: Available guru untuk semua peserta (tidak dibatasi)
+// Available guru untuk semua peserta
 const availableGuruForCurrentPosition = computed(() => {
   const currentPosition = form.value.jabatan
   if (!currentPosition) return []
 
   return guruList.value.filter((g) => {
-    // Filter yang eligible sebagai CALON
     if (!isEligible(g)) return false
-    // Filter yang aktif
     if (!g.is_active) return false
-    // Filter yang tidak perlu jeda periode
     if (needsJeda(g)) return false
-    // Filter guru yang BELUM jadi kandidat di POSISI INI
-    // BOLEH sudah jadi kandidat di posisi lain
     const alreadyInThisPosition = kandidatList.value.some(
       (k) => k.pengguna_id === g.id && k.jabatan === currentPosition,
     )
@@ -954,24 +918,12 @@ const getOtherPositions = (kandidat) => {
   return positions
 }
 
-// Validasi form - FRONTEND VALIDATION
-const nomorUrutError = computed(() => {
-  if (!form.value.nomor_urut || !form.value.jabatan) return ''
-
-  const existing = kandidatList.value.find(
-    (k) => k.jabatan === form.value.jabatan && k.nomor_urut === form.value.nomor_urut,
-  )
-
-  return existing ? `Nomor urut ${form.value.nomor_urut} sudah digunakan untuk posisi ini` : ''
-})
-
+// Validasi form - HAPUS VALIDASI NOMOR URUT MANUAL
 const canSubmit = computed(() => {
-  if (!form.value.jabatan || !form.value.pengguna_id || !form.value.nomor_urut) return false
-  if (nomorUrutError.value) return false
+  if (!form.value.jabatan || !form.value.pengguna_id) return false
   if (!selectedGuruDetail.value) return false
   if (!isEligible(selectedGuruDetail.value)) return false
   if (needsJeda(selectedGuruDetail.value)) return false
-  // PERUBAHAN: Self-registration hanya jika bisa dicalonkan
   if (isSelfRegistration.value && !user.value.can_be_candidate) return false
   if (isSelfRegistration.value && !confirmSelfRegistration.value) return false
   return true
@@ -1011,16 +963,6 @@ const getRowClass = (kandidat) => {
   return 'noneligible-row'
 }
 
-const getInitials = (name) => {
-  if (!name) return '??'
-  return name
-    .split(' ')
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
-}
-
 const formatStatus = (status) => {
   const map = {
     draft: 'Draft',
@@ -1036,6 +978,67 @@ const formatJabatan = (jabatan) => {
   return map[jabatan] || jabatan
 }
 
+// ==================== REAL-TIME FUNCTIONS ====================
+const setupRealtimeUpdates = () => {
+  if (!activeSession.value) return
+
+  console.log('🔔 Setting up real-time updates for session:', activeSession.value.id)
+
+  // Subscribe ke perubahan tabel kandidat
+  kandidatSubscription.value = supabase
+    .channel('kandidat-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*', // INSERT, UPDATE, DELETE
+        schema: 'public',
+        table: 'kandidat',
+        filter: `sesi_id=eq.${activeSession.value.id}`,
+      },
+      async (payload) => {
+        console.log('🔔 Real-time update:', payload.event, payload.new)
+
+        // Jika ada INSERT baru (kandidat baru didaftarkan)
+        if (payload.event === 'INSERT') {
+          // Ambil detail kandidat
+          const { data: kandidatDetail } = await supabase
+            .from('kandidat')
+            .select(
+              `
+              *,
+              pengguna:pengguna_id (nama_lengkap)
+            `,
+            )
+            .eq('id', payload.new.id)
+            .single()
+
+          if (kandidatDetail && kandidatDetail.pengguna) {
+            newCandidateNotification.value = {
+              nama: kandidatDetail.pengguna.nama_lengkap,
+              jabatan: kandidatDetail.jabatan,
+              timestamp: new Date(),
+            }
+
+            // Auto-hide setelah 10 detik
+            setTimeout(() => {
+              newCandidateNotification.value = null
+            }, 10000)
+          }
+        }
+
+        // Refresh data
+        await loadKandidat()
+        await loadMyRegistrations()
+        lastUpdated.value = new Date().toLocaleTimeString()
+      },
+    )
+    .subscribe((status) => {
+      console.log('📡 Subscription status:', status)
+    })
+}
+
+// Removed: refreshKandidat function is not used and real-time updates are handled by setupRealtimeUpdates()
+
 // ==================== METHODS ====================
 const goToLogin = () => {
   router.push('/login-calon')
@@ -1043,22 +1046,15 @@ const goToLogin = () => {
 
 const resetSelectedGuru = () => {
   form.value.pengguna_id = ''
-  form.value.nomor_urut =
-    kandidatList.value.filter((k) => k.jabatan === form.value.jabatan).length + 1
   confirmSelfRegistration.value = false
 }
 
 const onGuruSelected = () => {
-  if (form.value.pengguna_id && form.value.jabatan) {
-    if (!form.value.nomor_urut) {
-      form.value.nomor_urut =
-        kandidatList.value.filter((k) => k.jabatan === form.value.jabatan).length + 1
-    }
-  }
+  // Tidak perlu set nomor urut lagi
 }
 
 const resetForm = () => {
-  form.value = { pengguna_id: '', jabatan: '', nomor_urut: 1 }
+  form.value = { pengguna_id: '', jabatan: '' }
   confirmSelfRegistration.value = false
   registrationResult.value = null
 }
@@ -1067,7 +1063,6 @@ const resetForm = () => {
 const loadData = async () => {
   loading.value = true
   try {
-    // Get current session
     const { data: sessions } = await supabase
       .from('sesi_pemilihan')
       .select('*')
@@ -1079,11 +1074,13 @@ const loadData = async () => {
       activeSession.value = sessions[0]
       await loadKandidat()
       await loadMyRegistrations()
+
+      // Setup real-time updates setelah data load
+      setupRealtimeUpdates()
     } else {
       activeSession.value = null
     }
 
-    // Load all active teachers
     const { data: guru } = await supabase
       .from('pengguna')
       .select('*')
@@ -1093,13 +1090,14 @@ const loadData = async () => {
 
     guruList.value = guru || []
 
-    // Load periode jabatan
     const { data: periode } = await supabase
       .from('periode_jabatan')
       .select('*')
       .order('tahun_mulai', { ascending: false })
 
     periodeJabatanList.value = periode || []
+
+    lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error) {
     console.error('Error loading data:', error)
   } finally {
@@ -1127,8 +1125,7 @@ const loadKandidat = async () => {
           status_kepegawaian,
           is_active,
           is_manual_noneligible
-        ),
-        pendaftar:dibuat_oleh (id, nama_lengkap)
+        )
       `,
       )
       .eq('sesi_id', activeSession.value.id)
@@ -1146,7 +1143,6 @@ const loadKandidat = async () => {
       peran: k.pengguna?.peran,
       is_active: k.pengguna?.is_active,
       is_manual_noneligible: k.pengguna?.is_manual_noneligible,
-      pendaftar: k.pendaftar?.nama_lengkap,
       is_self: k.pengguna_id === k.dibuat_oleh,
     }))
   } catch (error) {
@@ -1164,8 +1160,7 @@ const loadMyRegistrations = async () => {
       .select(
         `
         *,
-        calon:pengguna_id (id, nama_lengkap),
-        pendaftar:dibuat_oleh (id, nama_lengkap)
+        calon:pengguna_id (id, nama_lengkap)
       `,
       )
       .eq('sesi_id', activeSession.value.id)
@@ -1213,7 +1208,7 @@ const handleLogout = async () => {
   }
 }
 
-// ==================== SUBMIT REGISTRATION DENGAN SERVER-SIDE VALIDATION ====================
+// ==================== SUBMIT REGISTRATION DENGAN NOMOR URUT OTOMATIS ====================
 const submitRegistration = async () => {
   if (!canSubmit.value) return
 
@@ -1245,42 +1240,40 @@ const submitRegistration = async () => {
       }
     }
 
-    // ⚠️ **SERVER-SIDE VALIDATION: CEK NOMOR URUT DI DATABASE REAL-TIME**
-    console.log('🔍 Checking nomor urut in database:', {
+    // ✅ HITUNG NOMOR URUT OTOMATIS
+    console.log('🔍 Getting next nomor urut for:', {
       sesi_id: activeSession.value.id,
       jabatan: form.value.jabatan,
-      nomor_urut: form.value.nomor_urut,
     })
 
-    const { data: existingWithSameNumber, error: checkError } = await supabase
+    // Get last nomor urut untuk posisi ini
+    const { data: lastCandidate, error: lastError } = await supabase
       .from('kandidat')
-      .select('id, pengguna:pengguna_id(nama_lengkap)')
+      .select('nomor_urut')
       .eq('sesi_id', activeSession.value.id)
       .eq('jabatan', form.value.jabatan)
-      .eq('nomor_urut', form.value.nomor_urut)
-      .maybeSingle()
+      .order('nomor_urut', { ascending: false })
+      .limit(1)
 
-    if (checkError) {
-      console.error('Error checking nomor urut:', checkError)
-      throw new Error('Gagal memeriksa ketersediaan nomor urut')
+    if (lastError) {
+      console.error('Error getting last nomor urut:', lastError)
+      throw new Error('Gagal mendapatkan nomor urut berikutnya')
     }
 
-    if (existingWithSameNumber) {
-      throw new Error(
-        `Nomor urut ${form.value.nomor_urut} sudah digunakan untuk posisi ini. Silakan pilih nomor lain.`,
-      )
-    }
+    // Calculate next nomor urut
+    const nextNomorUrut =
+      lastCandidate && lastCandidate.length > 0 ? lastCandidate[0].nomor_urut + 1 : 1
 
-    console.log('✅ Nomor urut available, proceeding with insert...')
+    console.log('✅ Next nomor urut:', nextNomorUrut)
 
-    // Insert kandidat dengan error handling untuk unique constraint
+    // ✅ INSERT DENGAN NOMOR URUT OTOMATIS
     const { data: newCandidate, error: kandidatError } = await supabase
       .from('kandidat')
       .insert({
         pengguna_id: form.value.pengguna_id,
         sesi_id: activeSession.value.id,
         jabatan: form.value.jabatan,
-        nomor_urut: form.value.nomor_urut,
+        nomor_urut: nextNomorUrut, // ✅ SISTEM OTOMATIS ASSIGN
         dibuat_oleh: user.value.id,
         total_suara: 0,
         dibuat_pada: new Date().toISOString(),
@@ -1288,33 +1281,38 @@ const submitRegistration = async () => {
       .select()
       .single()
 
+    // ⚠️ **HANDLE CONSTRAINT ERRORS DENGAN TEPAT**
     if (kandidatError) {
-      console.error('Insert error:', kandidatError)
+      console.error('Database error:', kandidatError)
 
-      // Error code 23505 = unique violation (untuk constraint database)
+      // 1. Error UNIQUE (sesi_id, pengguna_id, jabatan) - constraint: kandidat_sesi_jabatan_unique
       if (kandidatError.code === '23505') {
-        // Specific check for nomor_urut unique constraint
-        if (
-          kandidatError.message.includes('nomor_urut') ||
-          kandidatError.message.includes('unique')
-        ) {
+        if (kandidatError.message.includes('kandidat_sesi_jabatan_unique')) {
           throw new Error(
-            `Nomor urut ${form.value.nomor_urut} sudah digunakan untuk posisi ini. Silakan pilih nomor lain.`,
+            `⚠️ ${selectedGuruDetail.value.nama_lengkap} sudah terdaftar sebagai calon untuk posisi ${form.value.jabatan === 'sarpras' ? 'Sarpras' : 'Kesiswaan'}!`,
           )
         }
-        // General unique violation
+
+        // 2. Error UNIQUE (sesi_id, jabatan, nomor_urut) - constraint: kandidat_sesi_id_jabatan_nomor_urut_key
+        if (kandidatError.message.includes('kandidat_sesi_id_jabatan_nomor_urut_key')) {
+          // Race condition: nomor urut sudah dipakai orang lain
+          throw new Error(
+            `⚠️ Nomor urut ${nextNomorUrut} sudah digunakan. Silakan refresh halaman dan coba lagi.`,
+          )
+        }
+
+        // 3. General unique error
         throw new Error(
-          'Data sudah ada di database. Kemungkinan nomor urut atau kombinasi data sudah digunakan.',
+          'Data sudah ada di database. Kemungkinan sudah didaftarkan oleh peserta lain.',
         )
       }
 
-      // Error code 42501 = permission denied
+      // Error lainnya
       if (kandidatError.code === '42501') {
         throw new Error('Tidak memiliki izin untuk menyimpan data. Hubungi administrator.')
       }
 
-      // Other errors
-      throw new Error(`Gagal menyimpan data: ${kandidatError.message}`)
+      throw new Error(`Gagal menyimpan: ${kandidatError.message}`)
     }
 
     // Success
@@ -1323,7 +1321,7 @@ const submitRegistration = async () => {
       success: true,
       type: 'success',
       title: '✅ Pendaftaran Berhasil!',
-      message: `Anda berhasil mendaftarkan ${selectedGuruDetail.value.nama_lengkap} sebagai calon ${formatJabatan(form.value.jabatan)} (No. ${form.value.nomor_urut})`,
+      message: `Anda berhasil mendaftarkan ${selectedGuruDetail.value.nama_lengkap} sebagai calon ${formatJabatan(form.value.jabatan)} (No. ${nextNomorUrut})`,
     }
 
     // Reset form
@@ -1338,6 +1336,13 @@ const submitRegistration = async () => {
       type: 'error',
       title: '❌ Gagal Mendaftarkan',
       message: error.message || 'Terjadi kesalahan yang tidak diketahui',
+    }
+
+    // ✅ AUTO-REFRESH SETELAH ERROR CONSTRAINT
+    if (error.message.includes('sudah terdaftar') || error.message.includes('23505')) {
+      console.log('🔄 Auto-refresh karena constraint error')
+      await loadKandidat()
+      await loadMyRegistrations()
     }
 
     // Auto-clear error after 5 seconds
@@ -1376,6 +1381,14 @@ onMounted(async () => {
   }
 })
 
+// Unsubscribe saat komponen di-destroy
+onUnmounted(() => {
+  if (kandidatSubscription.value) {
+    supabase.removeChannel(kandidatSubscription.value)
+    console.log('🔕 Unsubscribed from real-time updates')
+  }
+})
+
 // Watch perubahan jabatan
 watch(
   () => form.value.jabatan,
@@ -1386,9 +1399,131 @@ watch(
   },
 )
 </script>
-
 <style scoped>
 /* STYLE TAMBAHAN UNTUK PERUBAHAN */
+
+/* Badge baru */
+.badge-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #1e40af;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-secondary {
+  background: rgba(107, 114, 128, 0.2);
+  color: #374151;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.text-success {
+  color: #059669;
+  font-weight: 600;
+}
+
+.text-warning {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.text-muted {
+  color: #6b7280;
+  font-size: 0.8rem;
+}
+
+/* Warning untuk diri sendiri tidak eligible */
+.self-not-eligible-warning {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fee2e2;
+  border-radius: 8px;
+  border: 2px solid #fca5a5;
+}
+
+.self-not-eligible-warning h4 {
+  color: #dc2626;
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.self-not-eligible-warning ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.self-not-eligible-warning li {
+  color: #991b1b;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.warning-note {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+/* Option untuk diri sendiri yang tidak eligible */
+.self-not-eligible {
+  background-color: #fef2f2;
+  color: #991b1b;
+  font-style: italic;
+}
+
+/* Constraint error advice */
+.constraint-advice {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: #fef3c7;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+}
+
+.constraint-advice p {
+  margin: 0;
+  color: #92400e;
+  font-size: 0.85rem;
+}
+
+/* Error details styling */
+.error-details {
+  background: #fef2f2;
+  padding: 0.75rem;
+  border-radius: 8px;
+  margin: 0.75rem 0;
+}
+
+/* Tampilan form jika tidak eligible */
+.guru-detail {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+}
+
+/* Loading state untuk submit button */
+.btn-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .constraint-advice {
+    font-size: 0.8rem;
+  }
+}
 
 /* Badge baru */
 .badge-info {

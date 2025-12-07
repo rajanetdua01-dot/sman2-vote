@@ -152,17 +152,35 @@ export const useAuthStore = defineStore('auth', {
           throw new Error('Password tidak valid')
         }
 
-        // 5. CEK ELIGIBILITY FLAG (hanya untuk PNS/PPPK yang bisa JADI CALON)
+        // 5. TENTUKAN PERMISSION BERDASARKAN PERAN & STATUS
+        // ✅ PERUBAHAN PENTING: Validasi peran untuk bisa dicalonkan
+        const isGuru = peserta.peran === 'guru'
+        const isPNSatauPPPK = ['PNS', 'PPPK'].includes(status)
+
+        // CEK ELIGIBILITY FLAG (hanya untuk PNS/PPPK yang bisa JADI CALON)
         let eligibilityMessage = null
-        if (['PNS', 'PPPK'].includes(status)) {
+        let canBeCandidate = false
+
+        if (isGuru && isPNSatauPPPK) {
+          // Hanya GURU PNS/PPPK yang dicek eligibility
           if (peserta.is_manual_noneligible) {
             eligibilityMessage = `Status: Tidak eligible - ${peserta.manual_noneligible_reason || 'Alasan tidak ditentukan'}`
-            // Tetap bisa login tapi dengan warning
+            canBeCandidate = false
             console.warn(eligibilityMessage)
+          } else {
+            canBeCandidate = true
           }
+        } else if (isGuru && !isPNSatauPPPK) {
+          // GURU tapi bukan PNS/PPPK (PTT/GTT/Honorer)
+          eligibilityMessage = `Status: ${status} - Tidak bisa dicalonkan (hanya PNS/PPPK)`
+          canBeCandidate = false
+        } else if (!isGuru) {
+          // TENAGA KEPENDIDIKAN (tendik)
+          eligibilityMessage = `Peran: ${peserta.peran === 'tendik' ? 'Tenaga Kependidikan' : peserta.peran} - Tidak bisa dicalonkan`
+          canBeCandidate = false
         }
 
-        // 6. Set user data - PERUBAHAN PENTING DI SINI
+        // 6. Set user data - DENGAN PERBAIKAN VALIDASI PERAN
         this.user = {
           id: peserta.id,
           nip: peserta.nip,
@@ -177,8 +195,12 @@ export const useAuthStore = defineStore('auth', {
           // ✅ PERUBAHAN: SEMUA PESERTA BISA MENDAPATKAN CALON
           can_register_candidate: true, // SEMUA BISA MENDAPATKAN
 
-          // ✅ Syarat untuk BISA DICALONKAN (sebagai calon)
-          can_be_candidate: ['PNS', 'PPPK'].includes(status) && !peserta.is_manual_noneligible,
+          // ✅ PERBAIKAN: Hanya GURU PNS/PPPK tanpa flag manual yang bisa dicalonkan
+          can_be_candidate: canBeCandidate,
+
+          // ✅ Info tambahan untuk tampilan
+          is_guru: isGuru,
+          is_pns_or_pppk: isPNSatauPPPK,
 
           can_vote: true, // Semua bisa voting (nanti pakai token QR)
           eligibility_message: eligibilityMessage,
@@ -308,18 +330,29 @@ export const useAuthStore = defineStore('auth', {
       return this.isPeserta() && this.user?.can_vote === true
     },
 
-    // ✅ PERUBAHAN: BEDA ANTARA "BISA MENDAPATKAN" vs "BISA DICALONKAN"
+    // ✅ PERBAIKAN: VALIDASI LENGKAP UNTUK BISA DICALONKAN
     isEligibleCandidate() {
       return (
         this.isPeserta() &&
-        ['PNS', 'PPPK'].includes(this.user?.status_kepegawaian) &&
-        !this.user?.eligibility_message
+        this.user?.is_guru === true && // ✅ HARUS GURU
+        this.user?.is_pns_or_pppk === true && // ✅ HARUS PNS/PPPK
+        !this.user?.eligibility_message // ✅ TIDAK ADA PESAN ELIGIBILITY
       )
     },
 
-    // ✅ FUNGSI BARU: Apakah user bisa dicalonkan
+    // ✅ PERBAIKAN: Apakah user bisa dicalonkan
     canBeCandidate() {
       return this.user?.can_be_candidate === true
+    },
+
+    // ✅ FUNGSI BARU: Cek apakah user adalah guru
+    isGuru() {
+      return this.user?.is_guru === true
+    },
+
+    // ✅ FUNGSI BARU: Cek apakah user adalah tenaga kependidikan
+    isTenagaKependidikan() {
+      return this.user?.peran === 'tendik'
     },
 
     // ==================== GET USER INFO ====================
@@ -416,7 +449,11 @@ export const useAuthStore = defineStore('auth', {
     userRole: (state) => state.user?.peran || null,
     authType: (state) => state.loginType,
 
-    // ==================== ELIGIBILITY GETTERS ====================
+    // ==================== PERAN GETTERS ====================
+    isGuru: (state) => state.user?.is_guru === true,
+    isTenagaKependidikan: (state) => state.user?.peran === 'tendik',
+
+    // ==================== STATUS KEPEGAWAIAN GETTERS ====================
     isPNS: (state) => state.user?.status_kepegawaian === 'PNS',
     isPPPK: (state) => state.user?.status_kepegawaian === 'PPPK',
     isPTT: (state) => state.user?.status_kepegawaian === 'PTT',
@@ -427,20 +464,57 @@ export const useAuthStore = defineStore('auth', {
     userDisplayInfo: (state) => {
       if (!state.user) return null
 
+      // Tentukan label peran
+      let peranLabel = 'Unknown'
+      if (state.user.peran === 'guru') {
+        peranLabel = 'Guru'
+      } else if (state.user.peran === 'tendik') {
+        peranLabel = 'Tenaga Kependidikan'
+      }
+
       return {
         nama: state.user.nama_lengkap,
         nip: state.user.nip,
         status: state.user.status_kepegawaian,
         pangkat: state.user.pangkat,
         golongan: state.user.golongan_ruang,
-        peran: state.user.peran === 'guru' ? 'Guru' : 'Tenaga Kependidikan',
+        peran: peranLabel,
         dapat_mendaftarkan: 'Ya', // ✅ Semua bisa mendaftarkan
-        dapat_dicalonkan: state.user.can_be_candidate ? 'Ya' : 'Tidak', // ✅ Hanya PNS/PPPK
+        dapat_dicalonkan: state.user.can_be_candidate ? 'Ya' : 'Tidak', // ✅ Hanya yang eligible
       }
     },
 
     // ==================== AUTH STATUS ====================
     isLoggedInAsPeserta: (state) => state.loginType === 'peserta',
     isLoggedInAsAdmin: (state) => state.loginType === 'admin',
+
+    // ==================== ELIGIBILITY SUMMARY ====================
+    eligibilitySummary: (state) => {
+      if (!state.user) return null
+
+      const summaries = []
+
+      // Cek peran
+      if (state.user.peran !== 'guru') {
+        summaries.push('❌ Bukan guru (Tenaga Kependidikan tidak bisa dicalonkan)')
+      }
+
+      // Cek status kepegawaian
+      if (!['PNS', 'PPPK'].includes(state.user.status_kepegawaian)) {
+        summaries.push(`❌ Status kepegawaian: ${state.user.status_kepegawaian} (harus PNS/PPPK)`)
+      }
+
+      // Cek eligibility message
+      if (state.user.eligibility_message) {
+        summaries.push(`❌ ${state.user.eligibility_message}`)
+      }
+
+      // Jika semua lolos
+      if (summaries.length === 0) {
+        summaries.push('✅ Memenuhi semua syarat untuk dicalonkan')
+      }
+
+      return summaries
+    },
   },
 })

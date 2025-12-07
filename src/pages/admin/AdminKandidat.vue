@@ -3,7 +3,20 @@
     <!-- Header -->
     <div class="page-header">
       <h1>👤 Data Kandidat</h1>
-      <button @click="$router.push('/admin')" class="back-btn">← Dashboard</button>
+      <div class="header-actions">
+        <button @click="refreshData" class="refresh-btn" title="Refresh data">🔄 Refresh</button>
+        <small class="last-updated" v-if="lastUpdated"> Terakhir update: {{ lastUpdated }} </small>
+        <button @click="$router.push('/admin')" class="back-btn">← Dashboard</button>
+      </div>
+    </div>
+
+    <!-- Real-time Notification -->
+    <div v-if="newCandidateNotification" class="notification-toast">
+      <p>
+        🆕 <strong>{{ newCandidateNotification.nama }}</strong> baru didaftarkan sebagai calon
+        {{ newCandidateNotification.jabatan === 'sarpras' ? 'Waka Sarpras' : 'Waka Kesiswaan' }}
+      </p>
+      <button @click="newCandidateNotification = null">✕</button>
     </div>
 
     <!-- Session Status -->
@@ -452,7 +465,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 
 // ==================== STATE ====================
@@ -466,6 +479,10 @@ const editing = ref(false)
 const activeTab = ref('all')
 const isSaving = ref(false)
 const selectedKandidat = ref(null)
+const lastUpdated = ref(null)
+const newCandidateNotification = ref(null)
+const kandidatSubscription = ref(null)
+const refreshInterval = ref(null)
 
 // Form state
 const form = ref({
@@ -475,6 +492,73 @@ const form = ref({
   nomor_urut: 1,
   reset_suara: false,
 })
+
+// ==================== REAL-TIME FUNCTIONS ====================
+const setupRealtimeUpdates = () => {
+  if (!activeSession.value) return
+
+  console.log('🔔 Setting up real-time updates for session:', activeSession.value.id)
+
+  // Subscribe ke perubahan tabel kandidat
+  kandidatSubscription.value = supabase
+    .channel('kandidat-changes-admin')
+    .on(
+      'postgres_changes',
+      {
+        event: '*', // INSERT, UPDATE, DELETE
+        schema: 'public',
+        table: 'kandidat',
+        filter: `sesi_id=eq.${activeSession.value.id}`,
+      },
+      async (payload) => {
+        console.log('🔔 Real-time update admin:', payload.event, payload.new)
+
+        // Jika ada INSERT baru (kandidat baru didaftarkan)
+        if (payload.event === 'INSERT') {
+          // Ambil detail kandidat
+          const { data: kandidatDetail } = await supabase
+            .from('kandidat')
+            .select(
+              `
+              *,
+              pengguna:pengguna_id (nama_lengkap)
+            `,
+            )
+            .eq('id', payload.new.id)
+            .single()
+
+          if (kandidatDetail && kandidatDetail.pengguna) {
+            newCandidateNotification.value = {
+              nama: kandidatDetail.pengguna.nama_lengkap,
+              jabatan: kandidatDetail.jabatan,
+              timestamp: new Date(),
+            }
+
+            // Auto-hide setelah 10 detik
+            setTimeout(() => {
+              newCandidateNotification.value = null
+            }, 10000)
+          }
+        }
+
+        // Refresh data
+        await refreshData()
+      },
+    )
+    .subscribe((status) => {
+      console.log('📡 Admin subscription status:', status)
+    })
+}
+
+const refreshData = async () => {
+  try {
+    await loadData()
+    lastUpdated.value = new Date().toLocaleTimeString()
+    console.log('✅ Data admin direfresh')
+  } catch (error) {
+    console.error('❌ Gagal refresh admin:', error)
+  }
+}
 
 // ==================== COMPUTED PROPERTIES ====================
 const sarprasCount = computed(
@@ -981,15 +1065,14 @@ const loadData = async () => {
 
     if (periodeError) throw periodeError
     periodeJabatanList.value = periode || []
+
+    lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error) {
     console.error('Load error:', error)
     // Set default empty arrays on error
     kandidatList.value = []
     guruList.value = []
     periodeJabatanList.value = []
-
-    // Show user-friendly error
-    alert('Gagal memuat data. Silakan refresh halaman.')
   }
 }
 
@@ -1130,7 +1213,7 @@ const saveKandidat = async () => {
       if (error) throw error
     }
 
-    await loadData()
+    await refreshData()
     closeModal()
     alert(`✅ Kandidat ${editing.value ? 'diperbarui' : 'ditambahkan'}!`)
   } catch (error) {
@@ -1156,7 +1239,7 @@ const deleteKandidat = async (k) => {
 
     if (error) throw error
 
-    await loadData()
+    await refreshData()
     alert('✅ Kandidat dihapus!')
   } catch (error) {
     console.error('Delete error:', error)
@@ -1185,11 +1268,29 @@ const closeDetailModal = () => {
 onMounted(async () => {
   await loadData()
 
-  // Auto-refresh setiap 30 detik jika sesi voting
-  if (activeSession.value?.status === 'voting') {
-    setInterval(async () => {
-      await loadData()
-    }, 30000) // 30 detik
+  // Setup real-time updates setelah data load
+  if (activeSession.value) {
+    setupRealtimeUpdates()
+  }
+
+  // Auto-refresh setiap 30 detik untuk update suara
+  refreshInterval.value = setInterval(async () => {
+    if (activeSession.value?.status === 'voting') {
+      await refreshData()
+    }
+  }, 30000) // 30 detik
+})
+
+// Unsubscribe saat komponen di-destroy
+onUnmounted(() => {
+  if (kandidatSubscription.value) {
+    supabase.removeChannel(kandidatSubscription.value)
+    console.log('🔕 Admin unsubscribed from real-time updates')
+  }
+
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+    console.log('⏹️ Admin auto-refresh stopped')
   }
 })
 
@@ -1207,6 +1308,106 @@ watch(
 </script>
 
 <style scoped>
+/* ==================== STYLE BARU UNTUK REAL-TIME FEATURES ==================== */
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.refresh-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.refresh-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.last-updated {
+  color: #6b7280;
+  font-size: 0.8rem;
+  background: #f9fafb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+/* Notification Toast */
+.notification-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 300px;
+  max-width: 400px;
+  animation: slideIn 0.3s ease;
+  border-left: 4px solid #047857;
+}
+
+.notification-toast p {
+  margin: 0;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.notification-toast strong {
+  font-weight: 700;
+}
+
+.notification-toast button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 10px;
+  transition: all 0.2s;
+}
+
+.notification-toast button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ==================== STYLE LAMA (DIPERTAHANKAN DENGAN IMPROVEMENT) ==================== */
+
 /* Tambahan CSS untuk fitur 1 guru 2 posisi */
 .other-position-info {
   margin-top: 0.25rem;
@@ -2241,6 +2442,11 @@ tbody tr:last-child td {
     text-align: center;
   }
 
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .back-btn {
     align-self: center;
   }
@@ -2306,6 +2512,12 @@ tbody tr:last-child td {
   .btn-action {
     margin-right: 0.25rem;
   }
+
+  .notification-toast {
+    left: 10px;
+    right: 10px;
+    min-width: unset;
+  }
 }
 
 /* Print Styles */
@@ -2313,7 +2525,9 @@ tbody tr:last-child td {
   .page-header,
   .actions,
   .btn-action,
-  .modal-overlay {
+  .modal-overlay,
+  .refresh-btn,
+  .notification-toast {
     display: none;
   }
 
