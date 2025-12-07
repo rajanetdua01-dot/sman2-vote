@@ -6,7 +6,6 @@
 
       <div class="header-center">
         <div class="session-name">
-          <!-- UPDATED: Sesuai branding baru -->
           <div class="main-title">SMANDA VOTE</div>
           <div class="sub-title">Aplikasi Digital Real Time Voting SMAN 2 Bandar Lampung</div>
           <div class="election-type">Pemilihan Wakil Kepala Sekolah</div>
@@ -30,6 +29,18 @@
         >
           {{ isFullscreen ? '📱' : '🖥️' }}
         </button>
+      </div>
+    </div>
+
+    <!-- MANUAL REFRESH UNTUK HP/PC -->
+    <div v-if="!isLargeScreen" class="manual-refresh-container">
+      <button @click="manualRefresh" class="manual-refresh-btn" :disabled="isRefreshing">
+        <span v-if="isRefreshing">⏳ Loading...</span>
+        <span v-else>🔄 REFRESH DATA</span>
+        <span class="refresh-count" v-if="refreshCount > 0">({{ refreshCount }})</span>
+      </button>
+      <div class="refresh-info">
+        <small>Auto-refresh: {{ refreshTimer }} detik | Terakhir: {{ lastUpdateTime }}</small>
       </div>
     </div>
 
@@ -241,7 +252,7 @@
               <span class="activity-icon">🔄</span>
               AKTIVITAS TERBARU
             </h3>
-            <button @click="refreshAllData" class="refresh-btn" title="Refresh data">🔄</button>
+            <button @click="manualRefresh" class="refresh-btn" title="Refresh data">🔄</button>
           </div>
           <div class="activity-feed">
             <div v-if="activityLog.length === 0" class="empty-activity">
@@ -272,7 +283,14 @@
         <div class="update-info">
           <span class="update-label">Update Terakhir:</span>
           <span class="update-time">{{ lastUpdateTime }}</span>
-          <button @click="refreshAllData" class="refresh-mini-btn" title="Refresh">↻</button>
+          <button
+            @click="manualRefresh"
+            class="refresh-mini-btn"
+            title="Refresh"
+            :disabled="isRefreshing"
+          >
+            {{ isRefreshing ? '⏳' : '↻' }}
+          </button>
         </div>
         <div class="session-info" v-if="sessionData">
           <span class="session-status">{{ sessionData.status }}</span>
@@ -281,7 +299,9 @@
         <div class="connection-info" :class="{ connected: isConnected }">
           <div class="connection-dot"></div>
           <span class="connection-text">
-            {{ isConnected ? 'LIVE' : 'CONNECTING...' }}
+            {{
+              isLargeScreen ? (isConnected ? '📺 LIVE TV' : '📺 CONNECTING...') : '📱 AUTO-REFRESH'
+            }}
           </span>
         </div>
       </div>
@@ -290,7 +310,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
@@ -301,14 +321,20 @@ const isConnected = ref(false)
 const isFullscreen = ref(false)
 const soundEnabled = ref(true)
 const votingRound = ref(1)
-const isAdmin = ref(true)
+const isAdmin = ref(false) // Set false untuk peserta biasa
 const activePosition = ref('kesiswaan')
+const isLargeScreen = ref(false) // TV/Smartboard detection
+const isRefreshing = ref(false)
+const refreshCount = ref(0)
+const refreshTimer = ref(30)
+let refreshTimerInterval = null
+let autoRefreshInterval = null
 
 // Data
 const candidatesData = ref([])
 const votesData = ref(0)
 const sessionData = ref(null)
-const totalVotersData = ref(0) // Data total peserta (semua pengguna aktif)
+const totalVotersData = ref(0)
 const activityLog = ref([])
 const realtimeChannel = ref(null)
 
@@ -339,13 +365,11 @@ const positions = [
 ]
 
 // ===== HELPER FUNCTIONS =====
-// Format angka dengan 2 desimal untuk persentase
 const formatPercentage = (value) => {
   if (isNaN(value) || value === null || value === undefined) return '0.00'
   return parseFloat(value).toFixed(2).replace('.', ',')
 }
 
-// Format periode sesi
 const formatSessionPeriod = (session) => {
   if (!session) return ''
   const start = new Date(session.waktu_mulai_voting).toLocaleDateString('id-ID')
@@ -353,8 +377,21 @@ const formatSessionPeriod = (session) => {
   return `${start} - ${end}`
 }
 
+// ===== DEVICE DETECTION =====
+const detectDeviceType = () => {
+  // TV/Smartboard biasanya punya layar besar (>1024px) dan aspect ratio berbeda
+  const width = window.innerWidth
+  const height = window.innerHeight
+  const isWideScreen = width > 1024 && width / height > 1.5
+
+  // Check URL parameter untuk force TV mode
+  const urlParams = new URLSearchParams(window.location.search)
+  const forceTV = urlParams.has('tv') || localStorage.getItem('tv_mode') === 'true'
+
+  return forceTV || isWideScreen
+}
+
 // ===== QUERY FUNCTIONS =====
-// FUNGSI UNTUK MENGHITUNG TOTAL PESERTA (semua pengguna aktif)
 const loadTotalVoters = async () => {
   try {
     isLoading.value.totalVoters = true
@@ -362,7 +399,7 @@ const loadTotalVoters = async () => {
     const { count, error } = await supabase
       .from('pengguna')
       .select('*', { count: 'exact', head: true })
-      .eq('is_active', true) // Hanya pengguna aktif
+      .eq('is_active', true)
 
     if (error) {
       console.error('❌ Error load total peserta:', error)
@@ -370,7 +407,6 @@ const loadTotalVoters = async () => {
       addActivity('❌ Gagal memuat total peserta', 'error')
     } else {
       totalVotersData.value = count || 0
-      addActivity(`✅ Total peserta: ${count}`, 'info')
     }
   } catch (err) {
     console.error('❌ Load total peserta error:', err)
@@ -381,12 +417,10 @@ const loadTotalVoters = async () => {
 }
 
 // ===== COMPUTED =====
-// Total peserta berdasarkan query database
 const totalVoters = computed(() => totalVotersData.value)
 
 const votedCount = computed(() => votesData.value)
 
-// Partisipasi dengan 2 desimal
 const participationRate = computed(() => {
   if (totalVoters.value === 0 || isLoading.value.totalVoters || isLoading.value.votes) return 0
   return (votedCount.value / totalVoters.value) * 100
@@ -569,8 +603,88 @@ const showNotification = (type, candidate) => {
   }, 3000)
 }
 
-// ===== ENHANCED REALTIME FUNCTIONS =====
+// ===== POLLING SYSTEM (UNTUK HP/PC) =====
+const startPolling = (interval = 30000) => {
+  // Hentikan interval sebelumnya jika ada
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval)
+  }
+
+  // Fungsi refresh data
+  const refreshData = async () => {
+    try {
+      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+      refreshCount.value++
+
+      // Update last update time
+      lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Jakarta',
+      })
+    } catch (err) {
+      console.error('❌ Polling error:', err)
+    }
+  }
+
+  // Immediate first refresh
+  refreshData()
+
+  // Set interval
+  autoRefreshInterval = setInterval(refreshData, interval)
+
+  // Start refresh timer
+  startRefreshTimer()
+}
+
+const startRefreshTimer = () => {
+  refreshTimer.value = 30
+  refreshTimerInterval = setInterval(() => {
+    refreshTimer.value--
+    if (refreshTimer.value <= 0) {
+      refreshTimer.value = 30
+    }
+  }, 1000)
+}
+
+const manualRefresh = async () => {
+  if (isRefreshing.value) return
+
+  isRefreshing.value = true
+  try {
+    addActivity('🔄 Manual refresh data...', 'info')
+
+    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+    refreshCount.value++
+
+    // Update waktu terakhir
+    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    })
+
+    // Reset timer
+    refreshTimer.value = 30
+
+    addActivity('✅ Data berhasil diperbarui', 'info')
+  } catch (err) {
+    console.error('❌ Manual refresh error:', err)
+    addActivity('❌ Gagal memuat ulang data', 'error')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+// ===== REALTIME SYSTEM (UNTUK TV/SMARTBOARD) =====
 const setupRealtime = async () => {
+  // Hanya jalankan jika layar besar (TV/Smartboard)
+  if (!isLargeScreen.value) {
+    console.log('📱 Device kecil, menggunakan polling mode')
+    startPolling(30000)
+    return
+  }
+
   try {
     // Load session data first
     const { data: session, error: sessionError } = await supabase
@@ -589,15 +703,11 @@ const setupRealtime = async () => {
     sessionData.value = session
     isLoading.value.session = false
 
-    // Initial data load - SEMUA DATA termasuk total peserta
-    await Promise.all([
-      loadTotalVoters(), // Load total peserta (semua pengguna aktif)
-      loadCandidates(),
-      loadVotesCount(),
-    ])
+    // Initial data load
+    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
 
-    // Setup real-time subscription
-    const channelName = `live-voting-${session.id}-${Date.now()}`
+    // Setup real-time subscription hanya untuk TV
+    const channelName = `tv-live-voting-${session.id}`
     realtimeChannel.value = supabase.channel(channelName)
 
     // Subscribe ke INSERT suara
@@ -642,71 +752,26 @@ const setupRealtime = async () => {
       },
     )
 
-    // Subscribe ke UPDATE pengguna (jika ada perubahan status aktif)
-    realtimeChannel.value.on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'pengguna',
-      },
-      async (payload) => {
-        // Jika ada perubahan status aktif, refresh total peserta
-        if (payload.new.is_active !== payload.old?.is_active) {
-          console.log('🔄 Status pengguna berubah, refresh total peserta')
-          await loadTotalVoters()
-        }
-      },
-    )
-
-    // Subscribe ke INSERT pengguna (penambahan peserta baru)
-    realtimeChannel.value.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'pengguna',
-      },
-      async () => {
-        console.log('🔄 Peserta baru ditambahkan, refresh total peserta')
-        await loadTotalVoters()
-      },
-    )
-
     // Status subscription
     realtimeChannel.value.subscribe((status) => {
-      console.log('🔔 Realtime status:', status)
+      console.log('📺 TV Realtime status:', status)
       isConnected.value = status === 'SUBSCRIBED'
 
       if (status === 'SUBSCRIBED') {
-        addActivity('✅ Terhubung ke sistem realtime', 'connection')
-
-        // Mulai auto-refresh data
-        startPeriodicRefresh()
+        addActivity('📺 Terhubung ke sistem realtime TV', 'connection')
       } else if (status === 'CHANNEL_ERROR') {
-        addActivity('❌ Koneksi realtime terganggu', 'error')
+        addActivity('❌ Koneksi TV terganggu', 'error')
         isConnected.value = false
+        // Fallback ke polling
+        startPolling(5000)
       }
     })
   } catch (err) {
-    console.error('❌ Setup realtime error:', err)
-    addActivity('❌ Gagal menyambung ke realtime', 'error')
+    console.error('❌ Setup realtime TV error:', err)
+    addActivity('❌ Gagal menyambung TV realtime', 'error')
+    // Fallback ke polling
+    startPolling(10000)
   }
-}
-
-// PERIODIC REFRESH FALLBACK
-let periodicRefreshInterval = null
-const startPeriodicRefresh = () => {
-  if (periodicRefreshInterval) {
-    clearInterval(periodicRefreshInterval)
-  }
-
-  // Refresh setiap 30 detik sebagai backup
-  periodicRefreshInterval = setInterval(async () => {
-    if (isConnected.value) {
-      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
-    }
-  }, 30000)
 }
 
 const loadCandidates = async () => {
@@ -816,12 +881,6 @@ const handleCandidateUpdate = (candidate) => {
           hasUpdate: true,
         }
 
-        if (Math.abs(newVotes - oldVotes) > 0) {
-          console.log(
-            `📈 Kandidat ${candidatesData.value[index].name} update: ${oldVotes} → ${newVotes}`,
-          )
-        }
-
         setTimeout(() => {
           if (candidatesData.value[index]) {
             candidatesData.value[index].hasUpdate = false
@@ -876,48 +935,6 @@ const startRunoff = () => {
   }
 }
 
-// Refresh semua data
-const refreshAllData = async () => {
-  try {
-    addActivity('🔄 Memuat ulang semua data...', 'info')
-
-    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
-
-    addActivity('✅ Data berhasil dimuat ulang', 'info')
-
-    // Update waktu terakhir
-    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Jakarta',
-    })
-  } catch (err) {
-    console.error('❌ Refresh data error:', err)
-    addActivity('❌ Gagal memuat ulang data', 'error')
-  }
-}
-
-// ===== RECONNECTION LOGIC =====
-const reconnectToRealtime = async () => {
-  try {
-    console.log('🔄 Attempting to reconnect...')
-    addActivity('🔄 Mencoba menyambung ulang...', 'connection')
-
-    if (realtimeChannel.value) {
-      await supabase.removeChannel(realtimeChannel.value)
-    }
-
-    await setupRealtime()
-  } catch (err) {
-    console.error('❌ Reconnection failed:', err)
-    setTimeout(() => {
-      if (!isConnected.value) {
-        reconnectToRealtime()
-      }
-    }, 5000)
-  }
-}
-
 // ===== TIME FUNCTIONS =====
 const updateCurrentTime = () => {
   const now = new Date()
@@ -957,25 +974,24 @@ let lastMinutes = ref(null)
 
 // ===== LIFECYCLE =====
 onMounted(async () => {
-  // Auto fullscreen untuk layar besar
-  if (window.innerWidth > 1024) {
-    isFullscreen.value = true
-  }
+  // Deteksi device type
+  isLargeScreen.value = detectDeviceType()
 
   // Setup waktu real-time
   updateCurrentTime()
   const timeInterval = setInterval(updateCurrentTime, 1000)
 
-  // Setup realtime
-  await setupRealtime()
-
-  // Setup reconnection checker
-  const reconnectionInterval = setInterval(() => {
-    if (!isConnected.value && sessionData.value) {
-      console.log('⚠️ Connection lost, attempting to reconnect...')
-      reconnectToRealtime()
-    }
-  }, 10000)
+  // Setup berdasarkan device type
+  if (isLargeScreen.value) {
+    // TV/SMARTBOARD: Realtime mode
+    console.log('📺 TV/Smartboard mode detected - using realtime')
+    await setupRealtime()
+  } else {
+    // HP/PC: Polling mode
+    console.log('📱 Mobile/PC mode detected - using polling')
+    startPolling(30000)
+    addActivity('📱 Mode Auto-Refresh aktif (30 detik)', 'info')
+  }
 
   // Listen for fullscreen changes
   document.addEventListener('fullscreenchange', () => {
@@ -985,7 +1001,12 @@ onMounted(async () => {
   // Cleanup intervals on unmount
   onUnmounted(() => {
     clearInterval(timeInterval)
-    clearInterval(reconnectionInterval)
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval)
+    }
+    if (refreshTimerInterval) {
+      clearInterval(refreshTimerInterval)
+    }
   })
 })
 
@@ -995,8 +1016,12 @@ onUnmounted(() => {
     console.log('🔕 Realtime channel cleaned up')
   }
 
-  if (periodicRefreshInterval) {
-    clearInterval(periodicRefreshInterval)
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval)
+  }
+
+  if (refreshTimerInterval) {
+    clearInterval(refreshTimerInterval)
   }
 
   if (document.fullscreenElement) {
@@ -1004,15 +1029,6 @@ onUnmounted(() => {
   }
 
   document.removeEventListener('fullscreenchange', () => {})
-})
-
-// Watch untuk koneksi status changes
-watch(isConnected, (newVal) => {
-  if (newVal) {
-    console.log('✅ Realtime connected')
-  } else {
-    console.log('❌ Realtime disconnected')
-  }
 })
 </script>
 
@@ -1075,7 +1091,6 @@ watch(isConnected, (newVal) => {
   text-align: center;
 }
 
-/* UPDATED: Main Title Styling */
 .main-title {
   font-size: 20px;
   font-weight: 800;
@@ -1089,7 +1104,6 @@ watch(isConnected, (newVal) => {
   margin-bottom: 2px;
 }
 
-/* UPDATED: Sub Title Styling */
 .sub-title {
   font-size: 11px;
   color: #cbd5e1;
@@ -1104,7 +1118,6 @@ watch(isConnected, (newVal) => {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* NEW: Election Type Styling */
 .election-type {
   font-size: 12px;
   color: #fbbf24;
@@ -1172,6 +1185,62 @@ watch(isConnected, (newVal) => {
 .control-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
+}
+
+/* ===== MANUAL REFRESH CONTAINER ===== */
+.manual-refresh-container {
+  margin: 10px 20px;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  text-align: center;
+}
+
+.manual-refresh-btn {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s;
+  font-size: 14px;
+  min-width: 180px;
+  justify-content: center;
+}
+
+.manual-refresh-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
+}
+
+.manual-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.refresh-count {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.refresh-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.refresh-info small {
+  font-family: 'Courier New', monospace;
 }
 
 /* ===== VOTE NOTIFICATION ===== */
@@ -1957,8 +2026,13 @@ watch(isConnected, (newVal) => {
   transition: all 0.2s;
 }
 
-.refresh-mini-btn:hover {
+.refresh-mini-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.refresh-mini-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Session info */
@@ -2075,6 +2149,17 @@ watch(isConnected, (newVal) => {
 
   .header-controls {
     align-self: flex-end;
+  }
+
+  .manual-refresh-container {
+    margin: 8px 12px;
+    padding: 10px;
+  }
+
+  .manual-refresh-btn {
+    width: 100%;
+    padding: 10px 16px;
+    font-size: 13px;
   }
 
   .summary-row {
@@ -2388,7 +2473,8 @@ watch(isConnected, (newVal) => {
   .back-button,
   .control-btn,
   .position-tab,
-  .runoff-button {
+  .runoff-button,
+  .manual-refresh-btn {
     min-height: 44px;
     min-width: 44px;
   }
