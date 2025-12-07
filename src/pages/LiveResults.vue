@@ -6,8 +6,10 @@
 
       <div class="header-center">
         <div class="session-name">
-          <div class="main-title">SISTEM HITUNG CEPAT</div>
-          <div class="sub-title">Pemilihan Wakil Kepala Sekolah SMA Negeri 2 Bandar Lampung</div>
+          <!-- UPDATED: Sesuai branding baru -->
+          <div class="main-title">SMANDA VOTE</div>
+          <div class="sub-title">Aplikasi Digital Real Time Voting SMAN 2 Bandar Lampung</div>
+          <div class="election-type">Pemilihan Wakil Kepala Sekolah</div>
         </div>
         <div class="round-info">PUTARAN {{ votingRound }}</div>
         <div class="status-indicator" :class="{ connected: isConnected }"></div>
@@ -1069,11 +1071,13 @@ watch(isConnected, (newVal) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  text-align: center;
 }
 
+/* UPDATED: Main Title Styling */
 .main-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
   color: white;
   letter-spacing: 0.5px;
@@ -1082,14 +1086,34 @@ watch(isConnected, (newVal) => {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  margin-bottom: 2px;
 }
 
+/* UPDATED: Sub Title Styling */
 .sub-title {
-  font-size: 12px;
+  font-size: 11px;
   color: #cbd5e1;
   text-align: center;
   max-width: 400px;
   line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* NEW: Election Type Styling */
+.election-type {
+  font-size: 12px;
+  color: #fbbf24;
+  font-weight: 600;
+  margin-top: 2px;
+  padding: 2px 12px;
+  background: rgba(251, 191, 36, 0.1);
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.2);
 }
 
 .round-info {
@@ -1099,6 +1123,7 @@ watch(isConnected, (newVal) => {
   padding: 4px 12px;
   border-radius: 12px;
   font-weight: 600;
+  margin-top: 4px;
 }
 
 .status-indicator {
@@ -2033,13 +2058,19 @@ watch(isConnected, (newVal) => {
   }
 
   .main-title {
-    font-size: 14px;
+    font-size: 16px;
     text-align: center;
   }
 
   .sub-title {
-    font-size: 10px;
+    font-size: 9px;
     max-width: 280px;
+    padding: 3px 8px;
+  }
+
+  .election-type {
+    font-size: 10px;
+    padding: 2px 8px;
   }
 
   .header-controls {
@@ -2102,11 +2133,12 @@ watch(isConnected, (newVal) => {
   }
 
   .main-title {
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .sub-title {
-    font-size: 11px;
+    font-size: 10px;
+    max-width: 350px;
   }
 
   .summary-row {
@@ -2202,8 +2234,13 @@ watch(isConnected, (newVal) => {
   }
 
   .sub-title {
-    font-size: 16px;
-    max-width: 600px;
+    font-size: 13px;
+    max-width: 500px;
+  }
+
+  .election-type {
+    font-size: 14px;
+    padding: 4px 16px;
   }
 
   .round-info {
