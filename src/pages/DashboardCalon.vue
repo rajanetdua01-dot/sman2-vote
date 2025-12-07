@@ -954,7 +954,7 @@ const getOtherPositions = (kandidat) => {
   return positions
 }
 
-// Validasi form
+// Validasi form - FRONTEND VALIDATION
 const nomorUrutError = computed(() => {
   if (!form.value.nomor_urut || !form.value.jabatan) return ''
 
@@ -1213,6 +1213,7 @@ const handleLogout = async () => {
   }
 }
 
+// ==================== SUBMIT REGISTRATION DENGAN SERVER-SIDE VALIDATION ====================
 const submitRegistration = async () => {
   if (!canSubmit.value) return
 
@@ -1244,25 +1245,80 @@ const submitRegistration = async () => {
       }
     }
 
-    // Insert kandidat
-    const { error: kandidatError } = await supabase.from('kandidat').insert({
-      pengguna_id: form.value.pengguna_id,
+    // ⚠️ **SERVER-SIDE VALIDATION: CEK NOMOR URUT DI DATABASE REAL-TIME**
+    console.log('🔍 Checking nomor urut in database:', {
       sesi_id: activeSession.value.id,
       jabatan: form.value.jabatan,
       nomor_urut: form.value.nomor_urut,
-      dibuat_oleh: user.value.id,
-      total_suara: 0,
-      dibuat_pada: new Date().toISOString(),
     })
 
+    const { data: existingWithSameNumber, error: checkError } = await supabase
+      .from('kandidat')
+      .select('id, pengguna:pengguna_id(nama_lengkap)')
+      .eq('sesi_id', activeSession.value.id)
+      .eq('jabatan', form.value.jabatan)
+      .eq('nomor_urut', form.value.nomor_urut)
+      .maybeSingle()
+
+    if (checkError) {
+      console.error('Error checking nomor urut:', checkError)
+      throw new Error('Gagal memeriksa ketersediaan nomor urut')
+    }
+
+    if (existingWithSameNumber) {
+      throw new Error(
+        `Nomor urut ${form.value.nomor_urut} sudah digunakan untuk posisi ini. Silakan pilih nomor lain.`,
+      )
+    }
+
+    console.log('✅ Nomor urut available, proceeding with insert...')
+
+    // Insert kandidat dengan error handling untuk unique constraint
+    const { data: newCandidate, error: kandidatError } = await supabase
+      .from('kandidat')
+      .insert({
+        pengguna_id: form.value.pengguna_id,
+        sesi_id: activeSession.value.id,
+        jabatan: form.value.jabatan,
+        nomor_urut: form.value.nomor_urut,
+        dibuat_oleh: user.value.id,
+        total_suara: 0,
+        dibuat_pada: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
     if (kandidatError) {
+      console.error('Insert error:', kandidatError)
+
+      // Error code 23505 = unique violation (untuk constraint database)
       if (kandidatError.code === '23505') {
-        throw new Error('Guru ini sudah terdaftar sebagai kandidat untuk jabatan ini')
+        // Specific check for nomor_urut unique constraint
+        if (
+          kandidatError.message.includes('nomor_urut') ||
+          kandidatError.message.includes('unique')
+        ) {
+          throw new Error(
+            `Nomor urut ${form.value.nomor_urut} sudah digunakan untuk posisi ini. Silakan pilih nomor lain.`,
+          )
+        }
+        // General unique violation
+        throw new Error(
+          'Data sudah ada di database. Kemungkinan nomor urut atau kombinasi data sudah digunakan.',
+        )
       }
-      throw kandidatError
+
+      // Error code 42501 = permission denied
+      if (kandidatError.code === '42501') {
+        throw new Error('Tidak memiliki izin untuk menyimpan data. Hubungi administrator.')
+      }
+
+      // Other errors
+      throw new Error(`Gagal menyimpan data: ${kandidatError.message}`)
     }
 
     // Success
+    console.log('✅ Registration successful:', newCandidate)
     registrationResult.value = {
       success: true,
       type: 'success',
@@ -1273,16 +1329,23 @@ const submitRegistration = async () => {
     // Reset form
     resetForm()
 
-    // Reload data
+    // Reload data untuk refresh list
     await loadData()
   } catch (error) {
-    console.error('Registration error:', error)
+    console.error('❌ Registration error:', error)
     registrationResult.value = {
       success: false,
       type: 'error',
       title: '❌ Gagal Mendaftarkan',
-      message: error.message || 'Terjadi kesalahan',
+      message: error.message || 'Terjadi kesalahan yang tidak diketahui',
     }
+
+    // Auto-clear error after 5 seconds
+    setTimeout(() => {
+      if (registrationResult.value?.type === 'error') {
+        registrationResult.value = null
+      }
+    }, 5000)
   } finally {
     submitting.value = false
   }

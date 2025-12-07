@@ -66,7 +66,7 @@
         <li>Input token di kolom atas (contoh: 123456)</li>
         <li>Pastikan token 6 digit lengkap</li>
         <li>Klik "Masuk ke Voting"</li>
-        <li>Pilih calon untuk 4 jabatan (Kurikulum, Kesiswaan, Sarpras, Humas)</li>
+        <li>Pilih calon Wakil Kepala Sekolah untuk 2 jabatan (Kesiswaan, Sarpras)</li>
         <li>Submit suara Anda</li>
       </ol>
 
