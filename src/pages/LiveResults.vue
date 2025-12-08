@@ -180,38 +180,33 @@
         <div class="stat-card">
           <div class="stat-icon">🗳️</div>
           <div class="stat-content">
-            <div class="stat-value" :class="{ loading: isLoading.votes }">
-              {{ isLoading.votes ? '...' : formatCompactNumber(votedCount) }}
+            <div class="stat-value" :class="{ loading: isLoading.candidates }">
+              {{ isLoading.candidates ? '...' : formatCompactNumber(totalVotesData) }}
             </div>
-            <div class="stat-label">Sudah Voting</div>
+            <div class="stat-label">Total Vote</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">👤</div>
+          <div class="stat-content">
+            <div class="stat-value" :class="{ loading: isLoading.uniqueVoters }">
+              {{ isLoading.uniqueVoters ? '...' : formatCompactNumber(uniqueVotersCount) }}
+            </div>
+            <div class="stat-label">Pemilih<br />Sudah Voting</div>
           </div>
         </div>
 
         <div class="stat-card">
           <div class="stat-icon">📊</div>
           <div class="stat-content">
-            <div class="stat-value" :class="{ loading: isLoading.totalVoters || isLoading.votes }">
-              {{
-                isLoading.totalVoters || isLoading.votes
-                  ? '...'
-                  : formatPercentage(participationRate)
-              }}%
-            </div>
-            <div class="stat-label">Partisipasi</div>
+            <div class="stat-value">{{ formatPercentage(participationRate) }}%</div>
+            <div class="stat-label">Tingkat<br />Partisipasi</div>
             <div v-if="participationRate >= 75" class="participation-indicator high">Tinggi</div>
             <div v-else-if="participationRate >= 50" class="participation-indicator medium">
               Sedang
             </div>
             <div v-else class="participation-indicator low">Rendah</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">📅</div>
-          <div class="stat-content">
-            <div class="stat-value date-value">{{ currentTimeWithSeconds }}</div>
-            <div class="stat-label date-label">{{ currentDateDay }}</div>
-            <div class="date-detail">{{ currentDateFormatted }}</div>
           </div>
         </div>
       </div>
