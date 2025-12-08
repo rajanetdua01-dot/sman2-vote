@@ -18,9 +18,20 @@
         <div class="connection-status" :class="{ connected: isConnected }">
           <span class="connection-dot"></span>
           <span class="connection-text">
-            {{ isLargeScreen ? '📺 LIVE TV' : '📱 AUTO-REFRESH' }}
+            {{
+              isLargeScreen ? (isConnected ? '📺 LIVE TV' : '📺 DISCONNECTED') : '📱 AUTO-REFRESH'
+            }}
           </span>
         </div>
+
+        <!-- ⭐ TAMBAH TOGGLE SOUND BUTTON -->
+        <button
+          @click="toggleSound"
+          class="sound-toggle"
+          :title="userPrefersSound ? 'Matikan sound' : 'Nyalakan sound'"
+        >
+          {{ userPrefersSound ? '🔔' : '🔕' }}
+        </button>
       </div>
     </div>
 
@@ -37,6 +48,9 @@
         <div class="notification-time">{{ lastVoteTime }}</div>
       </div>
     </div>
+
+    <!-- Audio untuk sound effect -->
+    <audio ref="voteSound" src="/sounds/vote-beep.mp3" preload="auto" style="display: none"></audio>
 
     <!-- Main Dashboard -->
     <div class="main-dashboard">
@@ -301,6 +315,10 @@ const lastCandidate = ref('')
 const lastVoteTime = ref('')
 const notificationTitle = ref('VOTE BARU!')
 
+// Audio
+const voteSound = ref(null)
+const userPrefersSound = ref(localStorage.getItem('sound-enabled') !== 'false')
+
 // Real-time flags untuk mencegah duplicate updates
 const isProcessingVote = ref(false)
 const lastProcessedCandidateId = ref(null)
@@ -436,6 +454,27 @@ const detectDeviceType = () => {
   const urlParams = new URLSearchParams(window.location.search)
   const forceTV = urlParams.has('tv') || localStorage.getItem('tv_mode') === 'true'
   return forceTV || isWideScreen
+}
+
+// Sound functions
+const playVoteSound = () => {
+  if (!userPrefersSound.value) return
+  if (!voteSound.value) return
+
+  try {
+    voteSound.value.currentTime = 0
+    voteSound.value.play().catch((e) => {
+      console.log('Audio play failed (user interaction required):', e)
+    })
+  } catch (err) {
+    console.log('Sound error:', err)
+  }
+}
+
+const toggleSound = () => {
+  userPrefersSound.value = !userPrefersSound.value
+  localStorage.setItem('sound-enabled', userPrefersSound.value)
+  addActivity(userPrefersSound.value ? '🔔 Sound diaktifkan' : '🔕 Sound dimatikan', 'info')
 }
 
 const loadTotalVoters = async () => {
@@ -716,9 +755,27 @@ const handleCandidateUpdate = async (candidate) => {
   try {
     console.log('🔄 Update kandidat:', candidate.id)
 
+    // ⭐ PLAY SOUND HANYA DI TV MODE
+    if (isLargeScreen.value) {
+      playVoteSound()
+    }
+
     // ⭐ REFRESH SEMUA DATA
     await loadAllData()
     await loadUniqueVoters()
+
+    // Show notification
+    showVoteAlert.value = true
+    lastCandidate.value = candidate.name
+    lastVoteTime.value = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    // Auto hide notification after 5 seconds
+    setTimeout(() => {
+      showVoteAlert.value = false
+    }, 5000)
 
     console.log('✅ Data refreshed')
   } catch (err) {
