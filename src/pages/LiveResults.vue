@@ -267,6 +267,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+// Hapus import router karena tidak dipakai
 import { supabase } from '@/utils/supabase'
 
 // ===== STATE =====
@@ -277,9 +278,10 @@ const isAdmin = ref(false)
 const isLargeScreen = ref(false)
 const isRefreshing = ref(false)
 
-// Data
+// Data - SINGLE SOURCE OF TRUTH
 const candidatesData = ref([])
-const votesData = ref(0)
+const totalVotesData = ref(0) // Total semua vote
+const uniqueVotersCount = ref(0) // Peserta unik yang sudah voting
 const sessionData = ref(null)
 const totalVotersData = ref(0)
 const activityLog = ref([])
@@ -287,9 +289,9 @@ const activityLog = ref([])
 // Loading states
 const isLoading = ref({
   totalVoters: true,
-  votes: true,
   candidates: true,
   session: true,
+  uniqueVoters: true,
 })
 
 // Time
@@ -305,14 +307,21 @@ const lastCandidate = ref('')
 const lastVoteTime = ref('')
 const notificationTitle = ref('VOTE BARU!')
 
+// Real-time flags untuk mencegah duplicate updates
+const isProcessingVote = ref(false)
+const lastProcessedCandidateId = ref(null)
+// Hapus: const lastProcessedVoteId = ref(null) // TIDAK DIPAKAI
+
 // ===== COMPUTED =====
 const totalVoters = computed(() => totalVotersData.value)
 
-const votedCount = computed(() => votesData.value)
+// Hapus: const totalVotes = computed(() => totalVotesData.value) // Ganti langsung pakai totalVotesData.value
 
+// Partisipasi berdasarkan peserta UNIK yang sudah voting
 const participationRate = computed(() => {
-  if (totalVoters.value === 0 || isLoading.value.totalVoters || isLoading.value.votes) return 0
-  return (votedCount.value / totalVoters.value) * 100
+  if (totalVoters.value === 0 || isLoading.value.totalVoters || isLoading.value.uniqueVoters)
+    return 0
+  return (uniqueVotersCount.value / totalVoters.value) * 100
 })
 
 const sessionStatus = computed(() => {
@@ -382,6 +391,8 @@ const formatCompactNumber = (value) => {
   return Math.floor(value / 1000000) + 'M'
 }
 
+// Hapus: const formatSessionPeriod = (session) => { ... } // TIDAK DIPAKAI
+
 const detectDeviceType = () => {
   const width = window.innerWidth
   const height = window.innerHeight
@@ -414,11 +425,14 @@ const loadTotalVoters = async () => {
   }
 }
 
-const loadCandidates = async () => {
+// Load semua data sekaligus dengan SINGLE SOURCE
+const loadAllData = async () => {
   try {
     if (!sessionData.value?.id) return
+
     isLoading.value.candidates = true
 
+    // 1. Load kandidat untuk sesi ini
     const { data: candidates, error } = await supabase
       .from('kandidat')
       .select('*, pengguna:pengguna_id(nama_lengkap)')
@@ -440,6 +454,9 @@ const loadCandidates = async () => {
     }))
 
     console.log(`📊 ${candidatesData.value.length} kandidat dimuat`)
+
+    // 2. Hitung TOTAL VOTE dari kandidat (SINGLE SOURCE)
+    totalVotesData.value = candidatesData.value.reduce((sum, c) => sum + c.votes, 0)
   } catch (err) {
     console.error('❌ Load candidates error:', err)
   } finally {
@@ -447,27 +464,32 @@ const loadCandidates = async () => {
   }
 }
 
-const loadVotesCount = async () => {
+// Hitung peserta UNIK yang sudah voting
+const loadUniqueVoters = async () => {
   try {
     if (!sessionData.value?.id) return
-    isLoading.value.votes = true
+    isLoading.value.uniqueVoters = true
 
-    const { count, error } = await supabase
+    const { data: votes, error } = await supabase
       .from('suara')
-      .select('*', { count: 'exact', head: true })
+      .select('pemilih_id')
       .eq('sesi_id', sessionData.value.id)
       .eq('is_draft', false)
 
     if (error) {
-      console.error('Load votes count error:', error)
+      console.error('Load unique voters error:', error)
+      uniqueVotersCount.value = 0
       return
     }
 
-    votesData.value = count || 0
+    // Hitung peserta unik
+    const uniqueVoters = new Set(votes.map((v) => v.pemilih_id))
+    uniqueVotersCount.value = uniqueVoters.size
   } catch (err) {
-    console.error('❌ Load votes count error:', err)
+    console.error('❌ Load unique voters error:', err)
+    uniqueVotersCount.value = 0
   } finally {
-    isLoading.value.votes = false
+    isLoading.value.uniqueVoters = false
   }
 }
 
@@ -562,10 +584,12 @@ const manualRefresh = async () => {
   isRefreshing.value = true
   try {
     addActivity('🔄 Manual refresh data...', 'info')
-    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+    await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
+    // Update waktu dengan detik untuk semua device
     lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
       timeZone: 'Asia/Jakarta',
     })
     addActivity('✅ Data berhasil diperbarui', 'info')
@@ -600,24 +624,15 @@ const setupRealtime = async () => {
 
     sessionData.value = session
     isLoading.value.session = false
-    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+
+    // Load semua data sekaligus
+    await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
 
     const channelName = `tv-live-voting-${session.id}`
     const realtimeChannel = supabase.channel(channelName)
 
-    realtimeChannel.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'suara',
-        filter: `sesi_id=eq.${session.id}`,
-      },
-      async (payload) => {
-        await handleNewVote(payload.new)
-      },
-    )
-
+    // HANYA gunakan UPDATE pada kandidat (SINGLE SOURCE)
+    // JANGAN gunakan INSERT pada suara karena akan double counting
     realtimeChannel.on(
       'postgres_changes',
       {
@@ -626,8 +641,23 @@ const setupRealtime = async () => {
         table: 'kandidat',
         filter: `sesi_id=eq.${session.id}`,
       },
-      (payload) => {
-        handleCandidateUpdate(payload.new)
+      async (payload) => {
+        // Cegah duplicate processing
+        if (isProcessingVote.value || lastProcessedCandidateId.value === payload.new.id) {
+          console.log('🔄 Skip duplicate candidate update')
+          return
+        }
+
+        isProcessingVote.value = true
+        lastProcessedCandidateId.value = payload.new.id
+
+        try {
+          await handleCandidateUpdate(payload.new)
+        } finally {
+          setTimeout(() => {
+            isProcessingVote.value = false
+          }, 1000)
+        }
       },
     )
 
@@ -662,59 +692,58 @@ const setupRealtime = async () => {
   }
 }
 
-const handleNewVote = async (vote) => {
+const handleCandidateUpdate = async (candidate) => {
   try {
-    const { data: candidate } = await supabase
-      .from('kandidat')
-      .select('*, pengguna:pengguna_id(nama_lengkap)')
-      .eq('id', vote.kandidat_id)
-      .single()
+    console.log('🔄 Candidate update received:', candidate.id, candidate.total_suara)
 
-    const candidateName = candidate?.pengguna?.nama_lengkap || 'Unknown'
-    showNotification(candidateName)
-    votesData.value++
+    // Cari kandidat di data lokal
+    const index = candidatesData.value.findIndex((c) => c.id === candidate.id)
+    if (index === -1) {
+      console.log('❌ Candidate not found in local data, refreshing...')
+      await loadAllData()
+      return
+    }
 
-    addActivity(
-      `🗳️ Vote baru untuk ${candidateName} (${getPositionName(candidate.jabatan)})`,
-      'vote',
-    )
+    const oldVotes = candidatesData.value[index].votes
+    const newVotes = candidate.total_suara || 0
 
-    const candidateIndex = candidatesData.value.findIndex((c) => c.id === vote.kandidat_id)
-    if (candidateIndex !== -1) {
-      candidatesData.value[candidateIndex].votes++
-      candidatesData.value[candidateIndex].hasUpdate = true
+    console.log(`📊 Vote update: ${oldVotes} → ${newVotes} (${candidate.jabatan})`)
+
+    if (newVotes !== oldVotes) {
+      // Update data lokal
+      candidatesData.value[index] = {
+        ...candidatesData.value[index],
+        votes: newVotes,
+        hasUpdate: true,
+      }
+
+      // Recalculate total votes
+      totalVotesData.value = candidatesData.value.reduce((sum, c) => sum + c.votes, 0)
+
+      // Refresh peserta unik juga
+      await loadUniqueVoters()
+
+      // Tampilkan notifikasi untuk kandidat tertentu
+      if (newVotes > oldVotes) {
+        const candidateName = candidatesData.value[index].name
+        showNotification(candidateName)
+        addActivity(
+          `🗳️ Vote baru untuk ${candidateName} (${getPositionName(candidate.jabatan)})`,
+          'vote',
+        )
+      }
+
+      // Reset update flag setelah animasi
       setTimeout(() => {
-        if (candidatesData.value[candidateIndex]) {
-          candidatesData.value[candidateIndex].hasUpdate = false
+        if (candidatesData.value[index]) {
+          candidatesData.value[index].hasUpdate = false
         }
       }, 1500)
     }
   } catch (err) {
-    console.error('❌ Handle new vote error:', err)
-  }
-}
-
-const handleCandidateUpdate = (candidate) => {
-  try {
-    const index = candidatesData.value.findIndex((c) => c.id === candidate.id)
-    if (index !== -1) {
-      const oldVotes = candidatesData.value[index].votes
-      const newVotes = candidate.total_suara || 0
-      if (newVotes !== oldVotes) {
-        candidatesData.value[index] = {
-          ...candidatesData.value[index],
-          votes: newVotes,
-          hasUpdate: true,
-        }
-        setTimeout(() => {
-          if (candidatesData.value[index]) {
-            candidatesData.value[index].hasUpdate = false
-          }
-        }, 1500)
-      }
-    }
-  } catch (err) {
     console.error('❌ Handle candidate update error:', err)
+    // Fallback: refresh semua data
+    await Promise.all([loadAllData(), loadUniqueVoters()])
   }
 }
 
@@ -731,6 +760,8 @@ const handleSessionUpdate = (session) => {
     console.error('❌ Handle session update error:', err)
   }
 }
+
+// Hapus: const toggleFullscreen = () => { ... } // TIDAK DIPAKAI di template
 
 const startRunoff = () => {
   if (votingRound.value === 1 && runoffs.value.length > 0) {
@@ -792,10 +823,12 @@ const startPolling = (interval = 30000) => {
 
   const refreshData = async () => {
     try {
-      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+      await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
+      // Update waktu polling juga dengan detik
       lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
         timeZone: 'Asia/Jakarta',
       })
     } catch (err) {
@@ -813,6 +846,8 @@ onMounted(async () => {
   updateCurrentTime()
   const timeInterval = setInterval(updateCurrentTime, 1000)
 
+  // TV Mode: Realtime updates
+  // Mobile/PC Mode: Polling every 30s
   if (isLargeScreen.value) {
     console.log('📺 TV/Smartboard mode detected - using realtime')
     await setupRealtime()
@@ -841,7 +876,6 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', () => {})
 })
 </script>
-
 <style scoped>
 /* ===== GLOBAL STYLES ===== */
 .live-results {
