@@ -457,17 +457,65 @@ const detectDeviceType = () => {
 }
 
 // Sound functions
+// ===== UPDATE playVoteSound() function =====
 const playVoteSound = () => {
-  if (!userPrefersSound.value) return
-  if (!voteSound.value) return
+  if (!userPrefersSound.value || !isLargeScreen.value) return
 
   try {
-    voteSound.value.currentTime = 0
-    voteSound.value.play().catch((e) => {
-      console.log('Audio play failed (user interaction required):', e)
-    })
+    // Check if AudioContext is supported
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    if (!AudioContext) {
+      console.log('Web Audio API not supported')
+      return
+    }
+
+    // Create audio context
+    const audioContext = new AudioContext()
+
+    // Create oscillator (sound source)
+    const oscillator = audioContext.createOscillator()
+
+    // Create gain node (volume control)
+    const gainNode = audioContext.createGain()
+
+    // Connect nodes
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+
+    // Configure sound
+    oscillator.frequency.value = 800 // Frequency in Hz (A5 note)
+    oscillator.type = 'sine' // Sine wave (smooth sound)
+
+    // Volume envelope: quick attack, quick decay
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime)
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05) // Attack
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3) // Decay
+
+    // Start and stop
+    oscillator.start()
+    oscillator.stop(audioContext.currentTime + 0.3) // Duration: 300ms
+
+    console.log('🔊 Beep sound played')
   } catch (err) {
-    console.log('Sound error:', err)
+    console.log('Web Audio error:', err)
+    // Fallback: try HTML5 audio if Web Audio fails
+    playFallbackSound()
+  }
+}
+
+// Fallback menggunakan HTML5 Audio
+const playFallbackSound = () => {
+  try {
+    // Create beep sound with base64 (no external file)
+    const audio = new Audio()
+    // Very short beep sound as base64
+    audio.src =
+      'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAAAAAA=='
+    audio.volume = 0.3
+    audio.play().catch((e) => console.log('Fallback audio failed:', e))
+  } catch {
+    // ⭐ HAPUS 'err' PARAMETER
+    console.log('All audio methods failed')
   }
 }
 
