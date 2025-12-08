@@ -568,17 +568,6 @@ const addActivity = (message, type = 'info') => {
   }
 }
 
-const showNotification = (candidateName) => {
-  showVoteAlert.value = true
-  lastCandidate.value = candidateName
-  lastVoteTime.value = currentTimeWithSeconds.value
-  notificationTitle.value = 'VOTE BARU!'
-
-  setTimeout(() => {
-    showVoteAlert.value = false
-  }, 3000)
-}
-
 const manualRefresh = async () => {
   if (isRefreshing.value) return
   isRefreshing.value = true
@@ -694,56 +683,15 @@ const setupRealtime = async () => {
 
 const handleCandidateUpdate = async (candidate) => {
   try {
-    console.log('🔄 Candidate update received:', candidate.id, candidate.total_suara)
+    console.log('🔄 Update kandidat:', candidate.id)
 
-    // Cari kandidat di data lokal
-    const index = candidatesData.value.findIndex((c) => c.id === candidate.id)
-    if (index === -1) {
-      console.log('❌ Candidate not found in local data, refreshing...')
-      await loadAllData()
-      return
-    }
+    // ⭐ REFRESH SEMUA DATA
+    await loadAllData()
+    await loadUniqueVoters()
 
-    const oldVotes = candidatesData.value[index].votes
-    const newVotes = candidate.total_suara || 0
-
-    console.log(`📊 Vote update: ${oldVotes} → ${newVotes} (${candidate.jabatan})`)
-
-    if (newVotes !== oldVotes) {
-      // Update data lokal
-      candidatesData.value[index] = {
-        ...candidatesData.value[index],
-        votes: newVotes,
-        hasUpdate: true,
-      }
-
-      // Recalculate total votes
-      totalVotesData.value = candidatesData.value.reduce((sum, c) => sum + c.votes, 0)
-
-      // Refresh peserta unik juga
-      await loadUniqueVoters()
-
-      // Tampilkan notifikasi untuk kandidat tertentu
-      if (newVotes > oldVotes) {
-        const candidateName = candidatesData.value[index].name
-        showNotification(candidateName)
-        addActivity(
-          `🗳️ Vote baru untuk ${candidateName} (${getPositionName(candidate.jabatan)})`,
-          'vote',
-        )
-      }
-
-      // Reset update flag setelah animasi
-      setTimeout(() => {
-        if (candidatesData.value[index]) {
-          candidatesData.value[index].hasUpdate = false
-        }
-      }, 1500)
-    }
+    console.log('✅ Data refreshed')
   } catch (err) {
-    console.error('❌ Handle candidate update error:', err)
-    // Fallback: refresh semua data
-    await Promise.all([loadAllData(), loadUniqueVoters()])
+    console.error('❌ Error:', err)
   }
 }
 
