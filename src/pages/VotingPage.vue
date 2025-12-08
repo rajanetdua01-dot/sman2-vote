@@ -246,17 +246,6 @@ const sessionAge = computed(() => {
   return new Date() - new Date(voterData.value.timestamp)
 })
 
-// Methods
-const getInitials = (name) => {
-  if (!name) return '??'
-  return name
-    .split(' ')
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
-}
-
 // Selection handlers
 const selectKesiswaan = (candidate) => {
   selectedKesiswaan.value = candidate
@@ -326,7 +315,6 @@ const loadDraft = () => {
     console.log('↩️ Restored step:', currentStep.value)
 
     // Restore selections (harus tunggu candidates loaded)
-    // Ini akan dipanggil setelah candidates loaded
     return draft
   } catch (err) {
     console.error('❌ Error loading draft:', err)
@@ -362,7 +350,7 @@ const restoreSelections = (draft) => {
 const nextStep = () => {
   if (currentStep.value < 2 && isCurrentStepValid.value) {
     currentStep.value++
-    saveDraft() // Auto-save saat pindah step
+    saveDraft()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
@@ -370,7 +358,7 @@ const nextStep = () => {
 const prevStep = () => {
   if (currentStep.value > 1) {
     currentStep.value--
-    saveDraft() // Auto-save saat pindah step
+    saveDraft()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
@@ -384,7 +372,6 @@ const loadVoterData = () => {
     console.error('❌ No voter session found in localStorage')
     error.value = 'Session tidak ditemukan. Silakan scan token kembali.'
 
-    // Redirect setelah delay
     setTimeout(() => {
       router.push('/scan')
     }, 2000)
@@ -401,12 +388,12 @@ const loadVoterData = () => {
       throw new Error('Data session tidak valid')
     }
 
-    // Optional: Validasi session expiry (30 menit)
-    const maxAge = 30 * 60 * 1000 // 30 menit
+    // Validasi session expiry (30 menit)
+    const maxAge = 30 * 60 * 1000
     if (sessionAge.value > maxAge) {
       console.warn('⚠️ Voter session expired, clearing...')
       localStorage.removeItem('smanda_voter')
-      localStorage.removeItem('smanda_vote_draft') // Juga clear draft
+      localStorage.removeItem('smanda_vote_draft')
       error.value = 'Session telah kadaluarsa. Silakan scan token kembali.'
 
       setTimeout(() => {
@@ -419,7 +406,7 @@ const loadVoterData = () => {
   } catch (err) {
     console.error('❌ Error parsing voter session:', err)
     localStorage.removeItem('smanda_voter')
-    localStorage.removeItem('smanda_vote_draft') // Juga clear draft
+    localStorage.removeItem('smanda_vote_draft')
     error.value = 'Error memuat data session. Silakan scan token kembali.'
 
     setTimeout(() => {
@@ -475,7 +462,6 @@ const loadCandidates = async () => {
 
     console.log('🔍 Loading candidates for session:', activeSession.value.id)
 
-    // Load all candidates for current session
     const { data: candidates, error: candidatesError } = await supabase
       .from('kandidat')
       .select(
@@ -499,7 +485,6 @@ const loadCandidates = async () => {
 
     console.log('✅ Candidates loaded:', candidates?.length || 0)
 
-    // Filter by position
     kesiswaanCandidates.value = candidates?.filter((c) => c.jabatan === 'kesiswaan') || []
     sarprasCandidates.value = candidates?.filter((c) => c.jabatan === 'sarpras') || []
 
@@ -547,7 +532,6 @@ const confirmSubmit = async () => {
     }
 
     console.log('📝 Preparing votes data...')
-    // Prepare votes data
     const votes = []
 
     if (selectedKesiswaan.value) {
@@ -577,7 +561,6 @@ const confirmSubmit = async () => {
     }
 
     console.log('💾 Inserting votes:', votes)
-    // Insert votes
     const { error: insertError } = await supabase.from('suara').insert(votes)
 
     if (insertError) {
@@ -601,7 +584,6 @@ const confirmSubmit = async () => {
 
     if (tokenError) {
       console.error('❌ Error marking token:', tokenError)
-      // Note: Tidak throw error karena vote sudah berhasil masuk
     } else {
       console.log('✅ Token successfully marked as used')
     }
@@ -623,7 +605,6 @@ const confirmSubmit = async () => {
     console.error('❌ Error submitting vote:', err)
     error.value = err.message || 'Gagal mengirim voting'
 
-    // Clear error after 5 seconds
     setTimeout(() => {
       if (error.value === err.message) {
         error.value = ''
@@ -664,7 +645,6 @@ watch(currentStep, () => {
 
 // Prevent accidental page leave
 const beforeUnloadHandler = (event) => {
-  // Only warn if there are unsaved selections
   if ((selectedKesiswaan.value || selectedSarpras.value) && !success.value && !submitting.value) {
     event.preventDefault()
     event.returnValue = 'Voting Anda belum disimpan. Yakin ingin keluar?'
