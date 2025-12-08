@@ -20,7 +20,7 @@
     <!-- Responsive Header dengan Toggle Mode -->
     <header>
       <div class="header-container">
-        <!-- UPDATED: App Name dengan Tagline -->
+        <!-- App Name dengan Tagline -->
         <div class="app-branding">
           <div class="app-logo-title">
             <h1 class="app-title">
@@ -48,51 +48,50 @@
               <div class="toggle-knob"></div>
             </div>
           </div>
-
-          <!-- Mobile Menu Button -->
-          <button class="menu-toggle" @click="toggleMenu" aria-label="Toggle menu">
-            <span v-if="!menuOpen">☰</span>
-            <span v-else>✕</span>
-          </button>
         </div>
       </div>
-
-      <!-- Mobile Navigation -->
-      <nav class="mobile-nav" :class="{ show: menuOpen }">
-        <!-- Mobile Branding -->
-        <div class="mobile-branding">
-          <div class="mobile-app-title">
-            <span class="mobile-app-icon">🗳️</span>
-            <span class="mobile-app-name">SMANDA VOTE</span>
-          </div>
-          <div class="mobile-tagline">Sistem Digital Real Time Voting SMAN 2 Bandar Lampung</div>
-        </div>
-
-        <router-link to="/" @click="closeMenu">🏠 Home</router-link>
-        <router-link to="/login-calon" @click="closeMenu">👤 Daftar Calon</router-link>
-        <router-link to="/scan" @click="closeMenu">🎫 Voting</router-link>
-        <router-link to="/live-results" @click="closeMenu">📊 Hasil</router-link>
-        <router-link to="/admin-login" @click="closeMenu">🔧 Admin</router-link>
-
-        <!-- Mobile Mode Toggle -->
-        <div class="mobile-mode-toggle" @click="toggleDarkMode">
-          <span class="mode-icon">{{ isDarkMode ? '☀️' : '🌙' }}</span>
-          <span class="mode-text">{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</span>
-        </div>
-      </nav>
     </header>
 
     <!-- Main Content -->
-    <main>
+    <main :class="{ 'has-bottom-nav': isMobile }">
       <router-view />
     </main>
 
-    <!-- Footer dengan Jam WIB & Links -->
-    <footer>
+    <!-- ============================================
+         BOTTOM NAVBAR UNTUK HP (MOBILE ONLY)
+         ============================================ -->
+    <nav v-if="isMobile" class="bottom-navbar">
+      <router-link to="/" class="nav-item" @click="closeMenu">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Home</span>
+      </router-link>
+
+      <router-link to="/login-calon" class="nav-item" @click="closeMenu">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Daftar</span>
+      </router-link>
+
+      <router-link to="/scan" class="nav-item nav-scan" @click="closeMenu">
+        <span class="nav-icon-scan">🎫</span>
+        <span class="nav-label">Voting</span>
+      </router-link>
+
+      <router-link to="/live-results" class="nav-item" @click="closeMenu">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Hasil</span>
+      </router-link>
+
+      <div class="nav-item" @click="toggleDarkMode">
+        <span class="nav-icon">{{ isDarkMode ? '☀️' : '🌙' }}</span>
+        <span class="nav-label">{{ isDarkMode ? 'Light' : 'Dark' }}</span>
+      </div>
+    </nav>
+
+    <!-- Footer -->
+    <footer :class="{ 'has-bottom-nav': isMobile }">
       <div class="footer-content">
-        <!-- Quick Links Bar (Website + Navigation Links) -->
+        <!-- Quick Links Bar -->
         <div class="footer-links-bar">
-          <!-- Website Sekolah -->
           <a href="https://smandabdl.sch.id" target="_blank" class="footer-link-item">
             <span class="link-icon">🌐</span>
             <span class="link-text">Website Sekolah</span>
@@ -120,9 +119,8 @@
           </router-link>
         </div>
 
-        <!-- Enhanced Credit Section - MULTI LINE -->
+        <!-- Credit Section -->
         <div class="footer-credit">
-          <!-- Line 1: App Name • Dev by -->
           <div class="credit-line-1">
             <span class="app-name">App Name: SMANDA VOTE</span>
             <span class="separator-small">•</span>
@@ -131,27 +129,13 @@
             </span>
           </div>
 
-          <!-- Line 2: School & Year -->
           <div class="credit-line-2">
             <span class="school-year">@ SMA Negeri 2 Bandar Lampung</span>
           </div>
 
-          <!-- Line 3: Description -->
           <div class="credit-description">
             This real-time voting system was developed by the School Administration Staff of SMA
             Negeri 2 Bandar Lampung to support and enhance the democratic process within the school.
-          </div>
-
-          <!-- Line 4: Tech Stack -->
-          <div class="tech-stack">
-            <span class="tech-label">Tech Stack:</span>
-            <div class="tech-items">
-              <span class="tech-item">⚡ Vue.js • Vite</span>
-              <span class="tech-separator">•</span>
-              <span class="tech-item">🔗 PostgreSQL</span>
-              <span class="tech-separator">•</span>
-              <span class="tech-item">☁️ Cloud Hosting</span>
-            </div>
           </div>
         </div>
       </div>
@@ -200,9 +184,6 @@ export default {
         second: '2-digit',
       })
     },
-    toggleMenu() {
-      this.menuOpen = !this.menuOpen
-    },
     closeMenu() {
       this.menuOpen = false
     },
@@ -242,35 +223,9 @@ export default {
 
 <style>
 /* ============================================
-   HIDDEN EASTER EGG FOR DEVELOPERS 😎
-   ============================================ */
-.hidden-credit {
-  /* Ini cuma untuk yang buka F12 aja wkwk */
-  font-family: 'Courier New', monospace;
-  white-space: pre;
-  color: #3b82f6;
-  background: #0f172a;
-  padding: 10px;
-  border: 1px dashed #3b82f6;
-  border-radius: 5px;
-  max-width: 400px;
-}
-
-.hidden-credit::before {
-  content: '🚀 Hidden Credit - F12 Crew Only';
-  display: block;
-  font-weight: bold;
-  color: #fbbf24;
-  margin-bottom: 10px;
-  border-bottom: 1px solid #3b82f6;
-  padding-bottom: 5px;
-}
-
-/* ============================================
    VARIABLES FOR LIGHT & DARK MODE
    ============================================ */
 :root {
-  /* Light Mode Colors */
   --color-bg: #ffffff;
   --color-bg-soft: #f8f9fa;
   --color-bg-mute: #f1f3f4;
@@ -297,7 +252,6 @@ export default {
 }
 
 .dark-mode {
-  /* Dark Mode Colors */
   --color-bg: #0f172a;
   --color-bg-soft: #1e293b;
   --color-bg-mute: #334155;
@@ -331,21 +285,15 @@ export default {
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease,
-    border-color 0.3s ease;
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
@@ -354,10 +302,11 @@ body {
   flex-direction: column;
   background: var(--color-bg);
   position: relative;
+  padding-bottom: 70px; /* Space for bottom navbar */
 }
 
 /* ============================================
-   HEADER STYLES - UPDATED WITH TAGLINE
+   HEADER STYLES
    ============================================ */
 header {
   background: var(--color-header-bg);
@@ -378,7 +327,6 @@ header {
   width: 100%;
 }
 
-/* App Branding - New */
 .app-branding {
   display: flex;
   align-items: center;
@@ -419,7 +367,7 @@ header {
   padding: 2px 8px;
   border-radius: 10px;
   display: inline-block;
-  max-width: 320px; /* Diperbesar untuk text lebih panjang */
+  max-width: 320px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -478,76 +426,6 @@ header {
   transform: translateX(30px);
 }
 
-/* Mobile Branding */
-.mobile-branding {
-  padding: 0.8rem 1rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 0.5rem;
-}
-
-.mobile-app-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.mobile-app-icon {
-  font-size: 1.5rem;
-}
-
-.mobile-app-name {
-  font-size: 1.2rem;
-  font-weight: 800;
-  color: white;
-}
-
-.mobile-tagline {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.8);
-  line-height: 1.3;
-  max-width: 280px;
-  white-space: normal;
-  text-align: center;
-}
-
-.mobile-mode-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  margin-top: 0.5rem;
-  cursor: pointer;
-}
-
-.mode-icon {
-  font-size: 1.2rem;
-}
-
-.mode-text {
-  color: white;
-  font-weight: 500;
-}
-
-/* Menu Toggle (Mobile) */
-.menu-toggle {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 4px;
-  display: none;
-  transition: background 0.2s;
-}
-
-.menu-toggle:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
 /* Desktop Navigation */
 .desktop-nav {
   display: flex;
@@ -572,40 +450,6 @@ header {
   transform: translateY(-1px);
 }
 
-/* Mobile Navigation */
-.mobile-nav {
-  display: none;
-  flex-direction: column;
-  background: rgba(30, 58, 138, 0.98);
-  backdrop-filter: blur(10px);
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  padding: 1rem;
-  box-shadow: var(--shadow-lg);
-  animation: slideDown 0.3s ease;
-}
-
-.dark-mode .mobile-nav {
-  background: rgba(15, 23, 42, 0.98);
-}
-
-.mobile-nav.show {
-  display: flex;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ============================================
    MAIN CONTENT
    ============================================ */
@@ -619,8 +463,100 @@ main {
   background: var(--color-bg);
 }
 
+main.has-bottom-nav {
+  padding-bottom: 5rem; /* Extra space for bottom navbar */
+}
+
 /* ============================================
-   FOOTER - MULTI LINE VERSION
+   BOTTOM NAVBAR FOR MOBILE
+   ============================================ */
+.bottom-navbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-bg-soft);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0.5rem 0;
+  z-index: 999;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .bottom-navbar {
+  background: rgba(30, 41, 59, 0.95);
+  border-top-color: var(--color-border);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: var(--color-text-soft);
+  padding: 0.5rem 0.3rem;
+  flex: 1;
+  min-height: 60px;
+  transition: all 0.2s;
+  border-radius: 8px;
+  margin: 0 0.2rem;
+  cursor: pointer;
+}
+
+.nav-item.router-link-active {
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.dark-mode .nav-item.router-link-active {
+  color: var(--color-primary-light);
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.nav-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.dark-mode .nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-scan {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+  color: white !important;
+  margin: 0 0.5rem;
+  transform: translateY(-10px);
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
+}
+
+.nav-scan.router-link-active {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: white !important;
+}
+
+.nav-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.nav-icon-scan {
+  font-size: 1.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.nav-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ============================================
+   FOOTER
    ============================================ */
 footer {
   background: var(--color-footer-bg);
@@ -628,6 +564,10 @@ footer {
   padding: 1.2rem 1rem 1rem;
   margin-top: auto;
   border-top: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+footer.has-bottom-nav {
+  padding-bottom: 5rem; /* Space for bottom navbar */
 }
 
 .footer-content {
@@ -671,10 +611,6 @@ footer {
   transform: translateY(-1px);
 }
 
-.footer-link-item:active {
-  background: rgba(255, 255, 255, 0.15);
-}
-
 .footer-link-item .link-icon {
   font-size: 1rem;
 }
@@ -686,7 +622,7 @@ footer {
   margin: 0 0.2rem;
 }
 
-/* Footer Credit - MULTI LINE */
+/* Footer Credit */
 .footer-credit {
   width: 100%;
   max-width: 900px;
@@ -697,7 +633,6 @@ footer {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Line 1: App Name • Dev by */
 .credit-line-1 {
   display: flex;
   align-items: center;
@@ -709,7 +644,7 @@ footer {
 }
 
 .app-name {
-  color: #f8fafc !important; /* PUTIH CERAH */
+  color: #f8fafc !important;
   font-weight: 700;
   letter-spacing: 0.3px;
 }
@@ -720,30 +655,18 @@ footer {
   opacity: 0.4;
 }
 
-.dev-by {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.dev-icon {
-  color: #fbbf24; /* KUNING EMAS */
-  font-size: 0.9rem;
-}
-
 .dev-text {
-  color: #ffd700 !important; /* EMAS MURNI */
+  color: #ffd700 !important;
   font-weight: 700;
   text-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
 }
 
-/* Line 2: School & Year */
 .credit-line-2 {
   margin-bottom: 0.8rem;
 }
 
 .school-year {
-  color: #22c55e !important; /* HIJAU CERAH */
+  color: #22c55e !important;
   font-weight: 600;
   font-size: 0.85rem;
   background: rgba(34, 197, 94, 0.1);
@@ -753,76 +676,23 @@ footer {
   display: inline-block;
 }
 
-/* Line 3: Description */
 .credit-description {
   font-size: 0.8rem;
   color: #94a3b8;
   line-height: 1.5;
-  margin-bottom: 0.8rem;
   padding: 0.6rem;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 6px;
   border-left: 2px solid #3b82f6;
   font-style: italic;
   max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* Line 4: Tech Stack */
-.tech-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: #94a3b8;
-}
-
-.tech-label {
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #cbd5e1;
-  font-size: 0.8rem;
-}
-
-.tech-items {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.tech-item {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: #cbd5e1;
-  padding: 0.3rem 0.6rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s;
-}
-
-.tech-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #60a5fa;
-}
-
-.tech-separator {
-  color: #64748b;
-  opacity: 0.3;
-  font-size: 0.9rem;
+  margin: 0 auto;
 }
 
 /* ============================================
    ADMIN PAGE OVERRIDES
    ============================================ */
 .admin-page {
-  /* Admin pages selalu light mode */
   --color-bg: #ffffff !important;
   --color-bg-soft: #f8f9fa !important;
   --color-bg-mute: #f1f3f4 !important;
@@ -839,60 +709,18 @@ footer {
   color: #000000 !important;
 }
 
-.admin-page main input,
-.admin-page main select,
-.admin-page main textarea,
-.admin-page main table,
-.admin-page main td,
-.admin-page main th,
-.admin-page main p,
-.admin-page main span,
-.admin-page main div:not(.btn):not(button):not(.menu-toggle):not(.footer-link):not(.school-link) {
-  color: #000000 !important;
-}
-
-.admin-page main a {
-  color: #000000 !important;
-}
-
-.admin-page main button,
-.admin-page main .btn {
-  color: initial !important;
-}
-
 .admin-page main {
   background: #ffffff !important;
-}
-
-.admin-page .simple-peserta,
-.admin-page .simple-kandidat,
-.admin-page .admin-dashboard {
-  background: #ffffff !important;
-}
-
-.admin-page table th,
-.admin-page table td {
-  color: #000000 !important;
-}
-
-.admin-page input,
-.admin-page select,
-.admin-page textarea {
-  color: #000000 !important;
 }
 
 /* ============================================
    RESPONSIVE DESIGN
    ============================================ */
 
-/* Tablet (768px ke bawah) */
+/* Tablet & Mobile (768px ke bawah) */
 @media (max-width: 768px) {
   body {
     font-size: 15px;
-  }
-
-  .menu-toggle {
-    display: block;
   }
 
   .desktop-nav {
@@ -903,13 +731,8 @@ footer {
     display: none;
   }
 
-  .header-container {
-    padding: 0.7rem 1rem;
-  }
-
-  /* Responsive tagline */
   .app-tagline {
-    display: none; /* Sembunyikan di tablet/mobile */
+    display: none;
   }
 
   .app-name {
@@ -960,14 +783,24 @@ footer {
     padding: 0.5rem;
     line-height: 1.4;
   }
+}
 
-  .tech-items {
-    flex-direction: column;
-    gap: 0.3rem;
+/* Desktop (768px ke atas) */
+@media (min-width: 769px) {
+  .bottom-navbar {
+    display: none;
   }
 
-  .tech-separator {
-    display: none;
+  #app {
+    padding-bottom: 0;
+  }
+
+  main.has-bottom-nav {
+    padding-bottom: 1rem;
+  }
+
+  footer.has-bottom-nav {
+    padding-bottom: 1.2rem;
   }
 }
 
@@ -985,23 +818,20 @@ footer {
     font-size: 1.1rem;
   }
 
-  .menu-toggle {
-    font-size: 1.3rem;
-    padding: 0.4rem;
-  }
-
-  .mobile-nav a {
-    padding: 0.7rem 0.9rem;
-    font-size: 0.95rem;
-  }
-
-  .mobile-tagline {
-    font-size: 0.65rem;
-    max-width: 250px;
-  }
-
   main {
     padding: 0.6rem;
+  }
+
+  .nav-icon {
+    font-size: 1.3rem;
+  }
+
+  .nav-icon-scan {
+    font-size: 1.5rem;
+  }
+
+  .nav-label {
+    font-size: 0.65rem;
   }
 
   /* Footer Small Mobile */
@@ -1049,51 +879,12 @@ footer {
     padding: 0.4rem;
     line-height: 1.4;
   }
-
-  .tech-stack {
-    font-size: 0.7rem;
-  }
-
-  .tech-item {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.7rem;
-  }
-}
-
-/* Desktop Lebar (1024px+) - Show full tagline */
-@media (min-width: 1024px) {
-  .app-tagline {
-    max-width: 350px;
-    font-size: 0.75rem;
-  }
-}
-
-/* Desktop Lebar Sekali (1200px+) */
-@media (min-width: 1200px) {
-  .app-tagline {
-    max-width: 400px;
-    font-size: 0.8rem;
-  }
 }
 
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
-  .desktop-nav a,
-  .footer-link-item,
-  .mobile-mode-toggle {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .menu-toggle,
-  .mode-toggle {
-    min-width: 44px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .nav-item {
+    min-height: 56px;
   }
 
   .footer-link-item {
@@ -1105,8 +896,7 @@ footer {
 @media print {
   header,
   footer,
-  .menu-toggle,
-  .mode-toggle {
+  .bottom-navbar {
     display: none !important;
   }
 
