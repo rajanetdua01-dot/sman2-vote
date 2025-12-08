@@ -262,7 +262,6 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-// Hapus import router karena tidak dipakai
 import { supabase } from '@/utils/supabase'
 
 // ===== STATE =====
@@ -275,8 +274,8 @@ const isRefreshing = ref(false)
 
 // Data - SINGLE SOURCE OF TRUTH
 const candidatesData = ref([])
-const totalVotesData = ref(0) // Total semua vote
-const uniqueVotersCount = ref(0) // Peserta unik yang sudah voting
+const totalVotesData = ref(0)
+const uniqueVotersCount = ref(0)
 const sessionData = ref(null)
 const totalVotersData = ref(0)
 const activityLog = ref([])
@@ -305,12 +304,56 @@ const notificationTitle = ref('VOTE BARU!')
 // Real-time flags untuk mencegah duplicate updates
 const isProcessingVote = ref(false)
 const lastProcessedCandidateId = ref(null)
-// Hapus: const lastProcessedVoteId = ref(null) // TIDAK DIPAKAI
+
+// ===== CLEANUP VARIABLES =====
+let timeInterval = null
+let autoRefreshInterval = null
+let realtimeChannel = null
+const cleanupListeners = []
+
+// ===== CLEANUP FUNCTIONS =====
+const addCleanupListener = (element, event, handler) => {
+  element.addEventListener(event, handler)
+  cleanupListeners.push({ element, event, handler })
+}
+
+const cleanupAll = () => {
+  // Clear intervals
+  if (timeInterval) {
+    clearInterval(timeInterval)
+    timeInterval = null
+  }
+
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval)
+    autoRefreshInterval = null
+  }
+
+  // Remove event listeners
+  cleanupListeners.forEach(({ element, event, handler }) => {
+    element.removeEventListener(event, handler)
+  })
+  cleanupListeners.length = 0
+
+  // Unsubscribe Supabase
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel)
+    realtimeChannel = null
+  }
+
+  // Exit fullscreen
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
+  }
+}
+
+// ===== FULLSCREEN HANDLER (named function) =====
+const handleFullscreen = () => {
+  isFullscreen.value = !!document.fullscreenElement
+}
 
 // ===== COMPUTED =====
 const totalVoters = computed(() => totalVotersData.value)
-
-// Hapus: const totalVotes = computed(() => totalVotesData.value) // Ganti langsung pakai totalVotesData.value
 
 // Partisipasi berdasarkan peserta UNIK yang sudah voting
 const participationRate = computed(() => {
@@ -385,8 +428,6 @@ const formatCompactNumber = (value) => {
   if (value < 1000000) return Math.floor(value / 1000) + 'K'
   return Math.floor(value / 1000000) + 'M'
 }
-
-// Hapus: const formatSessionPeriod = (session) => { ... } // TIDAK DIPAKAI
 
 const detectDeviceType = () => {
   const width = window.innerWidth
@@ -586,12 +627,6 @@ const manualRefresh = async () => {
 }
 
 const setupRealtime = async () => {
-  if (!isLargeScreen.value) {
-    console.log('📱 Device kecil, menggunakan polling mode')
-    startPolling(30000)
-    return
-  }
-
   try {
     const { data: session, error: sessionError } = await supabase
       .from('sesi_pemilihan')
@@ -613,10 +648,11 @@ const setupRealtime = async () => {
     await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
 
     const channelName = `tv-live-voting-${session.id}`
-    const realtimeChannel = supabase.channel(channelName)
+
+    // ⭐ SIMPAN CHANNEL KE VARIABLE GLOBAL
+    realtimeChannel = supabase.channel(channelName)
 
     // HANYA gunakan UPDATE pada kandidat (SINGLE SOURCE)
-    // JANGAN gunakan INSERT pada suara karena akan double counting
     realtimeChannel.on(
       'postgres_changes',
       {
@@ -704,8 +740,6 @@ const handleSessionUpdate = (session) => {
   }
 }
 
-// Hapus: const toggleFullscreen = () => { ... } // TIDAK DIPAKAI di template
-
 const startRunoff = () => {
   if (votingRound.value === 1 && runoffs.value.length > 0) {
     votingRound.value = 2
@@ -757,11 +791,12 @@ const updateCurrentTime = () => {
 }
 
 let lastMinutes = ref(null)
-let autoRefreshInterval = null
 
 const startPolling = (interval = 30000) => {
+  // Clear interval lama
   if (autoRefreshInterval) {
     clearInterval(autoRefreshInterval)
+    autoRefreshInterval = null
   }
 
   const refreshData = async () => {
@@ -787,7 +822,12 @@ const startPolling = (interval = 30000) => {
 onMounted(async () => {
   isLargeScreen.value = detectDeviceType()
   updateCurrentTime()
-  const timeInterval = setInterval(updateCurrentTime, 1000)
+
+  // ⭐ SIMPAN INTERVAL REFERENCE
+  timeInterval = setInterval(updateCurrentTime, 1000)
+
+  // ⭐ GUNAKAN CLEANUP LISTENER (bukan langsung addEventListener)
+  addCleanupListener(document, 'fullscreenchange', handleFullscreen)
 
   // TV Mode: Realtime updates
   // Mobile/PC Mode: Polling every 30s
@@ -799,26 +839,15 @@ onMounted(async () => {
     startPolling(30000)
     addActivity('📱 Mode Auto-Refresh aktif (30 detik)', 'info')
   }
-
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen.value = !!document.fullscreenElement
-  })
-
-  onUnmounted(() => {
-    clearInterval(timeInterval)
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval)
-    }
-  })
 })
 
 onUnmounted(() => {
-  if (document.fullscreenElement) {
-    document.exitFullscreen()
-  }
-  document.removeEventListener('fullscreenchange', () => {})
+  // ⭐ PANGGIL CLEANUP SEMUA
+  cleanupAll()
+  console.log('🧹 LiveResults cleanup complete')
 })
 </script>
+
 <style scoped>
 /* ===== GLOBAL STYLES ===== */
 .live-results {
