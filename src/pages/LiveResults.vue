@@ -40,56 +40,7 @@
 
     <!-- Main Dashboard -->
     <div class="main-dashboard">
-      <!-- Summary Stats - MODIFIED -->
-      <div class="summary-row">
-        <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-content">
-            <div class="stat-value" :class="{ loading: isLoading.totalVoters }">
-              {{ isLoading.totalVoters ? '...' : formatCompactNumber(totalVoters) }}
-            </div>
-            <div class="stat-label">Total<br />Peserta</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">🗳️</div>
-          <div class="stat-content">
-            <div class="stat-value" :class="{ loading: isLoading.votes }">
-              {{ isLoading.votes ? '...' : formatCompactNumber(votedCount) }}
-            </div>
-            <div class="stat-label">Sudah<br />Voting</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">📊</div>
-          <div class="stat-content">
-            <div class="stat-value" :class="{ loading: isLoading.totalVoters || isLoading.votes }">
-              {{
-                isLoading.totalVoters || isLoading.votes
-                  ? '...'
-                  : formatPercentage(participationRate)
-              }}%
-            </div>
-            <div class="stat-label">Tingkat<br />Partisipasi</div>
-            <div v-if="participationRate >= 75" class="participation-high">Tinggi</div>
-            <div v-else-if="participationRate >= 50" class="participation-medium">Sedang</div>
-            <div v-else class="participation-low">Rendah</div>
-          </div>
-        </div>
-
-        <div class="stat-card">
-          <div class="stat-icon">📅</div>
-          <div class="stat-content">
-            <div class="stat-value date-value">{{ currentDateDay }}</div>
-            <div class="stat-label date-label">{{ currentDateFormatted }}</div>
-            <div class="current-time">{{ currentTime }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2-Column Results -->
+      <!-- 2-Column Results - NOW AT TOP -->
       <div class="two-column-results">
         <!-- Left Column: Waka Kesiswaan -->
         <div class="position-column kesiswaan-column">
@@ -214,6 +165,57 @@
         </div>
       </div>
 
+      <!-- Summary Stats - NOW BELOW CANDIDATES -->
+      <div class="summary-row">
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <div class="stat-value" :class="{ loading: isLoading.totalVoters }">
+              {{ isLoading.totalVoters ? '...' : formatCompactNumber(totalVoters) }}
+            </div>
+            <div class="stat-label">Total Peserta</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">🗳️</div>
+          <div class="stat-content">
+            <div class="stat-value" :class="{ loading: isLoading.votes }">
+              {{ isLoading.votes ? '...' : formatCompactNumber(votedCount) }}
+            </div>
+            <div class="stat-label">Sudah Voting</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">📊</div>
+          <div class="stat-content">
+            <div class="stat-value" :class="{ loading: isLoading.totalVoters || isLoading.votes }">
+              {{
+                isLoading.totalVoters || isLoading.votes
+                  ? '...'
+                  : formatPercentage(participationRate)
+              }}%
+            </div>
+            <div class="stat-label">Partisipasi</div>
+            <div v-if="participationRate >= 75" class="participation-indicator high">Tinggi</div>
+            <div v-else-if="participationRate >= 50" class="participation-indicator medium">
+              Sedang
+            </div>
+            <div v-else class="participation-indicator low">Rendah</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon">📅</div>
+          <div class="stat-content">
+            <div class="stat-value date-value">{{ currentTimeWithSeconds }}</div>
+            <div class="stat-label date-label">{{ currentDateDay }}</div>
+            <div class="date-detail">{{ currentDateFormatted }}</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Run-off Alert -->
       <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-section">
         <div class="runoff-header">
@@ -292,6 +294,7 @@ const isLoading = ref({
 
 // Time
 const currentTime = ref('')
+const currentTimeWithSeconds = ref('')
 const currentDateDay = ref('')
 const currentDateFormatted = ref('')
 const lastUpdateTime = ref('')
@@ -546,7 +549,7 @@ const addActivity = (message, type = 'info') => {
 const showNotification = (candidateName) => {
   showVoteAlert.value = true
   lastCandidate.value = candidateName
-  lastVoteTime.value = currentTime.value
+  lastVoteTime.value = currentTimeWithSeconds.value
   notificationTitle.value = 'VOTE BARU!'
 
   setTimeout(() => {
@@ -738,17 +741,29 @@ const startRunoff = () => {
 
 const updateCurrentTime = () => {
   const now = new Date()
+
+  // Format dengan detik: "21:25:45"
+  currentTimeWithSeconds.value = now.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'Asia/Jakarta',
+  })
+
+  // Format tanpa detik untuk keperluan lain
   currentTime.value = now.toLocaleTimeString('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Asia/Jakarta',
   })
 
+  // Hari: "Senin"
   currentDateDay.value = now.toLocaleDateString('id-ID', {
     weekday: 'long',
     timeZone: 'Asia/Jakarta',
   })
 
+  // Tanggal: "8 Des 2025"
   currentDateFormatted.value = now.toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'short',
@@ -988,108 +1003,7 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
-/* ===== SUMMARY ROW ===== */
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background: var(--color-bg-soft);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 14px 12px; /* Reduced padding */
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 85px; /* Fixed height for consistency */
-}
-
-.stat-icon {
-  font-size: 20px; /* Reduced from 24px */
-  flex-shrink: 0;
-}
-
-.stat-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 60px;
-}
-
-.stat-value {
-  font-size: 16px; /* Reduced from 20px */
-  font-weight: bold;
-  color: var(--color-text);
-  margin-bottom: 2px;
-  line-height: 1.2;
-}
-
-.stat-value.loading {
-  color: var(--color-text-mute);
-}
-
-.stat-label {
-  font-size: 11px; /* Reduced from 12px */
-  color: var(--color-text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  line-height: 1.3;
-  margin-top: 2px;
-}
-
-/* Date-specific styles */
-.date-value {
-  font-size: 14px; /* Slightly smaller for date */
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.date-label {
-  font-size: 10px; /* Even smaller for date label */
-  margin-top: 0;
-}
-
-.current-time {
-  font-size: 10px; /* Reduced from 11px */
-  color: var(--color-text-soft);
-  margin-top: 4px;
-  font-weight: 500;
-}
-
-/* Participation indicators */
-.participation-high,
-.participation-medium,
-.participation-low {
-  font-size: 9px; /* Reduced from 11px */
-  margin-top: 3px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  display: inline-block;
-  font-weight: 600;
-  text-align: center;
-  width: fit-content;
-}
-
-.participation-high {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
-}
-
-.participation-medium {
-  background: rgba(251, 191, 36, 0.1);
-  color: #fbbf24;
-}
-
-.participation-low {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-/* ===== TWO COLUMN RESULTS ===== */
+/* ===== TWO COLUMN RESULTS - NOW AT TOP ===== */
 .two-column-results {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1290,6 +1204,119 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+/* ===== SUMMARY ROW - NOW BELOW CANDIDATES ===== */
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 70px; /* FIXED HEIGHT - cukup untuk 2 baris */
+  overflow: hidden; /* Pastikan tidak ada overflow */
+}
+
+.stat-icon {
+  font-size: 22px; /* Sedikit lebih kecil */
+  flex-shrink: 0;
+  width: 40px; /* Fixed width untuk icon */
+  text-align: center;
+}
+
+.stat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0; /* Penting untuk mencegah overflow */
+  overflow: hidden; /* Pastikan tidak overflow */
+}
+
+.stat-value {
+  font-size: 20px; /* Besar tapi proporsional */
+  font-weight: bold;
+  color: var(--color-text);
+  margin-bottom: 0; /* Tidak ada margin bawah */
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-value.loading {
+  color: var(--color-text-mute);
+}
+
+.stat-label {
+  font-size: 11px; /* Sangat kecil */
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Date card specific - WITH SECONDS */
+.date-value {
+  font-size: 16px; /* Sedikit lebih kecil untuk muat detik */
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.5px;
+  font-family: 'Courier New', monospace; /* Font monospace untuk jam digital */
+}
+
+.date-label {
+  font-size: 10px;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.date-detail {
+  font-size: 9px;
+  color: var(--color-text-mute);
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
+/* Participation indicators */
+.participation-indicator {
+  font-size: 8px; /* Sangat kecil */
+  margin-top: 2px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  display: inline-block;
+  font-weight: 600;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.participation-indicator.high {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.participation-indicator.medium {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+.participation-indicator.low {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
 /* ===== RUN-OFF SECTION ===== */
 .runoff-section {
   background: rgba(245, 158, 11, 0.1);
@@ -1445,22 +1472,26 @@ onUnmounted(() => {
     gap: 16px;
   }
 
-  /* Adjust summary cards for tablet */
   .summary-row {
     grid-template-columns: repeat(2, 1fr);
   }
 
   .stat-card {
-    padding: 12px 10px;
-    min-height: 80px;
+    height: 65px;
+    padding: 10px 8px;
   }
 
   .stat-value {
-    font-size: 15px;
+    font-size: 18px;
   }
 
-  .stat-label {
-    font-size: 10px;
+  .date-value {
+    font-size: 15px; /* Sedikit lebih kecil di tablet */
+  }
+
+  .stat-icon {
+    font-size: 20px;
+    width: 36px;
   }
 }
 
@@ -1483,29 +1514,29 @@ onUnmounted(() => {
   }
 
   .stat-card {
-    padding: 10px 8px;
-    min-height: 75px;
+    height: 60px;
+    padding: 8px 6px;
     gap: 8px;
   }
 
-  .stat-icon {
-    font-size: 18px;
-  }
-
   .stat-value {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .date-value {
-    font-size: 12px;
+    font-size: 14px; /* Lebih kecil di mobile */
+  }
+
+  .stat-label {
+    font-size: 10px;
   }
 
   .date-label {
     font-size: 9px;
   }
 
-  .current-time {
-    font-size: 9px;
+  .date-detail {
+    font-size: 8px;
   }
 
   .candidate-item {
@@ -1530,39 +1561,39 @@ onUnmounted(() => {
   }
 
   .stat-card {
-    padding: 10px 8px;
-    min-height: 70px;
+    height: 55px;
+    padding: 6px 4px;
   }
 
   .stat-icon {
-    font-size: 16px;
+    font-size: 18px;
+    width: 32px;
   }
 
   .stat-value {
-    font-size: 13px;
+    font-size: 14px;
+  }
+
+  .date-value {
+    font-size: 12px; /* Paling kecil di mobile kecil */
+    letter-spacing: 0.3px;
   }
 
   .stat-label {
     font-size: 9px;
   }
 
-  .date-value {
-    font-size: 11px;
-  }
-
   .date-label {
     font-size: 8px;
   }
 
-  .current-time {
-    font-size: 8px;
+  .date-detail {
+    font-size: 7px;
   }
 
-  .participation-high,
-  .participation-medium,
-  .participation-low {
-    font-size: 8px;
-    padding: 1px 4px;
+  .participation-indicator {
+    font-size: 7px;
+    padding: 1px 3px;
   }
 
   .position-column {
@@ -1587,17 +1618,26 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
+.live-results.fullscreen-mode .two-column-results {
+  margin-bottom: 24px;
+}
+
 .live-results.fullscreen-mode .summary-row {
   gap: 16px;
+  margin-bottom: 24px;
 }
 
 .live-results.fullscreen-mode .stat-card {
-  padding: 16px 14px;
-  min-height: 90px;
+  height: 75px;
+  padding: 14px 12px;
 }
 
 .live-results.fullscreen-mode .stat-value {
-  font-size: 18px;
+  font-size: 22px;
+}
+
+.live-results.fullscreen-mode .date-value {
+  font-size: 20px; /* Lebih besar di fullscreen */
 }
 
 .live-results.fullscreen-mode .stat-label {
@@ -1613,12 +1653,20 @@ onUnmounted(() => {
     max-width: 90%;
   }
 
+  .stat-card {
+    height: 80px;
+  }
+
   .stat-value {
-    font-size: 18px;
+    font-size: 24px;
+  }
+
+  .date-value {
+    font-size: 22px; /* Lebih besar di layar sangat lebar */
   }
 
   .stat-label {
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .column-title {
@@ -1654,5 +1702,20 @@ onUnmounted(() => {
 
 .stat-value.loading {
   animation: pulse 1.5s infinite;
+}
+
+/* Digital clock effect */
+@keyframes second-tick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.date-value {
+  animation: second-tick 1s infinite;
 }
 </style>
