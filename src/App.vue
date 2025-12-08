@@ -92,31 +92,7 @@
       <div class="footer-content">
         <!-- Quick Links Bar -->
         <div class="footer-links-bar">
-          <a href="https://smandabdl.sch.id" target="_blank" class="footer-link-item">
-            <span class="link-icon">🌐</span>
-            <span class="link-text">Website Sekolah</span>
-          </a>
-
           <span class="separator">•</span>
-
-          <router-link to="/live-results" class="footer-link-item" @click="closeMenu">
-            <span class="link-icon">📊</span>
-            <span class="link-text">Hasil Live</span>
-          </router-link>
-
-          <span class="separator">•</span>
-
-          <router-link to="/scan" class="footer-link-item" @click="closeMenu">
-            <span class="link-icon">🎫</span>
-            <span class="link-text">Voting</span>
-          </router-link>
-
-          <span class="separator">•</span>
-
-          <router-link to="/login-calon" class="footer-link-item" @click="closeMenu">
-            <span class="link-icon">👥</span>
-            <span class="link-text">Daftar</span>
-          </router-link>
         </div>
 
         <!-- Credit Section -->
@@ -129,13 +105,16 @@
             </span>
           </div>
 
-          <div class="credit-line-2">
-            <span class="school-year">@ SMA Negeri 2 Bandar Lampung</span>
-          </div>
-
           <div class="credit-description">
             This real-time voting system was developed by the School Administration Staff of SMA
             Negeri 2 Bandar Lampung to support and enhance the democratic process within the school.
+          </div>
+
+          <div class="footer-content">
+            <a href="https://smandabdl.sch.id" target="_blank" class="footer-link-item">
+              <span class="link-icon">🌐</span>
+              <span class="link-text">https://www.smandabdl.sch.id</span>
+            </a>
           </div>
         </div>
       </div>

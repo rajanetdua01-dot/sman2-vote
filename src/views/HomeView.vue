@@ -205,46 +205,6 @@
           </div>
         </div>
 
-        <!-- Quick Actions Card -->
-        <div class="content-card actions-card">
-          <div class="card-header">
-            <h3>🚀 AKSI SISTEM</h3>
-            <span class="actions-subtitle">vote.smandabdl.sch.id</span>
-          </div>
-
-          <div class="action-grid">
-            <router-link to="/login-calon" class="action-btn primary">
-              <span class="action-icon">👤</span>
-              <div class="action-content">
-                <strong>Pendaftaran Calon</strong>
-                <p>Form pencalonan online</p>
-                <small>📄 Pasal 9b</small>
-              </div>
-              <span class="action-arrow">→</span>
-            </router-link>
-
-            <router-link to="/scan" class="action-btn secondary">
-              <span class="action-icon">🎫</span>
-              <div class="action-content">
-                <strong>Voting</strong>
-                <p>Gunakan token untuk memilih</p>
-                <small>📄 Pasal 9f</small>
-              </div>
-              <span class="action-arrow">→</span>
-            </router-link>
-
-            <router-link to="/live-results" class="action-btn accent">
-              <span class="action-icon">📊</span>
-              <div class="action-content">
-                <strong>Hasil Live</strong>
-                <p>Pantau perkembangan suara</p>
-                <small>📄 Sistem real-time</small>
-              </div>
-              <span class="action-arrow">→</span>
-            </router-link>
-          </div>
-        </div>
-
         <!-- Legal Info Card -->
         <div class="content-card legal-card">
           <div class="card-header">
