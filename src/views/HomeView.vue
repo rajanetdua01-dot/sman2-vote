@@ -1,23 +1,66 @@
 <template>
   <div class="home">
-    <!-- Hero Section -->
-    <div class="hero">
-      <div class="hero-content">
-        <h1>🗳️ PEMILIHAN WAKIL KEPALA SEKOLAH</h1>
-        <h2>SMA NEGERI 2 BANDAR LAMPUNG</h2>
+    <!-- Compact Hero Section -->
+    <div class="compact-hero">
+      <div class="hero-card">
+        <!-- Konten dalam 2 kolom -->
+        <div class="hero-content-compact">
+          <!-- Kolom Kiri: QR Code dengan teks DI BAWAH -->
+          <div class="qr-column desktop-only">
+            <div class="qr-card">
+              <!-- QR Code FULL tanpa overlay -->
+              <div class="qr-image-container">
+                <img
+                  src="https://mdrwb.my.id/smanda/qr-code.svg"
+                  alt="QR Code Voting SMANDA"
+                  class="qr-image-full"
+                  @error="handleQrError"
+                />
+              </div>
 
-        <div class="date-badge">
-          <span class="date-icon">📅</span>
-          <span class="date-text">Disahkan: 05 Desember 2025</span>
-          <span class="date-separator">•</span>
-          <span class="date-text">Mulai Tugas: 22 Desember 2025</span>
+              <!-- Teks DI BAWAH QR code -->
+              <div class="qr-text-below">
+                <div class="qr-url">vote.smandabdl.sch.id</div>
+                <div class="qr-instruction">Scan QR code untuk masuk ke aplikasi voting</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kolom Kanan: Info + Judul -->
+          <div class="info-column">
+            <!-- Judul dipindah ke sini -->
+            <div class="hero-header-right">
+              <h1>🗳️ PEMILIHAN WAKIL KEPALA SEKOLAH</h1>
+              <h2>SMA NEGERI 2 BANDAR LAMPUNG</h2>
+            </div>
+
+            <div class="date-badge-compact">
+              <span class="date-icon">📅</span>
+              <span class="date-text">Disahkan: 05 Desember 2025</span>
+              <span class="date-separator">•</span>
+              <span class="date-text">Mulai Tugas: 22 Desember 2025</span>
+            </div>
+
+            <div class="description-compact">
+              <p>
+                Sistem pemilihan digital untuk penetapan Wakil Kepala Sekolah bidang
+                <strong>Sarpras</strong> dan <strong>Kesiswaan</strong> berdasarkan Tata Tertib
+                Pengangkatan Wakil Kepala Sekolah SMA Negeri 2 Bandar Lampung.
+              </p>
+            </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <p class="hero-description">
-          Sistem pemilihan digital untuk penetapan Wakil Kepala Sekolah bidang
-          <strong>Sarpras</strong> dan <strong>Kesiswaan</strong> berdasarkan Tata Tertib
-          Pengangkatan Wakil Kepala Sekolah SMA Negeri 2 Bandar Lampung.
-        </p>
+    <!-- Mobile Instruction (tampil hanya di HP) -->
+    <div class="mobile-only mobile-scan-instruction">
+      <div class="mobile-scan-card">
+        <div class="mobile-scan-icon">📱</div>
+        <div class="mobile-scan-content">
+          <h4>UNTUK VOTING:</h4>
+          <p><strong>Klik tombol VOTING di navbar bawah</strong></p>
+        </div>
       </div>
     </div>
 
@@ -272,57 +315,144 @@
 <script>
 export default {
   name: 'HomeView',
+  methods: {
+    handleQrError() {
+      console.warn('QR code image failed to load')
+    },
+  },
   mounted() {
-    // Tambahan logic jika diperlukan
+    // Preload QR code untuk performa
+    const qrImage = new Image()
+    qrImage.src = 'https://mdrwb.my.id/smanda/qr-code.svg'
   },
 }
 </script>
 
 <style scoped>
-.home {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 1rem;
-  color: var(--color-text);
+/* ============================================
+   COMPACT HERO SECTION - Judul di Kanan
+   ============================================ */
+.compact-hero {
+  margin-bottom: 2rem;
 }
 
-/* Hero Section */
-.hero {
-  text-align: center;
-  padding: 2.5rem 1rem;
+.hero-card {
   background: linear-gradient(135deg, var(--color-primary) 0%, #1e40af 100%);
   color: white;
   border-radius: 16px;
-  margin-bottom: 2rem;
+  padding: 2rem;
   box-shadow: var(--shadow-lg);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.hero h1 {
-  font-size: 2.2rem;
+.hero-content-compact {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+}
+
+/* QR Column */
+.qr-column {
+  flex: 0 0 320px;
+}
+
+.qr-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.qr-image-container {
+  width: 280px;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 5px;
+}
+
+.qr-image-full {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Teks DI BAWAH QR code */
+.qr-text-below {
+  text-align: center;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+
+.qr-url {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #000;
+  font-size: 0.95rem;
+  margin-bottom: 5px;
+  letter-spacing: 0.5px;
+}
+
+.qr-instruction {
+  color: #333;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  opacity: 0.9;
+}
+
+/* ============================================
+   INFO COLUMN dengan Judul
+   ============================================ */
+.info-column {
+  flex: 1;
+  padding-top: 0;
+}
+
+.hero-header-right {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.2rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.hero-header-right h1 {
+  font-size: 1.8rem;
   margin-bottom: 0.5rem;
   font-weight: 800;
+  line-height: 1.2;
 }
 
-.hero h2 {
-  font-size: 1.5rem;
-  margin-bottom: 1.5rem;
+.hero-header-right h2 {
+  font-size: 1.3rem;
   font-weight: 600;
   opacity: 0.95;
 }
 
-.date-badge {
+.date-badge-compact {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   background: rgba(255, 255, 255, 0.15);
-  padding: 0.6rem 1.2rem;
+  padding: 0.7rem 1.3rem;
   border-radius: 50px;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.2rem;
   backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .date-icon {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .date-text {
@@ -334,12 +464,184 @@ export default {
   opacity: 0.5;
 }
 
-.hero-description {
-  max-width: 800px;
-  margin: 0 auto;
-  font-size: 1.1rem;
-  line-height: 1.6;
+.description-compact p {
+  font-size: 1rem;
+  line-height: 1.5;
   opacity: 0.95;
+  margin: 0;
+}
+
+/* ============================================
+   MOBILE ONLY ELEMENTS (768px ke bawah)
+   ============================================ */
+.mobile-only {
+  display: none;
+}
+
+/* Mobile Scan Instruction */
+.mobile-scan-instruction {
+  background: rgba(59, 130, 246, 0.1);
+  border: 2px solid var(--color-primary);
+  border-radius: 12px;
+  padding: 1.2rem;
+  margin: 1.5rem 0;
+}
+
+.mobile-scan-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.mobile-scan-icon {
+  font-size: 2rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.mobile-scan-content h4 {
+  color: var(--color-primary);
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.mobile-scan-content p {
+  margin-bottom: 0.3rem;
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Tablet & Mobile (768px ke bawah) */
+@media (max-width: 768px) {
+  /* Hide desktop QR code section */
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Show mobile instruction */
+  .mobile-only {
+    display: block;
+  }
+
+  /* Compact hero adjustments */
+  .hero-card {
+    padding: 1.5rem;
+  }
+
+  .hero-content-compact {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .hero-header-right {
+    text-align: center;
+  }
+
+  .hero-header-right h1 {
+    font-size: 1.5rem;
+  }
+
+  .hero-header-right h2 {
+    font-size: 1.1rem;
+  }
+
+  .date-badge-compact {
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.8rem;
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Mobile scan instruction adjustments */
+  .mobile-scan-instruction {
+    margin: 1rem 0;
+    padding: 1rem;
+  }
+
+  .mobile-scan-card {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+
+  .mobile-scan-icon {
+    font-size: 1.8rem;
+  }
+
+  .mobile-scan-content h4 {
+    font-size: 1rem;
+  }
+
+  .mobile-scan-content p {
+    font-size: 0.9rem;
+  }
+}
+
+/* Desktop (768px ke atas) */
+@media (min-width: 769px) {
+  /* Hide mobile instruction */
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* HP Kecil (480px ke bawah) */
+@media (max-width: 480px) {
+  .hero-card {
+    padding: 1.2rem;
+  }
+
+  .hero-header-right h1 {
+    font-size: 1.3rem;
+  }
+
+  .hero-header-right h2 {
+    font-size: 1rem;
+  }
+
+  .date-badge-compact {
+    padding: 0.6rem;
+  }
+
+  .date-text {
+    font-size: 0.85rem;
+  }
+
+  .description-compact p {
+    font-size: 0.9rem;
+  }
+
+  /* Mobile scan instruction small screens */
+  .mobile-scan-instruction {
+    padding: 0.8rem;
+  }
+
+  .mobile-scan-icon {
+    font-size: 1.5rem;
+  }
+
+  .mobile-scan-content h4 {
+    font-size: 0.95rem;
+  }
+
+  .mobile-scan-content p {
+    font-size: 0.85rem;
+  }
+}
+
+/* ============================================
+   EXISTING STYLES (dari file asli)
+   ============================================ */
+.home {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+  color: var(--color-text);
 }
 
 /* Quick Info Cards */
@@ -689,12 +991,6 @@ export default {
   color: var(--color-accent);
 }
 
-.action-btn.admin {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: var(--color-danger);
-}
-
 .action-btn:hover.primary {
   background: rgba(30, 64, 175, 0.2);
 }
@@ -705,10 +1001,6 @@ export default {
 
 .action-btn:hover.accent {
   background: rgba(245, 158, 11, 0.2);
-}
-
-.action-btn:hover.admin {
-  background: rgba(239, 68, 68, 0.2);
 }
 
 .action-icon {
@@ -847,90 +1139,6 @@ export default {
 
 .dark-mode .requirement-list li {
   background: rgba(59, 130, 246, 0.1);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .hero h1 {
-    font-size: 1.8rem;
-  }
-
-  .hero h2 {
-    font-size: 1.3rem;
-  }
-
-  .date-badge {
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .main-grid {
-    gap: 1rem;
-  }
-
-  .content-card {
-    padding: 1.2rem;
-  }
-
-  .quick-info {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .signatures {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .hero h1 {
-    font-size: 1.5rem;
-  }
-
-  .hero h2 {
-    font-size: 1.1rem;
-  }
-
-  .date-badge {
-    padding: 0.5rem 1rem;
-  }
-
-  .quick-info {
-    grid-template-columns: 1fr;
-  }
-
-  .info-card {
-    padding: 1.2rem;
-  }
-
-  .timeline {
-    padding-left: 1rem;
-  }
-
-  .timeline-item {
-    padding-left: 1rem;
-  }
-
-  .timeline-item::before {
-    left: -1rem;
-  }
-
-  .timeline-date {
-    font-size: 0.8rem;
-  }
-
-  .timeline-content {
-    padding: 0.6rem;
-  }
-
-  .notice {
-    flex-direction: column;
-    text-align: center;
-    padding: 1rem;
-  }
-
-  .notice-icon {
-    font-size: 1.5rem;
-  }
 }
 
 /* Touch device optimizations */
