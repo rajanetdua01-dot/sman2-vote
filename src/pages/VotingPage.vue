@@ -11,9 +11,6 @@
       </div>
 
       <div class="voter-info" v-if="voterData">
-        <div class="voter-avatar">
-          {{ getInitials(voterData.pengguna.nama_lengkap) }}
-        </div>
         <div class="voter-details">
           <strong>{{ voterData.pengguna.nama_lengkap }}</strong>
           <span class="voter-token">Token: {{ voterData.token }}</span>
@@ -21,7 +18,7 @@
       </div>
     </div>
 
-    <!-- Voting Steps - DIUBAH: 2 step saja -->
+    <!-- Voting Steps - 2 step saja -->
     <div class="voting-steps">
       <div class="step" :class="{ active: currentStep === 1 }">
         <div class="step-number">1</div>
@@ -33,7 +30,7 @@
       </div>
     </div>
 
-    <!-- Main Content - DIUBAH: 2 step saja -->
+    <!-- Main Content - 2 step saja -->
     <div class="voting-content">
       <!-- Step 1: Waka Kesiswaan -->
       <div v-if="currentStep === 1" class="step-content">
@@ -50,23 +47,13 @@
             :class="{ selected: selectedKesiswaan?.id === candidate.id }"
             @click="selectKesiswaan(candidate)"
           >
-            <div class="candidate-photo">
-              <img
-                v-if="candidate.foto_kampanye"
-                :src="candidate.foto_kampanye"
-                :alt="candidate.pengguna.nama_lengkap"
-              />
-              <div v-else class="photo-placeholder">
-                {{ getInitials(candidate.pengguna.nama_lengkap) }}
-              </div>
-            </div>
             <div class="candidate-info">
               <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
               <div class="candidate-number">
                 <span class="number-badge">#{{ candidate.nomor_urut }}</span>
               </div>
-              <div class="candidate-visi">
-                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
+              <div class="candidate-simple-info">
+                <span class="candidate-role">Calon Waka Kesiswaan</span>
               </div>
             </div>
           </div>
@@ -92,23 +79,13 @@
             :class="{ selected: selectedSarpras?.id === candidate.id }"
             @click="selectSarpras(candidate)"
           >
-            <div class="candidate-photo">
-              <img
-                v-if="candidate.foto_kampanye"
-                :src="candidate.foto_kampanye"
-                :alt="candidate.pengguna.nama_lengkap"
-              />
-              <div v-else class="photo-placeholder">
-                {{ getInitials(candidate.pengguna.nama_lengkap) }}
-              </div>
-            </div>
             <div class="candidate-info">
               <h3 class="candidate-name">{{ candidate.pengguna.nama_lengkap }}</h3>
               <div class="candidate-number">
                 <span class="number-badge">#{{ candidate.nomor_urut }}</span>
               </div>
-              <div class="candidate-visi">
-                <p><strong>Visi:</strong> {{ truncateText(candidate.visi_misi, 100) }}</p>
+              <div class="candidate-simple-info">
+                <span class="candidate-role">Calon Waka Sarpras</span>
               </div>
             </div>
           </div>
@@ -120,7 +97,7 @@
       </div>
     </div>
 
-    <!-- Navigation Buttons - DIUBAH: max step = 2 -->
+    <!-- Navigation Buttons -->
     <div class="navigation-buttons">
       <button
         v-if="currentStep > 1"
@@ -150,7 +127,7 @@
       </button>
     </div>
 
-    <!-- Selection Summary - DIUBAH: 2 item saja -->
+    <!-- Selection Summary -->
     <div class="selection-summary">
       <h3>Ringkasan Pilihan Anda:</h3>
       <div class="summary-grid">
@@ -180,7 +157,7 @@
       </div>
     </div>
 
-    <!-- Confirmation Modal - DIUBAH: Hanya 2 item -->
+    <!-- Confirmation Modal -->
     <div v-if="showConfirmModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
@@ -227,7 +204,7 @@ import { supabase } from '@/utils/supabase'
 const router = useRouter()
 
 // State
-const currentStep = ref(1) // DIUBAH: Max 2 step
+const currentStep = ref(1)
 const voterData = ref(null)
 const activeSession = ref(null)
 const submitting = ref(false)
@@ -236,15 +213,15 @@ const success = ref(false)
 const showConfirmModal = ref(false)
 const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost'
 
-// Candidates data - DIUBAH: Hanya 2 array
+// Candidates data
 const kesiswaanCandidates = ref([])
 const sarprasCandidates = ref([])
 
-// Selections - DIUBAH: Hanya 2 selection
+// Selections
 const selectedKesiswaan = ref(null)
 const selectedSarpras = ref(null)
 
-// Computed - DIUBAH: Hanya 2 step validasi
+// Computed
 const isCurrentStepValid = computed(() => {
   switch (currentStep.value) {
     case 1:
@@ -280,13 +257,7 @@ const getInitials = (name) => {
     .substring(0, 2)
 }
 
-const truncateText = (text, maxLength) => {
-  if (!text) return ''
-  if (text.length <= maxLength) return text
-  return text.substring(0, maxLength) + '...'
-}
-
-// Selection handlers - DIUBAH: Hanya 2 fungsi
+// Selection handlers
 const selectKesiswaan = (candidate) => {
   selectedKesiswaan.value = candidate
 }
@@ -296,7 +267,7 @@ const selectSarpras = (candidate) => {
 }
 
 // =============================================
-// AUTO-SAVE DRAFT FUNCTIONS (NEW)
+// AUTO-SAVE DRAFT FUNCTIONS
 // =============================================
 
 // Save draft to localStorage
@@ -387,7 +358,7 @@ const restoreSelections = (draft) => {
   }
 }
 
-// Navigation - DIUBAH: Max step = 2
+// Navigation
 const nextStep = () => {
   if (currentStep.value < 2 && isCurrentStepValid.value) {
     currentStep.value++
@@ -504,7 +475,7 @@ const loadCandidates = async () => {
 
     console.log('🔍 Loading candidates for session:', activeSession.value.id)
 
-    // Load all candidates for current session - DIUBAH: Filter hanya 2 jabatan
+    // Load all candidates for current session
     const { data: candidates, error: candidatesError } = await supabase
       .from('kandidat')
       .select(
@@ -517,7 +488,7 @@ const loadCandidates = async () => {
       `,
       )
       .eq('sesi_id', activeSession.value.id)
-      .in('jabatan', ['kesiswaan', 'sarpras']) // DIUBAH: Hanya ambil 2 jabatan
+      .in('jabatan', ['kesiswaan', 'sarpras'])
       .order('jabatan', { ascending: true })
       .order('nomor_urut', { ascending: true })
 
@@ -528,7 +499,7 @@ const loadCandidates = async () => {
 
     console.log('✅ Candidates loaded:', candidates?.length || 0)
 
-    // Filter by position - DIUBAH: Hanya 2 filter
+    // Filter by position
     kesiswaanCandidates.value = candidates?.filter((c) => c.jabatan === 'kesiswaan') || []
     sarprasCandidates.value = candidates?.filter((c) => c.jabatan === 'sarpras') || []
 
@@ -552,9 +523,7 @@ const submitVote = () => {
   showConfirmModal.value = true
 }
 
-// =============================================
-// UPDATED: MARK TOKEN AFTER VOTE SUCCESS (NEW)
-// =============================================
+// Mark Token After Vote Success
 const confirmSubmit = async () => {
   showConfirmModal.value = false
   submitting.value = true
@@ -578,7 +547,7 @@ const confirmSubmit = async () => {
     }
 
     console.log('📝 Preparing votes data...')
-    // Prepare votes data - DIUBAH: Hanya 2 vote
+    // Prepare votes data
     const votes = []
 
     if (selectedKesiswaan.value) {
@@ -618,9 +587,7 @@ const confirmSubmit = async () => {
 
     console.log('✅ Votes submitted successfully')
 
-    // =============================================
-    // BARU: MARK TOKEN AS USED AFTER VOTE SUCCESS
-    // =============================================
+    // MARK TOKEN AS USED AFTER VOTE SUCCESS
     console.log('🏷️ Marking token as used...')
     const { error: tokenError } = await supabase
       .from('token_qr')
@@ -635,7 +602,6 @@ const confirmSubmit = async () => {
     if (tokenError) {
       console.error('❌ Error marking token:', tokenError)
       // Note: Tidak throw error karena vote sudah berhasil masuk
-      // Token bisa di-mark manual nanti oleh admin
     } else {
       console.log('✅ Token successfully marked as used')
     }
@@ -677,7 +643,7 @@ const clearSessionAndRedirect = () => {
 }
 
 // =============================================
-// WATCHERS FOR AUTO-SAVE (NEW)
+// WATCHERS FOR AUTO-SAVE
 // =============================================
 
 // Watch for selection changes and auto-save
@@ -739,228 +705,236 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ============================================
+   MOBILE-FIRST STYLES FOR VOTING PAGE
+   ============================================ */
+
 .voting-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
+  width: 100%;
   min-height: 100vh;
-  background: #f8f9fa;
+  background: var(--color-bg);
+  padding: 0;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Header */
+/* ============================================
+   HEADER - SIMPLIFIED FOR MOBILE
+   ============================================ */
 .voting-header {
-  background: white;
-  border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #1e40af 100%);
+  border-radius: 0 0 20px 20px;
+  padding: 1.2rem 1rem;
+  margin-bottom: 1.2rem;
+  box-shadow: var(--shadow-lg);
+  color: white;
   text-align: center;
 }
 
 .title {
-  color: #1e3a8a;
-  margin-bottom: 0.25rem;
-  font-size: 1.8rem;
+  font-size: 1.4rem;
+  margin-bottom: 0.3rem;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .subtitle {
-  color: #6b7280;
-  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+  margin-bottom: 1.2rem;
 }
 
 .session-info {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 0.8rem;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
 }
 
 .session-name {
-  font-weight: 600;
-  color: #1e40af;
-  background: #e0f2fe;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: white;
 }
 
 .session-status.voting {
   background: linear-gradient(135deg, #059669, #10b981);
   color: white;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 1rem;
   border-radius: 20px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  display: inline-block;
 }
 
+/* VOTER INFO - SIMPLIFIED */
 .voter-info {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f0f7ff;
-  border-radius: 12px;
-  border: 1px solid #dbeafe;
-}
-
-.voter-avatar {
-  width: 50px;
-  height: 50px;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 1.2rem;
-}
-
-.voter-details {
-  display: flex;
   flex-direction: column;
-  text-align: left;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  text-align: center;
+}
+
+.voter-info strong {
+  font-size: 1rem;
+  color: white;
+  display: block;
+  margin-bottom: 0.3rem;
 }
 
 .voter-token {
   font-size: 0.85rem;
-  color: #6b7280;
-  font-family: monospace;
-  margin-top: 0.25rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  display: inline-block;
 }
 
-/* Voting Steps - DIUBAH: Grid 2 kolom */
+/* ============================================
+   VOTING STEPS - MOBILE OPTIMIZED
+   ============================================ */
 .voting-steps {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 2rem;
+  display: flex;
+  gap: 0.8rem;
+  margin: 0 1rem 1.5rem;
+  padding: 0.8rem;
+  background: var(--color-bg-soft);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .step {
+  flex: 1;
   text-align: center;
-  padding: 1.5rem;
+  padding: 1rem 0.5rem;
   background: white;
-  border-radius: 12px;
-  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  border: 2px solid var(--color-border);
   transition: all 0.3s;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .step.active {
-  border-color: #1e3a8a;
-  background: #f0f7ff;
+  border-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
+  color: white;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.25);
 }
 
 .step-number {
-  width: 40px;
-  height: 40px;
-  background: #e5e7eb;
-  color: #6b7280;
+  width: 32px;
+  height: 32px;
+  background: var(--color-bg-mute);
+  color: var(--color-text-mute);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  margin: 0 auto 0.75rem;
-  font-size: 1.1rem;
+  margin: 0 auto 0.5rem;
+  font-size: 1rem;
 }
 
 .step.active .step-number {
-  background: #1e3a8a;
-  color: white;
+  background: white;
+  color: var(--color-primary);
 }
 
 .step-label {
   font-weight: 600;
-  color: #4b5563;
-  font-size: 1rem;
+  color: var(--color-text-soft);
+  font-size: 0.85rem;
+  line-height: 1.2;
 }
 
 .step.active .step-label {
-  color: #1e3a8a;
+  color: white;
+  font-weight: 700;
 }
 
-/* Step Content */
+/* ============================================
+   STEP CONTENT - MOBILE OPTIMIZED
+   ============================================ */
+.voting-content {
+  flex: 1;
+  padding: 0 1rem;
+  margin-bottom: 1.5rem;
+}
+
 .step-content {
   background: white;
   border-radius: 16px;
-  padding: 2rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin-bottom: 1.2rem;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
 }
 
 .step-title {
-  color: #1e3a8a;
+  color: var(--color-primary);
   margin-bottom: 0.5rem;
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1.3rem;
+  font-weight: 700;
 }
 
 .step-description {
-  color: #6b7280;
+  color: var(--color-text-soft);
   text-align: center;
-  margin-bottom: 2rem;
-  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
-/* Candidates Grid */
+/* ============================================
+   CANDIDATES - SIMPLIFIED (NO PHOTO, NO VISI)
+   ============================================ */
 .candidates-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.2rem;
 }
 
 .candidate-card {
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--color-border);
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 1.2rem;
   cursor: pointer;
   transition: all 0.3s;
   background: white;
+  position: relative;
+  overflow: hidden;
 }
 
 .candidate-card:hover {
-  border-color: #93c5fd;
+  border-color: var(--color-primary-light);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .candidate-card.selected {
-  border-color: #1e3a8a;
-  background: #f0f7ff;
+  border-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.05), rgba(30, 58, 138, 0.1));
   box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-}
-
-.candidate-photo {
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 1.5rem;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 4px solid #e5e7eb;
-}
-
-.candidate-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.photo-placeholder {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.5rem;
-  font-weight: bold;
 }
 
 .candidate-info {
@@ -968,162 +942,216 @@ onUnmounted(() => {
 }
 
 .candidate-name {
-  color: #1e293b;
+  color: var(--color-text);
   margin-bottom: 0.5rem;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .candidate-number {
-  margin-bottom: 1rem;
+  margin-bottom: 0.8rem;
+  display: inline-block;
 }
 
 .number-badge {
   display: inline-block;
-  padding: 0.4rem 1rem;
-  background: #1e3a8a;
+  padding: 0.3rem 0.8rem;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
   color: white;
-  border-radius: 20px;
-  font-size: 1rem;
+  border-radius: 15px;
+  font-size: 0.9rem;
   font-weight: 700;
+  min-width: 60px;
+  text-align: center;
 }
 
-.candidate-visi {
-  color: #4b5563;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  min-height: 60px;
+.candidate-simple-info {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed var(--color-border);
+  text-align: center;
+}
+
+.candidate-role {
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  background: var(--color-bg-mute);
+  color: var(--color-text-soft);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dark-mode .candidate-role {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.candidate-card.selected .candidate-role {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 .empty-candidates {
   text-align: center;
-  padding: 3rem;
-  color: #9ca3af;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 2px dashed #d1d5db;
+  padding: 2rem 1rem;
+  color: var(--color-text-mute);
+  background: var(--color-bg-soft);
+  border-radius: 12px;
+  border: 2px dashed var(--color-border);
+  margin: 1rem 0;
 }
 
-/* Navigation Buttons */
+/* ============================================
+   NAVIGATION BUTTONS - MOBILE OPTIMIZED
+   ============================================ */
 .navigation-buttons {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 0.8rem;
+  margin: 0 1rem 1.5rem;
+  padding: 0 0.5rem;
 }
 
 .nav-btn {
-  padding: 1rem 2rem;
+  flex: 1;
+  padding: 1rem 0;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.3s;
-  min-width: 150px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .prev-btn {
-  background: #6b7280;
+  background: var(--color-text-soft);
   color: white;
+  order: 1;
 }
 
 .prev-btn:hover:not(:disabled) {
-  background: #4b5563;
+  background: var(--color-text-mute);
+  transform: translateY(-2px);
 }
 
 .next-btn {
-  background: #1e3a8a;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
   color: white;
-  margin-left: auto;
+  order: 3;
 }
 
 .next-btn:hover:not(:disabled) {
-  background: #1e40af;
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
 }
 
 .submit-btn {
   background: linear-gradient(135deg, #059669, #10b981);
   color: white;
-  margin-left: auto;
+  order: 3;
+  flex: 2;
 }
 
 .submit-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #047857, #0d9c6d);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.3);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
 }
 
 .nav-btn:disabled {
-  background: #94a3b8;
+  background: var(--color-border);
+  color: var(--color-text-mute);
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  opacity: 0.7;
 }
 
-/* Selection Summary - DIUBAH: Grid 2 kolom */
+/* ============================================
+   SELECTION SUMMARY - MOBILE OPTIMIZED
+   ============================================ */
 .selection-summary {
   background: white;
   border-radius: 16px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
+  padding: 1.2rem;
+  margin: 0 1rem 1.5rem;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .selection-summary h3 {
-  color: #1e3a8a;
-  margin-bottom: 1.5rem;
+  color: var(--color-primary);
+  margin-bottom: 1rem;
   text-align: center;
-  font-size: 1.3rem;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
 }
 
 .summary-item {
-  padding: 1.25rem;
+  padding: 1rem;
   border-radius: 10px;
-  border: 2px solid #e5e7eb;
+  border: 2px solid var(--color-border);
   transition: all 0.3s;
+  background: var(--color-bg-soft);
 }
 
 .summary-item.filled {
-  border-color: #10b981;
-  background: #f0fdf4;
+  border-color: var(--color-secondary);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(16, 185, 129, 0.1));
 }
 
 .summary-label {
   display: block;
   font-weight: 600;
-  color: #4b5563;
-  margin-bottom: 0.75rem;
-  font-size: 1rem;
+  color: var(--color-text-soft);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
 }
 
 .summary-item.filled .summary-label {
-  color: #065f46;
+  color: var(--color-secondary);
+  font-weight: 700;
 }
 
 .summary-value {
-  color: #9ca3af;
+  color: var(--color-text-mute);
   font-size: 0.95rem;
   min-height: 24px;
+  font-weight: 500;
 }
 
 .summary-item.filled .summary-value {
-  color: #065f46;
-  font-weight: 600;
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 1rem;
 }
 
-/* Messages */
+/* ============================================
+   MESSAGES - MOBILE OPTIMIZED
+   ============================================ */
 .error-message,
 .success-message {
-  margin: 1.5rem 0;
-  padding: 1.5rem;
+  margin: 1rem;
+  padding: 1.2rem;
   border-radius: 12px;
   animation: slideDown 0.3s ease;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 @keyframes slideDown {
@@ -1141,44 +1169,45 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #fee, #fecaca);
   color: #dc2626;
   border: 2px solid #fca5a5;
-  text-align: center;
 }
 
 .success-message {
   background: linear-gradient(135deg, #d1fae5, #a7f3d0);
   color: #065f46;
   border: 2px solid #6ee7b7;
-  text-align: center;
 }
 
 .success-content h3 {
   margin-bottom: 0.5rem;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
 }
 
-/* Modal */
+/* ============================================
+   MODAL - MOBILE OPTIMIZED
+   ============================================ */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   padding: 1rem;
+  backdrop-filter: blur(5px);
 }
 
 .modal {
   background: white;
   border-radius: 16px;
   width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
+  max-width: 400px;
+  max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-lg);
   animation: modalSlideIn 0.3s ease;
 }
 
@@ -1197,45 +1226,53 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 1.2rem;
+  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+  color: white;
+  border-radius: 16px 16px 0 0;
 }
 
 .modal-header h3 {
   margin: 0;
-  color: #1e3a8a;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
+  font-weight: 700;
 }
 
 .modal-close {
-  background: none;
+  background: rgba(255, 255, 255, 0.2);
   border: none;
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
-  color: #6b7280;
+  color: white;
   padding: 0.25rem;
-  border-radius: 4px;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modal-close:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 1.2rem;
 }
 
 .modal-selections {
   margin: 1rem 0;
-  padding-left: 1.5rem;
-  color: #4b5563;
+  padding-left: 1.2rem;
+  color: var(--color-text);
 }
 
 .modal-selections li {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.8rem;
   font-size: 1rem;
+  line-height: 1.4;
 }
 
 .modal-warning {
@@ -1245,138 +1282,333 @@ onUnmounted(() => {
   padding: 1rem;
   margin-top: 1rem;
   color: #856404;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 .modal-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding: 1.5rem;
-  border-top: 1px solid #e5e7eb;
+  gap: 0.8rem;
+  padding: 1.2rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .modal-btn {
-  padding: 0.75rem 1.5rem;
+  flex: 1;
+  padding: 0.9rem;
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 10px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
   font-size: 0.95rem;
+  min-height: 48px;
 }
 
 .cancel-btn {
-  background: #6b7280;
+  background: var(--color-text-soft);
   color: white;
 }
 
 .cancel-btn:hover {
-  background: #4b5563;
+  background: var(--color-text-mute);
+  transform: translateY(-1px);
 }
 
 .confirm-btn {
-  background: #1e3a8a;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
   color: white;
 }
 
 .confirm-btn:hover {
-  background: #1e40af;
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  transform: translateY(-1px);
 }
 
-/* Debug Info (Hanya untuk development) */
+/* ============================================
+   DEBUG INFO - MOBILE OPTIMIZED
+   ============================================ */
 .debug-info {
-  background: #f1f5f9;
-  border: 2px dashed #64748b;
+  background: var(--color-bg-mute);
+  border: 1px dashed var(--color-border);
   border-radius: 12px;
   padding: 1rem;
-  margin-top: 2rem;
+  margin: 1rem;
   font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  display: none;
+}
+
+.isDevelopment .debug-info {
+  display: block;
 }
 
 .debug-info h4 {
-  color: #475569;
+  color: var(--color-text-soft);
   margin-bottom: 0.5rem;
+  font-size: 0.9rem;
 }
 
 .debug-info p {
-  color: #64748b;
-  margin: 0.25rem 0;
+  color: var(--color-text-mute);
+  margin: 0.2rem 0;
 }
 
 .debug-btn {
-  margin-top: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #ef4444;
+  margin-top: 0.8rem;
+  padding: 0.6rem 1rem;
+  background: var(--color-danger);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
+  width: 100%;
+  font-weight: 600;
 }
 
 .debug-btn:hover {
   background: #dc2626;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .voting-steps {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+/* ============================================
+   TOUCH DEVICE OPTIMIZATIONS
+   ============================================ */
+@media (hover: none) and (pointer: coarse) {
+  .candidate-card {
+    min-height: 100px;
+    padding: 1rem;
   }
 
-  .candidates-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-
-  .navigation-buttons {
-    flex-direction: column;
-  }
-
-  .nav-btn {
-    width: 100%;
+  .nav-btn,
+  .modal-btn {
+    min-height: 56px;
+    font-size: 1.1rem;
   }
 
   .step {
-    padding: 1.25rem;
+    min-height: 90px;
+  }
+
+  .step-number {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+
+  .step-label {
+    font-size: 0.9rem;
+  }
+
+  /* Increase tap target size */
+  .candidate-card,
+  .nav-btn,
+  .modal-btn,
+  .modal-close {
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
   }
 }
 
-@media (max-width: 480px) {
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Tablet (768px ke atas) */
+@media (min-width: 768px) {
   .voting-container {
-    padding: 0.75rem;
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 0.5rem;
+  }
+
+  .voting-header {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .title {
+    font-size: 1.6rem;
+  }
+
+  .voting-steps {
+    margin: 0 0 2rem;
+  }
+
+  .step {
+    padding: 1.2rem 0.8rem;
+    min-height: 90px;
+  }
+
+  .step-label {
+    font-size: 0.9rem;
+  }
+
+  .voting-content {
+    padding: 0;
   }
 
   .step-content {
-    padding: 1.25rem;
+    padding: 2rem;
+  }
+
+  .step-title {
+    font-size: 1.5rem;
   }
 
   .candidate-card {
-    padding: 1.25rem;
+    padding: 1.5rem;
   }
 
-  .candidate-photo {
-    width: 100px;
-    height: 100px;
+  .candidate-name {
+    font-size: 1.2rem;
   }
 
-  .modal-body {
-    padding: 1.25rem;
+  .navigation-buttons {
+    margin: 0 0 2rem;
   }
 
-  .modal-footer {
+  .selection-summary {
+    margin: 0 0 2rem;
+  }
+
+  .summary-grid {
+    flex-direction: row;
+    gap: 1rem;
+  }
+
+  .summary-item {
+    flex: 1;
+  }
+}
+
+/* Desktop kecil (1024px ke atas) */
+@media (min-width: 1024px) {
+  .voting-container {
+    max-width: 800px;
+  }
+
+  .candidates-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.2rem;
+  }
+
+  .candidate-card {
+    min-height: 180px;
+    display: flex;
     flex-direction: column;
+    justify-content: space-between;
+  }
+}
+
+/* Desktop besar (1200px ke atas) */
+@media (min-width: 1200px) {
+  .voting-container {
+    max-width: 1000px;
   }
 
-  .modal-btn {
-    width: 100%;
+  .candidates-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ============================================
+   DARK MODE OVERRIDES
+   ============================================ */
+.dark-mode .voting-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+.dark-mode .session-info {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .voter-info {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .step {
+  background: var(--color-bg-mute);
+  border-color: var(--color-border);
+}
+
+.dark-mode .step.active {
+  background: linear-gradient(135deg, #3b82f6, #60a5fa);
+}
+
+.dark-mode .step-content {
+  background: var(--color-bg-soft);
+  border-color: var(--color-border);
+}
+
+.dark-mode .candidate-card {
+  background: var(--color-bg-soft);
+  border-color: var(--color-border);
+}
+
+.dark-mode .candidate-card.selected {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.2));
+}
+
+.dark-mode .candidate-name {
+  color: var(--color-text);
+}
+
+.dark-mode .empty-candidates {
+  background: var(--color-bg-mute);
+  border-color: var(--color-border);
+}
+
+.dark-mode .selection-summary {
+  background: var(--color-bg-soft);
+  border-color: var(--color-border);
+}
+
+.dark-mode .summary-item {
+  background: var(--color-bg-mute);
+}
+
+.dark-mode .modal {
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+}
+
+.dark-mode .modal-header {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  .voting-header,
+  .voting-steps,
+  .navigation-buttons,
+  .selection-summary,
+  .debug-info,
+  .error-message,
+  .success-message,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  .voting-container {
+    padding: 0;
+    background: white !important;
+    color: black !important;
+  }
+
+  .step-content {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    page-break-inside: avoid;
+  }
+
+  .candidate-card {
+    border: 1px solid #ccc !important;
+    margin-bottom: 0.5rem;
   }
 }
 </style>
