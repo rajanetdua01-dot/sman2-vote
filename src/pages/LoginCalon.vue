@@ -47,37 +47,6 @@
         <div v-if="error" class="error-message">❌ {{ error }}</div>
         <div v-if="success" class="success-message">✅ Login berhasil! Mengalihkan...</div>
       </form>
-
-      <div class="info-box">
-        <p><strong>Petunjuk Login:</strong></p>
-
-        <div class="password-guide">
-          <div class="guide-item" @click="setExample('PNS')">
-            <strong>PNS:</strong> Password = Tanggal Lahir (DDMMYYYY)<br />
-            <small>Contoh: NIP 197711072014072001 → Password: 07111977</small>
-          </div>
-
-          <div class="guide-item" @click="setExample('PPPK')">
-            <strong>PPPK:</strong> Password = Tanggal Lahir (DDMMYYYY)<br />
-            <small>Contoh: NIP 199509292024212031 → Password: 29091995</small>
-          </div>
-
-          <div class="guide-item" @click="setExample('PTT')">
-            <strong>PTT/GTT/Honorer:</strong> Password = smanda123<br />
-            <small>Contoh: NIP PTT20250001 → Password: smanda123</small>
-          </div>
-        </div>
-
-        <p class="note">
-          <small>Semua peserta (guru & tendik) bisa login untuk mendaftarkan calon kandidat</small>
-        </p>
-      </div>
-
-      <div class="footer-links">
-        <router-link to="/scan">Pemilih? Scan QR Code</router-link>
-        <br />
-        <router-link to="/admin-login">Admin? Login disini</router-link>
-      </div>
     </div>
   </div>
 </template>
@@ -125,23 +94,6 @@ const updatePasswordHint = () => {
 }
 
 // Set contoh login
-const setExample = (type) => {
-  switch (type) {
-    case 'PNS':
-      nip.value = '197711072014072001'
-      password.value = '07111977'
-      break
-    case 'PPPK':
-      nip.value = '199509292024212031'
-      password.value = '29091995'
-      break
-    case 'PTT':
-      nip.value = 'PTT20250001'
-      password.value = 'smanda123'
-      break
-  }
-  updatePasswordHint()
-}
 
 // Auto redirect jika sudah login
 onMounted(async () => {

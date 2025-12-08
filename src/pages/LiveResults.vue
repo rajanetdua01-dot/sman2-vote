@@ -1,77 +1,54 @@
 <template>
   <div class="live-results" :class="{ 'fullscreen-mode': isFullscreen }">
-    <!-- Minimal Header -->
-    <div class="minimal-header">
-      <button class="back-button" @click="goToHome" title="Kembali ke Home">← HOME</button>
+    <!-- Status Header -->
+    <div class="status-header">
+      <div class="header-left">
+        <span class="update-label">Update:</span>
+        <span class="update-time">{{ lastUpdateTime }}</span>
+        <button @click="manualRefresh" class="refresh-btn" title="Refresh" :disabled="isRefreshing">
+          {{ isRefreshing ? '⏳' : '↻' }}
+        </button>
+      </div>
 
       <div class="header-center">
-        <div class="session-name">
-          <div class="main-title">SMANDA VOTE</div>
-          <div class="sub-title">Aplikasi Digital Real Time Voting SMAN 2 Bandar Lampung</div>
-          <div class="election-type">Pemilihan Wakil Kepala Sekolah</div>
+        <span class="status-badge">{{ sessionStatus }}</span>
+      </div>
+
+      <div class="header-right">
+        <div class="connection-status" :class="{ connected: isConnected }">
+          <span class="connection-dot"></span>
+          <span class="connection-text">
+            {{ isLargeScreen ? '📺 LIVE TV' : '📱 AUTO-REFRESH' }}
+          </span>
         </div>
-        <div class="round-info">PUTARAN {{ votingRound }}</div>
-        <div class="status-indicator" :class="{ connected: isConnected }"></div>
-      </div>
-
-      <div class="header-controls">
-        <button
-          class="control-btn"
-          @click="toggleSound"
-          :title="soundEnabled ? 'Mute suara' : 'Unmute suara'"
-        >
-          {{ soundEnabled ? '🔊' : '🔇' }}
-        </button>
-        <button
-          class="control-btn"
-          @click="toggleFullscreen"
-          :title="isFullscreen ? 'Keluar fullscreen' : 'Fullscreen'"
-        >
-          {{ isFullscreen ? '📱' : '🖥️' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- MANUAL REFRESH UNTUK HP/PC -->
-    <div v-if="!isLargeScreen" class="manual-refresh-container">
-      <button @click="manualRefresh" class="manual-refresh-btn" :disabled="isRefreshing">
-        <span v-if="isRefreshing">⏳ Loading...</span>
-        <span v-else>🔄 REFRESH DATA</span>
-        <span class="refresh-count" v-if="refreshCount > 0">({{ refreshCount }})</span>
-      </button>
-      <div class="refresh-info">
-        <small>Auto-refresh: {{ refreshTimer }} detik | Terakhir: {{ lastUpdateTime }}</small>
       </div>
     </div>
 
     <!-- Live Notification -->
-    <transition name="slide-down">
-      <div v-if="showVoteAlert" class="vote-notification" :class="notificationType">
-        <div class="notification-content">
-          <div class="notification-icon">🎉</div>
-          <div class="notification-text">
-            <div class="notification-title">{{ notificationTitle }}</div>
-            <div class="notification-details">
-              Vote baru diterima untuk <span class="candidate">{{ lastCandidate }}</span>
-            </div>
+    <div v-if="showVoteAlert" class="vote-notification">
+      <div class="notification-content">
+        <div class="notification-icon">🎉</div>
+        <div class="notification-text">
+          <div class="notification-title">{{ notificationTitle }}</div>
+          <div class="notification-details">
+            Vote baru untuk <strong>{{ lastCandidate }}</strong>
           </div>
-          <div class="notification-time">{{ lastVoteTime }}</div>
         </div>
+        <div class="notification-time">{{ lastVoteTime }}</div>
       </div>
-    </transition>
+    </div>
 
     <!-- Main Dashboard -->
     <div class="main-dashboard">
-      <!-- Summary Stats Row -->
+      <!-- Summary Stats - MODIFIED -->
       <div class="summary-row">
         <div class="stat-card">
           <div class="stat-icon">👥</div>
           <div class="stat-content">
             <div class="stat-value" :class="{ loading: isLoading.totalVoters }">
-              {{ isLoading.totalVoters ? '...' : totalVoters }}
+              {{ isLoading.totalVoters ? '...' : formatCompactNumber(totalVoters) }}
             </div>
-            <div class="stat-label">Total Peserta</div>
-            <div v-if="isLoading.totalVoters" class="stat-loading">Memuat...</div>
+            <div class="stat-label">Total<br />Peserta</div>
           </div>
         </div>
 
@@ -79,9 +56,9 @@
           <div class="stat-icon">🗳️</div>
           <div class="stat-content">
             <div class="stat-value" :class="{ loading: isLoading.votes }">
-              {{ isLoading.votes ? '...' : votedCount }}
+              {{ isLoading.votes ? '...' : formatCompactNumber(votedCount) }}
             </div>
-            <div class="stat-label">Sudah Voting</div>
+            <div class="stat-label">Sudah<br />Voting</div>
           </div>
         </div>
 
@@ -95,134 +72,70 @@
                   : formatPercentage(participationRate)
               }}%
             </div>
-            <div class="stat-label">Partisipasi</div>
-            <div v-if="participationRate >= 75" class="participation-high">🎯 Tinggi</div>
-            <div v-else-if="participationRate >= 50" class="participation-medium">📈 Sedang</div>
+            <div class="stat-label">Tingkat<br />Partisipasi</div>
+            <div v-if="participationRate >= 75" class="participation-high">Tinggi</div>
+            <div v-else-if="participationRate >= 50" class="participation-medium">Sedang</div>
+            <div v-else class="participation-low">Rendah</div>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon">⏰</div>
+          <div class="stat-icon">📅</div>
           <div class="stat-content">
-            <div class="stat-value">{{ currentTime }}</div>
-            <div class="stat-label">Waktu WIB</div>
-            <div v-if="timeRemaining" class="time-remaining">{{ timeRemaining }}</div>
+            <div class="stat-value date-value">{{ currentDateDay }}</div>
+            <div class="stat-label date-label">{{ currentDateFormatted }}</div>
+            <div class="current-time">{{ currentTime }}</div>
           </div>
         </div>
       </div>
 
-      <!-- Winners Section (if any) -->
-      <div v-if="winners.length > 0" class="winners-section">
-        <h3 class="section-title">
-          <span class="title-icon">🏆</span>
-          PEMENANG PUTARAN {{ votingRound }}
-        </h3>
-        <div class="winners-grid">
-          <div
-            v-for="winner in winners"
-            :key="winner.jabatan"
-            class="winner-card"
-            :class="{ supermajority: winner.percentage > 50 }"
-          >
-            <div class="winner-position">{{ formatJabatan(winner.jabatan) }}</div>
-            <div class="winner-name">{{ winner.name }}</div>
-            <div class="winner-stats">
-              <span class="stat-votes">{{ winner.votes }} suara</span>
-              <span class="stat-percentage">{{ formatPercentage(winner.percentage) }}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Run-off Alert -->
-      <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-section">
-        <div class="runoff-alert">
-          <div class="runoff-icon">🔄</div>
-          <div class="runoff-content">
-            <h4 class="runoff-title">PERLU RUN-OFF</h4>
-            <p class="runoff-description">{{ runoffs.length }} posisi belum ada pemenang >50%</p>
-            <div class="runoff-details">
-              <div v-for="position in runoffs" :key="position" class="runoff-position">
-                {{ getPositionName(position) }}
-              </div>
-            </div>
-          </div>
-          <button v-if="isAdmin" @click="startRunoff" class="runoff-button">MULAI PUTARAN 2</button>
-        </div>
-      </div>
-
-      <!-- Main Content Grid -->
-      <div class="content-grid">
-        <!-- Position Tabs -->
-        <div class="position-tabs-container">
-          <div class="position-tabs">
-            <button
-              v-for="position in positions"
-              :key="position.id"
-              class="position-tab"
-              :class="{
-                active: activePosition === position.id,
-                'has-winner': winners.some((w) => w.jabatan === position.id),
-              }"
-              @click="activePosition = position.id"
-            >
-              <span class="tab-icon">{{ position.icon }}</span>
-              <span class="tab-name">{{ position.name }}</span>
-              <span class="tab-count">{{ getPositionVotes(position.id) }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Candidates Ranking -->
-        <div class="candidates-container">
-          <div class="candidates-header">
-            <h3 class="candidates-title">
-              {{ getPositionName(activePosition) }}
-              <span class="status-badge">{{ getPositionStatus(activePosition) }}</span>
+      <!-- 2-Column Results -->
+      <div class="two-column-results">
+        <!-- Left Column: Waka Kesiswaan -->
+        <div class="position-column kesiswaan-column">
+          <div class="column-header">
+            <h3 class="column-title">
+              <span class="title-icon">👨‍🎓</span>
+              WAKA KESISWAAN
+              <span class="position-status">{{ getPositionStatus('kesiswaan') }}</span>
             </h3>
-            <div class="candidates-stats">
-              <span class="stat">{{ getCandidates(activePosition).length }} Kandidat</span>
-              <span class="stat"
-                >{{ formatPercentage(getPositionParticipation(activePosition)) }}% Partisipasi</span
+            <div class="column-stats">
+              <span>{{ getCandidates('kesiswaan').length }} Kandidat</span>
+              <span
+                >{{ formatPercentage(getPositionParticipation('kesiswaan')) }}% Partisipasi</span
               >
             </div>
           </div>
 
-          <div class="candidates-ranking">
-            <div v-if="isLoading.candidates" class="loading-candidates">
-              <div class="loading-spinner"></div>
-              <p>Memuat data kandidat...</p>
+          <div class="candidates-list">
+            <div v-if="isLoading.candidates" class="loading">
+              <div class="spinner"></div>
+              <p>Memuat kandidat...</p>
+            </div>
+
+            <div v-else-if="getCandidates('kesiswaan').length === 0" class="empty">
+              <p>Belum ada kandidat</p>
             </div>
 
             <div
-              v-for="(candidate, index) in getCandidates(activePosition)"
               v-else
+              v-for="(candidate, index) in getCandidates('kesiswaan')"
               :key="candidate.id"
               class="candidate-item"
               :class="{
                 'rank-1': index === 0,
                 'rank-2': index === 1,
                 'rank-3': index === 2,
-                'vote-update': candidate.hasUpdate,
-                'is-winner': isWinner(candidate.id, activePosition),
+                winner: isWinner(candidate.id, 'kesiswaan'),
               }"
             >
-              <div class="candidate-rank">
-                <span class="rank-number">#{{ index + 1 }}</span>
-                <div v-if="index === 0 && candidate.percentage > 50" class="winner-badge">🏆</div>
-              </div>
+              <div class="candidate-rank">#{{ index + 1 }}</div>
 
               <div class="candidate-info">
                 <div class="candidate-avatar">{{ getInitials(candidate.name) }}</div>
                 <div class="candidate-details">
                   <div class="candidate-name">{{ candidate.name }}</div>
-                  <div class="candidate-meta">
-                    <span class="meta-votes">{{ candidate.votes }} suara</span>
-                    <span class="meta-separator">•</span>
-                    <span class="meta-percentage"
-                      >{{ formatPercentage(candidate.percentage) }}%</span
-                    >
-                  </div>
+                  <div class="candidate-votes">{{ candidate.votes }} suara</div>
                 </div>
               </div>
 
@@ -230,79 +143,120 @@
                 <div class="progress-bar">
                   <div
                     class="progress-fill"
-                    :style="{ width: candidate.percentage + '%' }"
+                    :style="{ width: Math.min(candidate.percentage, 100) + '%' }"
                     :class="{ supermajority: candidate.percentage > 50 }"
                   ></div>
                 </div>
-                <div class="progress-text">
-                  {{ formatPercentage(candidate.percentage) }}%
-                  <span v-if="candidate.percentage > 50" class="supermajority-indicator"
-                    >(>50%)</span
-                  >
-                </div>
+                <div class="progress-percentage">{{ formatPercentage(candidate.percentage) }}%</div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Live Activity -->
-        <div class="activity-container">
-          <div class="activity-header">
-            <h3 class="activity-title">
-              <span class="activity-icon">🔄</span>
-              AKTIVITAS TERBARU
+        <!-- Right Column: Waka Sarpras -->
+        <div class="position-column sarpras-column">
+          <div class="column-header">
+            <h3 class="column-title">
+              <span class="title-icon">🏫</span>
+              WAKA SARPRAS
+              <span class="position-status">{{ getPositionStatus('sarpras') }}</span>
             </h3>
-            <button @click="manualRefresh" class="refresh-btn" title="Refresh data">🔄</button>
-          </div>
-          <div class="activity-feed">
-            <div v-if="activityLog.length === 0" class="empty-activity">
-              <p>Menunggu aktivitas voting...</p>
+            <div class="column-stats">
+              <span>{{ getCandidates('sarpras').length }} Kandidat</span>
+              <span>{{ formatPercentage(getPositionParticipation('sarpras')) }}% Partisipasi</span>
             </div>
-            <div v-else class="activity-list">
-              <div
-                v-for="activity in recentActivities"
-                :key="activity.id"
-                class="activity-item"
-                :class="activity.type"
-              >
-                <div class="activity-icon">{{ getActivityIcon(activity.type) }}</div>
-                <div class="activity-content">
-                  <p class="activity-message">{{ activity.message }}</p>
-                  <div class="activity-meta">
-                    <span class="activity-time">{{ activity.time }}</span>
-                  </div>
+          </div>
+
+          <div class="candidates-list">
+            <div v-if="isLoading.candidates" class="loading">
+              <div class="spinner"></div>
+              <p>Memuat kandidat...</p>
+            </div>
+
+            <div v-else-if="getCandidates('sarpras').length === 0" class="empty">
+              <p>Belum ada kandidat</p>
+            </div>
+
+            <div
+              v-else
+              v-for="(candidate, index) in getCandidates('sarpras')"
+              :key="candidate.id"
+              class="candidate-item"
+              :class="{
+                'rank-1': index === 0,
+                'rank-2': index === 1,
+                'rank-3': index === 2,
+                winner: isWinner(candidate.id, 'sarpras'),
+              }"
+            >
+              <div class="candidate-rank">#{{ index + 1 }}</div>
+
+              <div class="candidate-info">
+                <div class="candidate-avatar">{{ getInitials(candidate.name) }}</div>
+                <div class="candidate-details">
+                  <div class="candidate-name">{{ candidate.name }}</div>
+                  <div class="candidate-votes">{{ candidate.votes }} suara</div>
                 </div>
+              </div>
+
+              <div class="candidate-progress">
+                <div class="progress-bar">
+                  <div
+                    class="progress-fill"
+                    :style="{ width: Math.min(candidate.percentage, 100) + '%' }"
+                    :class="{ supermajority: candidate.percentage > 50 }"
+                  ></div>
+                </div>
+                <div class="progress-percentage">{{ formatPercentage(candidate.percentage) }}%</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Footer Info -->
-      <div class="footer-info">
-        <div class="update-info">
-          <span class="update-label">Update Terakhir:</span>
-          <span class="update-time">{{ lastUpdateTime }}</span>
-          <button
-            @click="manualRefresh"
-            class="refresh-mini-btn"
-            title="Refresh"
-            :disabled="isRefreshing"
-          >
-            {{ isRefreshing ? '⏳' : '↻' }}
-          </button>
+      <!-- Run-off Alert -->
+      <div v-if="runoffs.length > 0 && votingRound === 1" class="runoff-section">
+        <div class="runoff-header">
+          <span class="runoff-icon">🔄</span>
+          <h3 class="runoff-title">PERLU RUN-OFF</h3>
         </div>
-        <div class="session-info" v-if="sessionData">
-          <span class="session-status">{{ sessionData.status }}</span>
-          <span class="session-period">{{ formatSessionPeriod(sessionData) }}</span>
+        <div class="runoff-content">
+          <p class="runoff-description">{{ runoffs.length }} posisi belum ada pemenang >50%</p>
+          <div class="runoff-positions">
+            <span v-for="position in runoffs" :key="position" class="runoff-position">
+              {{ getPositionName(position) }}
+            </span>
+          </div>
+          <div v-if="isAdmin" class="runoff-actions">
+            <button @click="startRunoff" class="runoff-button">MULAI PUTARAN 2</button>
+          </div>
         </div>
-        <div class="connection-info" :class="{ connected: isConnected }">
-          <div class="connection-dot"></div>
-          <span class="connection-text">
-            {{
-              isLargeScreen ? (isConnected ? '📺 LIVE TV' : '📺 CONNECTING...') : '📱 AUTO-REFRESH'
-            }}
-          </span>
+      </div>
+
+      <!-- Live Activity -->
+      <div class="activity-section">
+        <div class="activity-header">
+          <h3 class="activity-title">
+            <span class="activity-icon">🔄</span>
+            AKTIVITAS TERBARU
+          </h3>
+          <button @click="manualRefresh" class="refresh-btn" title="Refresh">🔄</button>
+        </div>
+
+        <div class="activity-feed">
+          <div v-if="activityLog.length === 0" class="empty-activity">
+            <p>Menunggu aktivitas voting...</p>
+          </div>
+
+          <div v-else class="activity-list">
+            <div v-for="activity in recentActivities" :key="activity.id" class="activity-item">
+              <div class="activity-icon">{{ getActivityIcon(activity.type) }}</div>
+              <div class="activity-content">
+                <p class="activity-message">{{ activity.message }}</p>
+                <div class="activity-time">{{ activity.time }}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -311,24 +265,15 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
-
-const router = useRouter()
 
 // ===== STATE =====
 const isConnected = ref(false)
 const isFullscreen = ref(false)
-const soundEnabled = ref(true)
 const votingRound = ref(1)
-const isAdmin = ref(false) // Set false untuk peserta biasa
-const activePosition = ref('kesiswaan')
-const isLargeScreen = ref(false) // TV/Smartboard detection
+const isAdmin = ref(false)
+const isLargeScreen = ref(false)
 const isRefreshing = ref(false)
-const refreshCount = ref(0)
-const refreshTimer = ref(30)
-let refreshTimerInterval = null
-let autoRefreshInterval = null
 
 // Data
 const candidatesData = ref([])
@@ -336,7 +281,6 @@ const votesData = ref(0)
 const sessionData = ref(null)
 const totalVotersData = ref(0)
 const activityLog = ref([])
-const realtimeChannel = ref(null)
 
 // Loading states
 const isLoading = ref({
@@ -348,73 +292,15 @@ const isLoading = ref({
 
 // Time
 const currentTime = ref('')
-const timeRemaining = ref('')
+const currentDateDay = ref('')
+const currentDateFormatted = ref('')
 const lastUpdateTime = ref('')
 
 // Live Alert
 const showVoteAlert = ref(false)
 const lastCandidate = ref('')
 const lastVoteTime = ref('')
-const notificationType = ref('vote')
 const notificationTitle = ref('VOTE BARU!')
-
-// ===== POSITIONS =====
-const positions = [
-  { id: 'kesiswaan', name: 'WAKA KESISWAAN', icon: '👨‍🎓' },
-  { id: 'sarpras', name: 'WAKA SARPRAS', icon: '🏫' },
-]
-
-// ===== HELPER FUNCTIONS =====
-const formatPercentage = (value) => {
-  if (isNaN(value) || value === null || value === undefined) return '0.00'
-  return parseFloat(value).toFixed(2).replace('.', ',')
-}
-
-const formatSessionPeriod = (session) => {
-  if (!session) return ''
-  const start = new Date(session.waktu_mulai_voting).toLocaleDateString('id-ID')
-  const end = new Date(session.waktu_selesai_voting).toLocaleDateString('id-ID')
-  return `${start} - ${end}`
-}
-
-// ===== DEVICE DETECTION =====
-const detectDeviceType = () => {
-  // TV/Smartboard biasanya punya layar besar (>1024px) dan aspect ratio berbeda
-  const width = window.innerWidth
-  const height = window.innerHeight
-  const isWideScreen = width > 1024 && width / height > 1.5
-
-  // Check URL parameter untuk force TV mode
-  const urlParams = new URLSearchParams(window.location.search)
-  const forceTV = urlParams.has('tv') || localStorage.getItem('tv_mode') === 'true'
-
-  return forceTV || isWideScreen
-}
-
-// ===== QUERY FUNCTIONS =====
-const loadTotalVoters = async () => {
-  try {
-    isLoading.value.totalVoters = true
-
-    const { count, error } = await supabase
-      .from('pengguna')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-
-    if (error) {
-      console.error('❌ Error load total peserta:', error)
-      totalVotersData.value = 0
-      addActivity('❌ Gagal memuat total peserta', 'error')
-    } else {
-      totalVotersData.value = count || 0
-    }
-  } catch (err) {
-    console.error('❌ Load total peserta error:', err)
-    totalVotersData.value = 0
-  } finally {
-    isLoading.value.totalVoters = false
-  }
-}
 
 // ===== COMPUTED =====
 const totalVoters = computed(() => totalVotersData.value)
@@ -426,15 +312,21 @@ const participationRate = computed(() => {
   return (votedCount.value / totalVoters.value) * 100
 })
 
+const sessionStatus = computed(() => {
+  if (!sessionData.value) return 'LOADING...'
+  return sessionData.value.status.toUpperCase()
+})
+
 const recentActivities = computed(() => {
-  return activityLog.value.slice(0, 3)
+  return activityLog.value.slice(0, 8)
 })
 
 const winners = computed(() => {
   const result = []
+  const positions = ['kesiswaan', 'sarpras']
 
   positions.forEach((position) => {
-    const candidates = getCandidates(position.id)
+    const candidates = getCandidates(position)
     if (candidates.length === 0) return
 
     const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
@@ -444,7 +336,7 @@ const winners = computed(() => {
       const percentage = (candidate.votes / totalVotes) * 100
       if (percentage > 50) {
         result.push({
-          jabatan: position.id,
+          jabatan: position,
           name: candidate.name,
           votes: candidate.votes,
           percentage: percentage,
@@ -458,13 +350,14 @@ const winners = computed(() => {
 
 const runoffs = computed(() => {
   const result = []
+  const positions = ['kesiswaan', 'sarpras']
 
   positions.forEach((position) => {
-    const hasWinner = winners.value.some((w) => w.jabatan === position.id)
+    const hasWinner = winners.value.some((w) => w.jabatan === position)
     if (!hasWinner) {
-      const candidates = getCandidates(position.id)
+      const candidates = getCandidates(position)
       if (candidates.length >= 2) {
-        result.push(position.id)
+        result.push(position)
       }
     }
   })
@@ -472,312 +365,55 @@ const runoffs = computed(() => {
   return result
 })
 
-// ===== SOUND SYSTEM =====
-const playVoteSound = () => {
-  if (!soundEnabled.value) return
-  try {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
-
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
-
-    oscillator.frequency.value = 800
-    oscillator.type = 'sine'
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
-
-    oscillator.start(audioContext.currentTime)
-    oscillator.stop(audioContext.currentTime + 0.1)
-  } catch {
-    console.log('Audio context not supported')
-  }
-}
-
 // ===== METHODS =====
-const goToHome = () => {
-  router.push('/')
+const formatPercentage = (value) => {
+  if (isNaN(value) || value === null || value === undefined) return '0.00'
+  return parseFloat(value).toFixed(2).replace('.', ',')
 }
 
-const getPositionVotes = (positionId) => {
-  return getCandidates(positionId).reduce((sum, c) => sum + c.votes, 0)
+const formatCompactNumber = (value) => {
+  if (!value && value !== 0) return '0'
+  if (value < 1000) return value.toString()
+  if (value < 10000) return (value / 1000).toFixed(1) + 'K'
+  if (value < 1000000) return Math.floor(value / 1000) + 'K'
+  return Math.floor(value / 1000000) + 'M'
 }
 
-const getCandidates = (positionId) => {
-  let candidates = candidatesData.value.filter((c) => c.jabatan === positionId)
-
-  const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
-  candidates = candidates.map((c) => ({
-    ...c,
-    percentage: totalVotes > 0 ? (c.votes / totalVotes) * 100 : 0,
-  }))
-
-  return candidates.sort((a, b) => b.votes - a.votes)
+const detectDeviceType = () => {
+  const width = window.innerWidth
+  const height = window.innerHeight
+  const isWideScreen = width > 1024 && width / height > 1.5
+  const urlParams = new URLSearchParams(window.location.search)
+  const forceTV = urlParams.has('tv') || localStorage.getItem('tv_mode') === 'true'
+  return forceTV || isWideScreen
 }
 
-const getPositionName = (positionId) => {
-  const position = positions.find((p) => p.id === positionId)
-  return position?.name || positionId
-}
-
-const getPositionStatus = (positionId) => {
-  if (winners.value.some((w) => w.jabatan === positionId)) return '✅'
-  if (runoffs.value.includes(positionId)) return '🔄'
-  return '📊'
-}
-
-const getPositionParticipation = (positionId) => {
-  const positionVotes = getPositionVotes(positionId)
-  return totalVoters.value > 0 ? (positionVotes / totalVoters.value) * 100 : 0
-}
-
-const isWinner = (candidateId, positionId) => {
-  return winners.value.some(
-    (w) =>
-      w.jabatan === positionId &&
-      getCandidates(positionId).find((c) => c.id === candidateId)?.name === w.name,
-  )
-}
-
-const formatJabatan = (jabatan) => {
-  return jabatan === 'kesiswaan' ? 'Waka Kesiswaan' : 'Waka Sarpras'
-}
-
-const getInitials = (name) => {
-  if (!name) return '??'
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .substring(0, 2)
-}
-
-const getActivityIcon = (type) => {
-  const icons = {
-    vote: '🗳️',
-    winner: '🏆',
-    round: '🔄',
-    info: 'ℹ️',
-    error: '❌',
-    connection: '🔌',
-  }
-  return icons[type] || '📝'
-}
-
-// ===== ACTIVITY LOG =====
-const addActivity = (message, type = 'info') => {
-  activityLog.value.unshift({
-    id: Date.now(),
-    message,
-    type,
-    time: new Date().toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    timestamp: Date.now(),
-  })
-
-  if (activityLog.value.length > 20) {
-    activityLog.value = activityLog.value.slice(0, 20)
-  }
-}
-
-// ===== NOTIFICATION SYSTEM =====
-const showNotification = (type, candidate) => {
-  showVoteAlert.value = true
-  lastCandidate.value = candidate
-  lastVoteTime.value = currentTime.value
-  notificationType.value = type
-
-  if (type === 'vote') {
-    notificationTitle.value = 'VOTE BARU!'
-    playVoteSound()
-  } else if (type === 'winner') {
-    notificationTitle.value = '🏆 PEMENANG!'
-  }
-
-  setTimeout(() => {
-    showVoteAlert.value = false
-  }, 3000)
-}
-
-// ===== POLLING SYSTEM (UNTUK HP/PC) =====
-const startPolling = (interval = 30000) => {
-  // Hentikan interval sebelumnya jika ada
-  if (autoRefreshInterval) {
-    clearInterval(autoRefreshInterval)
-  }
-
-  // Fungsi refresh data
-  const refreshData = async () => {
-    try {
-      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
-      refreshCount.value++
-
-      // Update last update time
-      lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Jakarta',
-      })
-    } catch (err) {
-      console.error('❌ Polling error:', err)
-    }
-  }
-
-  // Immediate first refresh
-  refreshData()
-
-  // Set interval
-  autoRefreshInterval = setInterval(refreshData, interval)
-
-  // Start refresh timer
-  startRefreshTimer()
-}
-
-const startRefreshTimer = () => {
-  refreshTimer.value = 30
-  refreshTimerInterval = setInterval(() => {
-    refreshTimer.value--
-    if (refreshTimer.value <= 0) {
-      refreshTimer.value = 30
-    }
-  }, 1000)
-}
-
-const manualRefresh = async () => {
-  if (isRefreshing.value) return
-
-  isRefreshing.value = true
+const loadTotalVoters = async () => {
   try {
-    addActivity('🔄 Manual refresh data...', 'info')
+    isLoading.value.totalVoters = true
+    const { count, error } = await supabase
+      .from('pengguna')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
 
-    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
-    refreshCount.value++
-
-    // Update waktu terakhir
-    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Jakarta',
-    })
-
-    // Reset timer
-    refreshTimer.value = 30
-
-    addActivity('✅ Data berhasil diperbarui', 'info')
+    if (error) {
+      console.error('Error load total peserta:', error)
+      totalVotersData.value = 0
+      addActivity('❌ Gagal memuat total peserta', 'error')
+    } else {
+      totalVotersData.value = count || 0
+    }
   } catch (err) {
-    console.error('❌ Manual refresh error:', err)
-    addActivity('❌ Gagal memuat ulang data', 'error')
+    console.error('Load total peserta error:', err)
+    totalVotersData.value = 0
   } finally {
-    isRefreshing.value = false
-  }
-}
-
-// ===== REALTIME SYSTEM (UNTUK TV/SMARTBOARD) =====
-const setupRealtime = async () => {
-  // Hanya jalankan jika layar besar (TV/Smartboard)
-  if (!isLargeScreen.value) {
-    console.log('📱 Device kecil, menggunakan polling mode')
-    startPolling(30000)
-    return
-  }
-
-  try {
-    // Load session data first
-    const { data: session, error: sessionError } = await supabase
-      .from('sesi_pemilihan')
-      .select('*')
-      .order('dibuat_pada', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (sessionError) {
-      console.error('Session error:', sessionError)
-      addActivity('❌ Tidak ada sesi aktif', 'error')
-      return
-    }
-
-    sessionData.value = session
-    isLoading.value.session = false
-
-    // Initial data load
-    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
-
-    // Setup real-time subscription hanya untuk TV
-    const channelName = `tv-live-voting-${session.id}`
-    realtimeChannel.value = supabase.channel(channelName)
-
-    // Subscribe ke INSERT suara
-    realtimeChannel.value.on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'suara',
-        filter: `sesi_id=eq.${session.id}`,
-      },
-      async (payload) => {
-        await handleNewVote(payload.new)
-      },
-    )
-
-    // Subscribe ke UPDATE kandidat
-    realtimeChannel.value.on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'kandidat',
-        filter: `sesi_id=eq.${session.id}`,
-      },
-      (payload) => {
-        handleCandidateUpdate(payload.new)
-      },
-    )
-
-    // Subscribe ke UPDATE sesi
-    realtimeChannel.value.on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'sesi_pemilihan',
-        filter: `id=eq.${session.id}`,
-      },
-      (payload) => {
-        handleSessionUpdate(payload.new)
-      },
-    )
-
-    // Status subscription
-    realtimeChannel.value.subscribe((status) => {
-      console.log('📺 TV Realtime status:', status)
-      isConnected.value = status === 'SUBSCRIBED'
-
-      if (status === 'SUBSCRIBED') {
-        addActivity('📺 Terhubung ke sistem realtime TV', 'connection')
-      } else if (status === 'CHANNEL_ERROR') {
-        addActivity('❌ Koneksi TV terganggu', 'error')
-        isConnected.value = false
-        // Fallback ke polling
-        startPolling(5000)
-      }
-    })
-  } catch (err) {
-    console.error('❌ Setup realtime TV error:', err)
-    addActivity('❌ Gagal menyambung TV realtime', 'error')
-    // Fallback ke polling
-    startPolling(10000)
+    isLoading.value.totalVoters = false
   }
 }
 
 const loadCandidates = async () => {
   try {
     if (!sessionData.value?.id) return
-
     isLoading.value.candidates = true
 
     const { data: candidates, error } = await supabase
@@ -811,7 +447,6 @@ const loadCandidates = async () => {
 const loadVotesCount = async () => {
   try {
     if (!sessionData.value?.id) return
-
     isLoading.value.votes = true
 
     const { count, error } = await supabase
@@ -833,6 +468,197 @@ const loadVotesCount = async () => {
   }
 }
 
+const getCandidates = (positionId) => {
+  let candidates = candidatesData.value.filter((c) => c.jabatan === positionId)
+  const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0)
+  candidates = candidates.map((c) => ({
+    ...c,
+    percentage: totalVotes > 0 ? (c.votes / totalVotes) * 100 : 0,
+  }))
+  return candidates.sort((a, b) => b.votes - a.votes)
+}
+
+const getPositionName = (positionId) => {
+  const positionNames = {
+    kesiswaan: 'WAKA KESISWAAN',
+    sarpras: 'WAKA SARPRAS',
+  }
+  return positionNames[positionId] || positionId
+}
+
+const getPositionStatus = (positionId) => {
+  if (winners.value.some((w) => w.jabatan === positionId)) return '✅'
+  if (runoffs.value.includes(positionId)) return '🔄'
+  return '📊'
+}
+
+const getPositionParticipation = (positionId) => {
+  const positionVotes = getCandidates(positionId).reduce((sum, c) => sum + c.votes, 0)
+  return totalVoters.value > 0 ? (positionVotes / totalVoters.value) * 100 : 0
+}
+
+const isWinner = (candidateId, positionId) => {
+  const winner = winners.value.find((w) => w.jabatan === positionId)
+  if (!winner) return false
+  const candidate = getCandidates(positionId).find((c) => c.id === candidateId)
+  return candidate?.name === winner.name
+}
+
+const getInitials = (name) => {
+  if (!name) return '??'
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
+}
+
+const getActivityIcon = (type) => {
+  const icons = {
+    vote: '🗳️',
+    winner: '🏆',
+    round: '🔄',
+    info: 'ℹ️',
+    error: '❌',
+    connection: '🔌',
+  }
+  return icons[type] || '📝'
+}
+
+const addActivity = (message, type = 'info') => {
+  activityLog.value.unshift({
+    id: Date.now(),
+    message,
+    type,
+    time: new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    timestamp: Date.now(),
+  })
+
+  if (activityLog.value.length > 20) {
+    activityLog.value = activityLog.value.slice(0, 20)
+  }
+}
+
+const showNotification = (candidateName) => {
+  showVoteAlert.value = true
+  lastCandidate.value = candidateName
+  lastVoteTime.value = currentTime.value
+  notificationTitle.value = 'VOTE BARU!'
+
+  setTimeout(() => {
+    showVoteAlert.value = false
+  }, 3000)
+}
+
+const manualRefresh = async () => {
+  if (isRefreshing.value) return
+  isRefreshing.value = true
+  try {
+    addActivity('🔄 Manual refresh data...', 'info')
+    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    })
+    addActivity('✅ Data berhasil diperbarui', 'info')
+  } catch (err) {
+    console.error('❌ Manual refresh error:', err)
+    addActivity('❌ Gagal memuat ulang data', 'error')
+  } finally {
+    isRefreshing.value = false
+  }
+}
+
+const setupRealtime = async () => {
+  if (!isLargeScreen.value) {
+    console.log('📱 Device kecil, menggunakan polling mode')
+    startPolling(30000)
+    return
+  }
+
+  try {
+    const { data: session, error: sessionError } = await supabase
+      .from('sesi_pemilihan')
+      .select('*')
+      .order('dibuat_pada', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (sessionError) {
+      console.error('Session error:', sessionError)
+      addActivity('❌ Tidak ada sesi aktif', 'error')
+      return
+    }
+
+    sessionData.value = session
+    isLoading.value.session = false
+    await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+
+    const channelName = `tv-live-voting-${session.id}`
+    const realtimeChannel = supabase.channel(channelName)
+
+    realtimeChannel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'suara',
+        filter: `sesi_id=eq.${session.id}`,
+      },
+      async (payload) => {
+        await handleNewVote(payload.new)
+      },
+    )
+
+    realtimeChannel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'kandidat',
+        filter: `sesi_id=eq.${session.id}`,
+      },
+      (payload) => {
+        handleCandidateUpdate(payload.new)
+      },
+    )
+
+    realtimeChannel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'sesi_pemilihan',
+        filter: `id=eq.${session.id}`,
+      },
+      (payload) => {
+        handleSessionUpdate(payload.new)
+      },
+    )
+
+    realtimeChannel.subscribe((status) => {
+      console.log('📺 TV Realtime status:', status)
+      isConnected.value = status === 'SUBSCRIBED'
+      if (status === 'SUBSCRIBED') {
+        addActivity('📺 Terhubung ke sistem realtime TV', 'connection')
+      } else if (status === 'CHANNEL_ERROR') {
+        addActivity('❌ Koneksi TV terganggu', 'error')
+        isConnected.value = false
+        startPolling(5000)
+      }
+    })
+  } catch (err) {
+    console.error('❌ Setup realtime TV error:', err)
+    addActivity('❌ Gagal menyambung TV realtime', 'error')
+    startPolling(10000)
+  }
+}
+
 const handleNewVote = async (vote) => {
   try {
     const { data: candidate } = await supabase
@@ -842,20 +668,18 @@ const handleNewVote = async (vote) => {
       .single()
 
     const candidateName = candidate?.pengguna?.nama_lengkap || 'Unknown'
-
-    // Update UI
-    showNotification('vote', candidateName)
+    showNotification(candidateName)
     votesData.value++
 
-    // Tambahkan ke activity log
-    addActivity(`🗳️ Vote baru untuk ${candidateName}`, 'vote')
+    addActivity(
+      `🗳️ Vote baru untuk ${candidateName} (${getPositionName(candidate.jabatan)})`,
+      'vote',
+    )
 
-    // Update data kandidat
     const candidateIndex = candidatesData.value.findIndex((c) => c.id === vote.kandidat_id)
     if (candidateIndex !== -1) {
       candidatesData.value[candidateIndex].votes++
       candidatesData.value[candidateIndex].hasUpdate = true
-
       setTimeout(() => {
         if (candidatesData.value[candidateIndex]) {
           candidatesData.value[candidateIndex].hasUpdate = false
@@ -873,14 +697,12 @@ const handleCandidateUpdate = (candidate) => {
     if (index !== -1) {
       const oldVotes = candidatesData.value[index].votes
       const newVotes = candidate.total_suara || 0
-
       if (newVotes !== oldVotes) {
         candidatesData.value[index] = {
           ...candidatesData.value[index],
           votes: newVotes,
           hasUpdate: true,
         }
-
         setTimeout(() => {
           if (candidatesData.value[index]) {
             candidatesData.value[index].hasUpdate = false
@@ -897,33 +719,13 @@ const handleSessionUpdate = (session) => {
   try {
     console.log('🔄 Session updated:', session.status)
     sessionData.value = { ...sessionData.value, ...session }
-
     if (session.status === 'voting') {
       addActivity('🚀 Voting dimulai!', 'info')
     } else if (session.status === 'selesai') {
       addActivity('🏁 Voting selesai!', 'info')
-      showNotification('winner', '')
     }
   } catch (err) {
     console.error('❌ Handle session update error:', err)
-  }
-}
-
-// ===== UI CONTROLS =====
-const toggleSound = () => {
-  soundEnabled.value = !soundEnabled.value
-  addActivity(soundEnabled.value ? '🔊 Suara diaktifkan' : '🔇 Suara dimatikan', 'info')
-}
-
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen()
-    isFullscreen.value = true
-    addActivity('🖥️ Mode layar penuh diaktifkan', 'info')
-  } else {
-    document.exitFullscreen()
-    isFullscreen.value = false
-    addActivity('📱 Mode layar penuh dinonaktifkan', 'info')
   }
 }
 
@@ -931,21 +733,29 @@ const startRunoff = () => {
   if (votingRound.value === 1 && runoffs.value.length > 0) {
     votingRound.value = 2
     addActivity(`🔄 PUTARAN 2 DIMULAI`, 'round')
-    showNotification('round', '')
   }
 }
 
-// ===== TIME FUNCTIONS =====
 const updateCurrentTime = () => {
   const now = new Date()
   currentTime.value = now.toLocaleTimeString('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     timeZone: 'Asia/Jakarta',
   })
 
-  // Update last update time setiap menit
+  currentDateDay.value = now.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    timeZone: 'Asia/Jakarta',
+  })
+
+  currentDateFormatted.value = now.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  })
+
   const minutes = now.getMinutes()
   if (minutes !== lastMinutes.value) {
     lastUpdateTime.value = now.toLocaleTimeString('id-ID', {
@@ -955,79 +765,64 @@ const updateCurrentTime = () => {
     })
     lastMinutes.value = minutes
   }
-
-  // Hitung waktu tersisa jika ada sesi aktif
-  if (sessionData.value?.waktu_selesai_voting) {
-    const endTime = new Date(sessionData.value.waktu_selesai_voting)
-    const diffMs = endTime - now
-    if (diffMs > 0) {
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-      const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
-      timeRemaining.value = `${diffHours}j ${diffMinutes}m`
-    } else {
-      timeRemaining.value = 'Selesai'
-    }
-  }
 }
 
 let lastMinutes = ref(null)
+let autoRefreshInterval = null
+
+const startPolling = (interval = 30000) => {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval)
+  }
+
+  const refreshData = async () => {
+    try {
+      await Promise.all([loadTotalVoters(), loadCandidates(), loadVotesCount()])
+      lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Jakarta',
+      })
+    } catch (err) {
+      console.error('❌ Polling error:', err)
+    }
+  }
+
+  refreshData()
+  autoRefreshInterval = setInterval(refreshData, interval)
+}
 
 // ===== LIFECYCLE =====
 onMounted(async () => {
-  // Deteksi device type
   isLargeScreen.value = detectDeviceType()
-
-  // Setup waktu real-time
   updateCurrentTime()
   const timeInterval = setInterval(updateCurrentTime, 1000)
 
-  // Setup berdasarkan device type
   if (isLargeScreen.value) {
-    // TV/SMARTBOARD: Realtime mode
     console.log('📺 TV/Smartboard mode detected - using realtime')
     await setupRealtime()
   } else {
-    // HP/PC: Polling mode
     console.log('📱 Mobile/PC mode detected - using polling')
     startPolling(30000)
     addActivity('📱 Mode Auto-Refresh aktif (30 detik)', 'info')
   }
 
-  // Listen for fullscreen changes
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement
   })
 
-  // Cleanup intervals on unmount
   onUnmounted(() => {
     clearInterval(timeInterval)
     if (autoRefreshInterval) {
       clearInterval(autoRefreshInterval)
     }
-    if (refreshTimerInterval) {
-      clearInterval(refreshTimerInterval)
-    }
   })
 })
 
 onUnmounted(() => {
-  if (realtimeChannel.value) {
-    supabase.removeChannel(realtimeChannel.value)
-    console.log('🔕 Realtime channel cleaned up')
-  }
-
-  if (autoRefreshInterval) {
-    clearInterval(autoRefreshInterval)
-  }
-
-  if (refreshTimerInterval) {
-    clearInterval(refreshTimerInterval)
-  }
-
   if (document.fullscreenElement) {
     document.exitFullscreen()
   }
-
   document.removeEventListener('fullscreenchange', () => {})
 })
 </script>
@@ -1036,226 +831,112 @@ onUnmounted(() => {
 /* ===== GLOBAL STYLES ===== */
 .live-results {
   min-height: 100vh;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  color: white;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* ===== MINIMAL HEADER ===== */
-.minimal-header {
+/* ===== STATUS HEADER ===== */
+.status-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.back-button {
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.5);
-  color: #93c5fd;
-  padding: 8px 16px;
-  border-radius: 20px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--color-bg-soft);
+  border-bottom: 1px solid var(--color-border);
   font-size: 14px;
+}
+
+.header-left,
+.header-center,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-label {
+  color: var(--color-text-soft);
+}
+
+.update-time {
   font-weight: 600;
+  color: var(--color-text);
+}
+
+.refresh-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.back-button:hover {
-  background: rgba(59, 130, 246, 0.3);
-  transform: translateY(-1px);
-}
-
-.header-center {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  flex: 1;
+  justify-content: center;
 }
 
-.session-name {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
+.refresh-btn:hover:not(:disabled) {
+  background: var(--color-bg-mute);
 }
 
-.main-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: white;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  margin-bottom: 2px;
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.sub-title {
-  font-size: 11px;
-  color: #cbd5e1;
-  text-align: center;
-  max-width: 400px;
-  line-height: 1.3;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 4px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.election-type {
-  font-size: 12px;
-  color: #fbbf24;
-  font-weight: 600;
-  margin-top: 2px;
-  padding: 2px 12px;
-  background: rgba(251, 191, 36, 0.1);
-  border-radius: 10px;
-  border: 1px solid rgba(251, 191, 36, 0.2);
-}
-
-.round-info {
-  font-size: 12px;
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
+.status-badge {
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: 20px;
   font-weight: 600;
-  margin-top: 4px;
+  font-size: 12px;
+  background: var(--color-primary);
+  color: white;
 }
 
-.status-indicator {
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.connection-status.connected {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.connection-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #ef4444;
-  margin-top: 4px;
 }
 
-.status-indicator.connected {
+.connection-status.connected .connection-dot {
   background: #22c55e;
-  animation: pulse 1s infinite;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.header-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.control-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.control-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
-}
-
-/* ===== MANUAL REFRESH CONTAINER ===== */
-.manual-refresh-container {
-  margin: 10px 20px;
-  padding: 12px;
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  text-align: center;
-}
-
-.manual-refresh-btn {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.3s;
-  font-size: 14px;
-  min-width: 180px;
-  justify-content: center;
-}
-
-.manual-refresh-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(59, 130, 246, 0.3);
-}
-
-.manual-refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-.refresh-count {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 8px;
-  border-radius: 10px;
+.connection-text {
   font-size: 12px;
-  font-weight: bold;
-}
-
-.refresh-info {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.refresh-info small {
-  font-family: 'Courier New', monospace;
+  font-weight: 500;
 }
 
 /* ===== VOTE NOTIFICATION ===== */
 .vote-notification {
   position: fixed;
-  top: 80px;
+  top: 60px;
   left: 50%;
   transform: translateX(-50%);
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border-radius: 12px;
+  color: white;
   padding: 12px 20px;
+  border-radius: 8px;
   max-width: 400px;
   width: 90%;
   z-index: 1000;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   animation: slideDown 0.3s ease;
 }
 
@@ -1277,19 +958,7 @@ onUnmounted(() => {
 }
 
 .notification-icon {
-  font-size: 24px;
-  animation: bounce 2s infinite;
-}
-
-@keyframes bounce {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-  }
-  30% {
-    transform: translateY(-5px);
-  }
+  font-size: 20px;
 }
 
 .notification-text {
@@ -1307,24 +976,16 @@ onUnmounted(() => {
   opacity: 0.9;
 }
 
-.notification-details .candidate {
-  font-weight: bold;
-}
-
 .notification-time {
   font-size: 11px;
   opacity: 0.8;
-  font-family: 'Courier New', monospace;
 }
 
 /* ===== MAIN DASHBOARD ===== */
 .main-dashboard {
-  flex: 1;
   padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 /* ===== SUMMARY ROW ===== */
@@ -1332,359 +993,181 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 16px;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 14px 12px; /* Reduced padding */
   display: flex;
   align-items: center;
-  gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: transform 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.08);
+  gap: 10px;
+  min-height: 85px; /* Fixed height for consistency */
 }
 
 .stat-icon {
-  font-size: 24px;
+  font-size: 20px; /* Reduced from 24px */
+  flex-shrink: 0;
 }
 
 .stat-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 60px;
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 16px; /* Reduced from 20px */
   font-weight: bold;
-  color: white;
-  display: block;
+  color: var(--color-text);
   margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.stat-value.loading {
+  color: var(--color-text-mute);
 }
 
 .stat-label {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 11px; /* Reduced from 12px */
+  color: var(--color-text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Loading States */
-.stat-value.loading {
-  color: #94a3b8 !important;
-  animation: pulse 1.5s infinite;
-}
-
-.stat-loading {
-  font-size: 10px;
-  color: #64748b;
+  letter-spacing: 0.3px;
+  line-height: 1.3;
   margin-top: 2px;
+}
+
+/* Date-specific styles */
+.date-value {
+  font-size: 14px; /* Slightly smaller for date */
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.date-label {
+  font-size: 10px; /* Even smaller for date label */
+  margin-top: 0;
+}
+
+.current-time {
+  font-size: 10px; /* Reduced from 11px */
+  color: var(--color-text-soft);
+  margin-top: 4px;
+  font-weight: 500;
 }
 
 /* Participation indicators */
 .participation-high,
-.participation-medium {
-  font-size: 10px;
-  margin-top: 2px;
-  padding: 1px 6px;
-  border-radius: 8px;
+.participation-medium,
+.participation-low {
+  font-size: 9px; /* Reduced from 11px */
+  margin-top: 3px;
+  padding: 1px 5px;
+  border-radius: 3px;
   display: inline-block;
+  font-weight: 600;
+  text-align: center;
+  width: fit-content;
 }
 
 .participation-high {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.1);
   color: #22c55e;
 }
 
 .participation-medium {
-  background: rgba(251, 191, 36, 0.2);
+  background: rgba(251, 191, 36, 0.1);
   color: #fbbf24;
 }
 
-/* Time remaining */
-.time-remaining {
-  font-size: 10px;
-  color: #fbbf24;
-  margin-top: 2px;
-  font-weight: 600;
+.participation-low {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
 }
 
-/* ===== WINNERS SECTION ===== */
-.winners-section {
-  background: rgba(34, 197, 94, 0.1);
-  border: 2px solid rgba(34, 197, 94, 0.2);
-  border-radius: 16px;
+/* ===== TWO COLUMN RESULTS ===== */
+.two-column-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.position-column {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
   padding: 20px;
 }
 
-.section-title {
+.kesiswaan-column {
+  border-top: 4px solid #3b82f6;
+}
+
+.sarpras-column {
+  border-top: 4px solid #8b5cf6;
+}
+
+.column-header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.column-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  color: var(--color-text);
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 16px 0;
-  font-size: 18px;
-  color: #22c55e;
 }
 
 .title-icon {
   font-size: 20px;
 }
 
-.winners-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.winner-card {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 16px;
-  border-left: 4px solid #22c55e;
-  position: relative;
-  overflow: hidden;
-}
-
-.winner-card.supermajority {
-  border-left-color: #fbbf24;
-  background: rgba(251, 191, 36, 0.05);
-}
-
-.winner-position {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-bottom: 8px;
-}
-
-.winner-name {
-  font-size: 18px;
-  font-weight: bold;
-  margin-bottom: 12px;
-  color: white;
-}
-
-.winner-stats {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.stat-votes {
-  color: #cbd5e1;
-  font-size: 14px;
-}
-
-.stat-percentage {
-  font-size: 20px;
-  font-weight: bold;
-  color: #22c55e;
-  font-family: 'Courier New', monospace;
-}
-
-.winner-card.supermajority .stat-percentage {
-  color: #fbbf24;
-}
-
-/* ===== RUN-OFF SECTION ===== */
-.runoff-section {
-  background: rgba(245, 158, 11, 0.1);
-  border: 2px solid rgba(245, 158, 11, 0.2);
-  border-radius: 16px;
-  padding: 16px;
-}
-
-.runoff-alert {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.runoff-icon {
-  font-size: 32px;
-}
-
-.runoff-content {
-  flex: 1;
-}
-
-.runoff-title {
-  margin: 0 0 4px 0;
-  color: #f59e0b;
+.position-status {
+  margin-left: auto;
   font-size: 16px;
 }
 
-.runoff-description {
-  margin: 0;
-  color: #cbd5e1;
-  font-size: 14px;
-}
-
-.runoff-details {
-  margin-top: 8px;
-}
-
-.runoff-position {
-  display: inline-block;
-  background: rgba(245, 158, 11, 0.1);
-  color: #fbbf24;
-  padding: 4px 8px;
-  border-radius: 6px;
-  margin-right: 4px;
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.runoff-button {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: bold;
-  font-size: 14px;
-  cursor: pointer;
-  transition: transform 0.2s;
-  white-space: nowrap;
-}
-
-.runoff-button:hover {
-  transform: translateY(-2px);
-}
-
-/* ===== CONTENT GRID ===== */
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-}
-
-/* ===== POSITION TABS ===== */
-.position-tabs-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.position-tabs {
-  display: flex;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 8px;
-  gap: 8px;
-}
-
-.position-tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: none;
-  border: none;
-  color: white;
-  padding: 12px;
-  cursor: pointer;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.position-tab:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.position-tab.active {
-  background: rgba(59, 130, 246, 0.3);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-}
-
-.position-tab.has-winner {
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.tab-icon {
-  font-size: 16px;
-}
-
-.tab-name {
-  white-space: nowrap;
-}
-
-.tab-count {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-}
-
-/* ===== CANDIDATES CONTAINER ===== */
-.candidates-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 20px;
-}
-
-.candidates-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.candidates-title {
-  margin: 0;
-  font-size: 18px;
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-badge {
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
-  border-radius: 8px;
-}
-
-.candidates-stats {
+.column-stats {
   display: flex;
   gap: 16px;
-}
-
-.candidates-stats .stat {
   font-size: 12px;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-family: 'Courier New', monospace;
+  color: var(--color-text-soft);
 }
 
-/* ===== CANDIDATES RANKING ===== */
-.candidates-ranking {
+.column-stats span {
+  background: var(--color-bg-mute);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* ===== CANDIDATES LIST ===== */
+.candidates-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.loading-candidates {
+.loading,
+.empty {
   text-align: center;
   padding: 40px 20px;
+  color: var(--color-text-soft);
 }
 
-.loading-spinner {
+.spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #3b82f6;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 12px;
@@ -1699,28 +1182,11 @@ onUnmounted(() => {
 .candidate-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-bg-mute);
+  border-radius: 6px;
   border-left: 4px solid transparent;
-  transition: all 0.2s;
-  animation: slideIn 0.3s;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.candidate-item:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .candidate-item.rank-1 {
@@ -1736,41 +1202,16 @@ onUnmounted(() => {
   border-left-color: #92400e;
 }
 
-.candidate-item.vote-update {
-  animation: highlightVote 1s;
-}
-
-@keyframes highlightVote {
-  0% {
-    background: rgba(59, 130, 246, 0.3);
-  }
-  100% {
-    background: rgba(255, 255, 255, 0.03);
-  }
-}
-
-.candidate-item.is-winner {
+.candidate-item.winner {
   border-left-color: #22c55e;
   background: rgba(34, 197, 94, 0.05);
 }
 
 .candidate-rank {
-  min-width: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.rank-number {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
-  color: #94a3b8;
-}
-
-.winner-badge {
-  font-size: 14px;
-  margin-top: 2px;
+  color: var(--color-text-soft);
+  min-width: 36px;
 }
 
 .candidate-info {
@@ -1781,8 +1222,8 @@ onUnmounted(() => {
 }
 
 .candidate-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   border-radius: 50%;
   display: flex;
@@ -1790,8 +1231,12 @@ onUnmounted(() => {
   justify-content: center;
   font-weight: bold;
   color: white;
-  font-size: 14px;
+  font-size: 12px;
   flex-shrink: 0;
+}
+
+.sarpras-column .candidate-avatar {
+  background: linear-gradient(135deg, #8b5cf6, #d946ef);
 }
 
 .candidate-details {
@@ -1800,21 +1245,14 @@ onUnmounted(() => {
 
 .candidate-name {
   font-weight: bold;
-  font-size: 16px;
-  margin-bottom: 4px;
-  color: white;
+  font-size: 14px;
+  margin-bottom: 2px;
+  color: var(--color-text);
 }
 
-.candidate-meta {
-  display: flex;
-  gap: 8px;
+.candidate-votes {
   font-size: 12px;
-  color: #94a3b8;
-}
-
-.meta-percentage {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
+  color: var(--color-text-soft);
 }
 
 .candidate-progress {
@@ -1823,9 +1261,9 @@ onUnmounted(() => {
 }
 
 .progress-bar {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
   overflow: hidden;
   margin-bottom: 4px;
 }
@@ -1833,30 +1271,95 @@ onUnmounted(() => {
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.5s ease;
+}
+
+.sarpras-column .progress-fill {
+  background: linear-gradient(90deg, #8b5cf6, #d946ef);
 }
 
 .progress-fill.supermajority {
   background: linear-gradient(90deg, #fbbf24, #f59e0b);
 }
 
-.progress-text {
+.progress-percentage {
   text-align: center;
   font-size: 12px;
-  color: #94a3b8;
-  font-family: 'Courier New', monospace;
+  color: var(--color-text-soft);
+  font-weight: 600;
 }
 
-.supermajority-indicator {
-  color: #fbbf24;
-  font-size: 10px;
+/* ===== RUN-OFF SECTION ===== */
+.runoff-section {
+  background: rgba(245, 158, 11, 0.1);
+  border: 2px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
-/* ===== ACTIVITY CONTAINER ===== */
-.activity-container {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
+.runoff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.runoff-icon {
+  font-size: 24px;
+}
+
+.runoff-title {
+  margin: 0;
+  color: #f59e0b;
+  font-size: 18px;
+}
+
+.runoff-description {
+  margin: 0 0 12px 0;
+  color: var(--color-text);
+}
+
+.runoff-positions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.runoff-position {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.runoff-actions {
+  text-align: center;
+}
+
+.runoff-button {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.runoff-button:hover {
+  opacity: 0.9;
+}
+
+/* ===== ACTIVITY SECTION ===== */
+.activity-section {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
   padding: 20px;
 }
 
@@ -1865,12 +1368,14 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .activity-title {
   margin: 0;
   font-size: 16px;
-  color: white;
+  color: var(--color-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1880,36 +1385,16 @@ onUnmounted(() => {
   font-size: 18px;
 }
 
-.refresh-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.refresh-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: rotate(180deg);
-}
-
 .activity-feed {
-  height: 150px;
+  height: 200px;
   overflow-y: auto;
 }
 
 .empty-activity {
   text-align: center;
   padding: 40px 20px;
-  color: #64748b;
+  color: var(--color-text-soft);
   font-style: italic;
-  font-size: 14px;
 }
 
 .activity-list {
@@ -1923,43 +1408,18 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  border-left: 3px solid transparent;
-  animation: slideInLeft 0.3s;
+  background: var(--color-bg-mute);
+  border-radius: 6px;
+  border-left: 3px solid var(--color-primary);
 }
 
-@keyframes slideInLeft {
-  from {
-    transform: translateX(-10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.activity-item:nth-child(odd) {
+  background: var(--color-bg-soft);
 }
 
-.activity-item.vote {
-  border-left-color: #3b82f6;
-}
-
-.activity-item.winner {
-  border-left-color: #22c55e;
-}
-
-.activity-item.round {
-  border-left-color: #f59e0b;
-}
-
-.activity-item.connection {
-  border-left-color: #8b5cf6;
-}
-
-.activity-item .activity-icon {
+.activity-icon {
   font-size: 16px;
   margin-top: 2px;
-  flex-shrink: 0;
 }
 
 .activity-content {
@@ -1967,544 +1427,232 @@ onUnmounted(() => {
 }
 
 .activity-message {
-  font-size: 12px;
-  color: #e2e8f0;
+  font-size: 13px;
+  color: var(--color-text);
   margin-bottom: 4px;
   line-height: 1.4;
 }
 
-.activity-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-}
-
 .activity-time {
-  color: #94a3b8;
-  font-family: 'Courier New', monospace;
-}
-
-/* ===== FOOTER INFO ===== */
-.footer-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.update-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.update-label {
-  color: #94a3b8;
-}
-
-.update-time {
-  color: white;
-  font-weight: 600;
-  font-family: 'Courier New', monospace;
-}
-
-.refresh-mini-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: none;
-  color: #94a3b8;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-left: 8px;
-  font-size: 12px;
-  transition: all 0.2s;
-}
-
-.refresh-mini-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.refresh-mini-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Session info */
-.session-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   font-size: 11px;
+  color: var(--color-text-soft);
 }
 
-.session-status {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+  .two-column-results {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  /* Adjust summary cards for tablet */
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-card {
+    padding: 12px 10px;
+    min-height: 80px;
+  }
+
+  .stat-value {
+    font-size: 15px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+  }
 }
 
-.session-period {
-  color: #94a3b8;
-  font-size: 10px;
+@media (max-width: 768px) {
+  .status-header {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .header-left,
+  .header-center,
+  .header-right {
+    justify-content: center;
+  }
+
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 10px 8px;
+    min-height: 75px;
+    gap: 8px;
+  }
+
+  .stat-icon {
+    font-size: 18px;
+  }
+
+  .stat-value {
+    font-size: 14px;
+  }
+
+  .date-value {
+    font-size: 12px;
+  }
+
+  .date-label {
+    font-size: 9px;
+  }
+
+  .current-time {
+    font-size: 9px;
+  }
+
+  .candidate-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .candidate-progress {
+    width: 100%;
+  }
 }
 
-.connection-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 20px;
-}
+@media (max-width: 480px) {
+  .main-dashboard {
+    padding: 12px;
+  }
 
-.connection-info.connected {
-  background: rgba(34, 197, 94, 0.1);
-}
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
 
-.connection-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ef4444;
-  animation: pulse 1.5s infinite;
-}
+  .stat-card {
+    padding: 10px 8px;
+    min-height: 70px;
+  }
 
-.connection-info.connected .connection-dot {
-  background: #22c55e;
-  animation: pulse 1s infinite;
-}
+  .stat-icon {
+    font-size: 16px;
+  }
 
-.connection-text {
-  font-size: 11px;
-  font-weight: bold;
-}
+  .stat-value {
+    font-size: 13px;
+  }
 
-.connection-info.connected .connection-text {
-  color: #22c55e;
+  .stat-label {
+    font-size: 9px;
+  }
+
+  .date-value {
+    font-size: 11px;
+  }
+
+  .date-label {
+    font-size: 8px;
+  }
+
+  .current-time {
+    font-size: 8px;
+  }
+
+  .participation-high,
+  .participation-medium,
+  .participation-low {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+
+  .position-column {
+    padding: 16px;
+  }
+
+  .candidate-info {
+    gap: 8px;
+  }
+
+  .candidate-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+  }
 }
 
 /* ===== FULLSCREEN MODE ===== */
 .live-results.fullscreen-mode .main-dashboard {
   padding: 24px;
   height: calc(100vh - 60px);
+  overflow-y: auto;
 }
 
-/* ===== TRANSITIONS ===== */
-.slide-down-enter-active,
-.slide-down-leave-active {
-  transition: all 0.3s ease;
+.live-results.fullscreen-mode .summary-row {
+  gap: 16px;
 }
 
-.slide-down-enter-from,
-.slide-down-leave-to {
-  transform: translate(-50%, -20px);
-  opacity: 0;
+.live-results.fullscreen-mode .stat-card {
+  padding: 16px 14px;
+  min-height: 90px;
 }
 
-/* ===== RESPONSIVE BREAKPOINTS ===== */
-
-/* Mobile: ≤480px */
-@media (max-width: 480px) {
-  .minimal-header {
-    padding: 10px 12px;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .back-button {
-    align-self: flex-start;
-    font-size: 12px;
-    padding: 6px 12px;
-  }
-
-  .header-center {
-    order: 3;
-    width: 100%;
-  }
-
-  .main-title {
-    font-size: 16px;
-    text-align: center;
-  }
-
-  .sub-title {
-    font-size: 9px;
-    max-width: 280px;
-    padding: 3px 8px;
-  }
-
-  .election-type {
-    font-size: 10px;
-    padding: 2px 8px;
-  }
-
-  .header-controls {
-    align-self: flex-end;
-  }
-
-  .manual-refresh-container {
-    margin: 8px 12px;
-    padding: 10px;
-  }
-
-  .manual-refresh-btn {
-    width: 100%;
-    padding: 10px 16px;
-    font-size: 13px;
-  }
-
-  .summary-row {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .winners-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .content-grid {
-    gap: 12px;
-  }
-
-  .position-tabs {
-    flex-direction: column;
-  }
-
-  .candidate-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .candidate-info {
-    width: 100%;
-  }
-
-  .candidate-progress {
-    width: 100%;
-  }
-
-  .activity-feed {
-    height: 120px;
-  }
-
-  .footer-info {
-    flex-direction: column;
-    gap: 8px;
-    text-align: center;
-  }
-
-  .session-info {
-    display: none;
-  }
-
-  .refresh-mini-btn {
-    margin-left: 4px;
-  }
+.live-results.fullscreen-mode .stat-value {
+  font-size: 18px;
 }
 
-/* Tablet: 481px-768px */
-@media (min-width: 481px) and (max-width: 768px) {
-  .minimal-header {
-    padding: 12px 16px;
-  }
-
-  .main-title {
-    font-size: 18px;
-  }
-
-  .sub-title {
-    font-size: 10px;
-    max-width: 350px;
-  }
-
-  .summary-row {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .winners-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .candidate-item {
-    gap: 12px;
-  }
-
-  .candidate-progress {
-    width: 100px;
-  }
-
-  .activity-feed {
-    height: 130px;
-  }
+.live-results.fullscreen-mode .stat-label {
+  font-size: 12px;
 }
 
-/* Desktop: 769px-1024px */
-@media (min-width: 769px) {
-  .content-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .activity-container {
-    grid-column: 1 / -1;
-  }
-}
-
-/* Large Desktop: 1025px-1920px */
-@media (min-width: 1025px) {
-  .main-dashboard {
-    padding: 24px 32px;
-    gap: 20px;
-  }
-
-  .summary-row {
-    gap: 16px;
-  }
-
-  .stat-card {
-    padding: 20px;
-  }
-
-  .stat-value {
-    font-size: 24px;
-  }
-
-  .winners-section {
-    padding: 24px;
-  }
-
-  .winner-name {
-    font-size: 20px;
-  }
-
-  .content-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-  }
-
-  .candidates-container {
-    padding: 24px;
-  }
-
-  .activity-container {
-    grid-column: 1 / -1;
-  }
-
-  .activity-feed {
-    height: 180px;
-  }
-}
-
-/* TV Mode: ≥1921px */
 @media (min-width: 1921px) {
   .live-results {
     font-size: 1.1em;
   }
 
-  .minimal-header {
-    padding: 20px 40px;
-  }
-
-  .main-title {
-    font-size: 24px;
-    letter-spacing: 1px;
-  }
-
-  .sub-title {
-    font-size: 13px;
-    max-width: 500px;
-  }
-
-  .election-type {
-    font-size: 14px;
-    padding: 4px 16px;
-  }
-
-  .round-info {
-    font-size: 16px;
-    padding: 6px 16px;
-  }
-
-  .control-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 22px;
-  }
-
   .main-dashboard {
-    padding: 32px 48px;
-    gap: 24px;
-    max-width: 3840px;
-    margin: 0 auto;
-  }
-
-  .summary-row {
-    gap: 24px;
-  }
-
-  .stat-card {
-    padding: 24px;
-    border-radius: 16px;
-  }
-
-  .stat-icon {
-    font-size: 32px;
+    max-width: 90%;
   }
 
   .stat-value {
-    font-size: 28px;
+    font-size: 18px;
   }
 
   .stat-label {
-    font-size: 14px;
+    font-size: 12px;
   }
 
-  .winners-section {
-    padding: 32px;
-    border-radius: 20px;
-  }
-
-  .section-title {
-    font-size: 24px;
-  }
-
-  .winner-card {
-    padding: 24px;
-    border-radius: 16px;
-  }
-
-  .winner-name {
-    font-size: 24px;
-  }
-
-  .winner-stats {
-    font-size: 18px;
-  }
-
-  .content-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 32px;
-  }
-
-  .activity-container {
-    grid-column: span 1;
-  }
-
-  .position-tab {
-    padding: 16px;
-    font-size: 16px;
-    border-radius: 16px;
-  }
-
-  .candidate-item {
-    padding: 20px;
-    gap: 20px;
-    border-radius: 16px;
-  }
-
-  .candidate-avatar {
-    width: 50px;
-    height: 50px;
-    font-size: 18px;
+  .column-title {
+    font-size: 20px;
   }
 
   .candidate-name {
-    font-size: 18px;
-  }
-
-  .candidate-meta {
-    font-size: 14px;
-  }
-
-  .candidate-progress {
-    width: 200px;
+    font-size: 16px;
   }
 
   .progress-bar {
-    height: 10px;
-  }
-
-  .progress-text {
-    font-size: 14px;
-  }
-
-  .activity-feed {
-    height: 250px;
-  }
-
-  .activity-message {
-    font-size: 14px;
-  }
-
-  .footer-info {
-    padding: 16px 24px;
-    border-radius: 16px;
-  }
-
-  .update-info {
-    font-size: 14px;
-  }
-
-  .connection-text {
-    font-size: 14px;
-  }
-
-  /* No scroll on 70 inch TV */
-  .live-results.fullscreen-mode .main-dashboard {
-    height: calc(100vh - 80px);
-    overflow-y: hidden;
-  }
-
-  .live-results.fullscreen-mode .activity-feed {
-    height: calc(50vh - 100px);
+    height: 8px;
   }
 }
 
-/* Touch device optimizations */
-@media (hover: none) and (pointer: coarse) {
-  .back-button,
-  .control-btn,
-  .position-tab,
-  .runoff-button,
-  .manual-refresh-btn {
-    min-height: 44px;
-    min-width: 44px;
-  }
+/* Hover effects for cards */
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+}
 
-  .candidate-item {
-    padding: 16px;
-    margin-bottom: 8px;
+/* Loading animation for stats */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
-
-  .candidates-ranking,
-  .activity-feed {
-    -webkit-overflow-scrolling: touch;
+  50% {
+    opacity: 0.5;
   }
 }
 
-/* Reduced motion preference */
-@media (prefers-reduced-motion: reduce) {
-  .live-results * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  .vote-notification {
-    animation: none;
-  }
-
-  .status-indicator,
-  .connection-dot {
-    animation: none;
-  }
+.stat-value.loading {
+  animation: pulse 1.5s infinite;
 }
 </style>
