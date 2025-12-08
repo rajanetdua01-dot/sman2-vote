@@ -220,7 +220,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/utils/supabase'
 
@@ -295,10 +295,103 @@ const selectSarpras = (candidate) => {
   selectedSarpras.value = candidate
 }
 
+// =============================================
+// AUTO-SAVE DRAFT FUNCTIONS (NEW)
+// =============================================
+
+// Save draft to localStorage
+const saveDraft = () => {
+  if (!voterData.value || !activeSession.value) return
+
+  const draft = {
+    sessionId: activeSession.value.id,
+    voterId: voterData.value.pengguna.id,
+    token: voterData.value.token,
+    step: currentStep.value,
+    kesiswaanId: selectedKesiswaan.value?.id,
+    sarprasId: selectedSarpras.value?.id,
+    timestamp: new Date().toISOString(),
+  }
+
+  localStorage.setItem('smanda_vote_draft', JSON.stringify(draft))
+  console.log('💾 Draft saved:', draft)
+}
+
+// Load draft from localStorage
+const loadDraft = () => {
+  try {
+    const saved = localStorage.getItem('smanda_vote_draft')
+    if (!saved) {
+      console.log('ℹ️ No draft found')
+      return
+    }
+
+    const draft = JSON.parse(saved)
+    console.log('📂 Found draft:', draft)
+
+    // Validasi: harus sama session & voter
+    if (!activeSession.value || draft.sessionId !== activeSession.value.id) {
+      console.log('❌ Draft session mismatch, clearing...')
+      localStorage.removeItem('smanda_vote_draft')
+      return
+    }
+
+    if (!voterData.value || draft.voterId !== voterData.value.pengguna.id) {
+      console.log('❌ Draft voter mismatch, clearing...')
+      localStorage.removeItem('smanda_vote_draft')
+      return
+    }
+
+    // Validasi usia draft (max 30 menit)
+    const draftAge = new Date() - new Date(draft.timestamp)
+    if (draftAge > 30 * 60 * 1000) {
+      console.log('❌ Draft expired (30 mins), clearing...')
+      localStorage.removeItem('smanda_vote_draft')
+      return
+    }
+
+    // Restore step
+    currentStep.value = draft.step || 1
+    console.log('↩️ Restored step:', currentStep.value)
+
+    // Restore selections (harus tunggu candidates loaded)
+    // Ini akan dipanggil setelah candidates loaded
+    return draft
+  } catch (err) {
+    console.error('❌ Error loading draft:', err)
+    localStorage.removeItem('smanda_vote_draft')
+    return null
+  }
+}
+
+// Restore selections after candidates are loaded
+const restoreSelections = (draft) => {
+  if (!draft) return
+
+  // Restore kesiswaan selection
+  if (draft.kesiswaanId && kesiswaanCandidates.value.length > 0) {
+    const candidate = kesiswaanCandidates.value.find((c) => c.id === draft.kesiswaanId)
+    if (candidate) {
+      selectedKesiswaan.value = candidate
+      console.log('✅ Restored kesiswaan selection:', candidate.pengguna.nama_lengkap)
+    }
+  }
+
+  // Restore sarpras selection
+  if (draft.sarprasId && sarprasCandidates.value.length > 0) {
+    const candidate = sarprasCandidates.value.find((c) => c.id === draft.sarprasId)
+    if (candidate) {
+      selectedSarpras.value = candidate
+      console.log('✅ Restored sarpras selection:', candidate.pengguna.nama_lengkap)
+    }
+  }
+}
+
 // Navigation - DIUBAH: Max step = 2
 const nextStep = () => {
   if (currentStep.value < 2 && isCurrentStepValid.value) {
     currentStep.value++
+    saveDraft() // Auto-save saat pindah step
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
@@ -306,6 +399,7 @@ const nextStep = () => {
 const prevStep = () => {
   if (currentStep.value > 1) {
     currentStep.value--
+    saveDraft() // Auto-save saat pindah step
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
@@ -323,7 +417,7 @@ const loadVoterData = () => {
     setTimeout(() => {
       router.push('/scan')
     }, 2000)
-    return
+    return false
   }
 
   try {
@@ -341,21 +435,26 @@ const loadVoterData = () => {
     if (sessionAge.value > maxAge) {
       console.warn('⚠️ Voter session expired, clearing...')
       localStorage.removeItem('smanda_voter')
+      localStorage.removeItem('smanda_vote_draft') // Juga clear draft
       error.value = 'Session telah kadaluarsa. Silakan scan token kembali.'
 
       setTimeout(() => {
         router.push('/scan')
       }, 2000)
-      return
+      return false
     }
+
+    return true
   } catch (err) {
     console.error('❌ Error parsing voter session:', err)
     localStorage.removeItem('smanda_voter')
+    localStorage.removeItem('smanda_vote_draft') // Juga clear draft
     error.value = 'Error memuat data session. Silakan scan token kembali.'
 
     setTimeout(() => {
       router.push('/scan')
     }, 2000)
+    return false
   }
 }
 
@@ -379,16 +478,20 @@ const loadActiveSession = async () => {
     // Check if session is voting
     if (!activeSession.value) {
       error.value = 'Tidak ada sesi pemilihan aktif'
-      return
+      return false
     }
 
     if (activeSession.value.status !== 'voting') {
       error.value = `Sesi voting tidak aktif. Status saat ini: ${activeSession.value.status.toUpperCase()}`
       console.warn('⚠️ Session not in voting status:', activeSession.value.status)
+      return false
     }
+
+    return true
   } catch (err) {
     console.error('❌ Error loading session:', err)
     error.value = 'Gagal memuat data sesi. Silakan coba lagi nanti.'
+    return false
   }
 }
 
@@ -431,9 +534,12 @@ const loadCandidates = async () => {
 
     console.log('🎯 Kesiswaan candidates:', kesiswaanCandidates.value.length)
     console.log('🎯 Sarpras candidates:', sarprasCandidates.value.length)
+
+    return true
   } catch (err) {
     console.error('❌ Error loading candidates:', err)
     error.value = 'Gagal memuat data calon'
+    return false
   }
 }
 
@@ -446,6 +552,9 @@ const submitVote = () => {
   showConfirmModal.value = true
 }
 
+// =============================================
+// UPDATED: MARK TOKEN AFTER VOTE SUCCESS (NEW)
+// =============================================
 const confirmSubmit = async () => {
   showConfirmModal.value = false
   submitting.value = true
@@ -508,12 +617,36 @@ const confirmSubmit = async () => {
     }
 
     console.log('✅ Votes submitted successfully')
+
+    // =============================================
+    // BARU: MARK TOKEN AS USED AFTER VOTE SUCCESS
+    // =============================================
+    console.log('🏷️ Marking token as used...')
+    const { error: tokenError } = await supabase
+      .from('token_qr')
+      .update({
+        sudah_digunakan: true,
+        digunakan_pada: new Date().toISOString(),
+        info_perangkat: navigator.userAgent,
+      })
+      .eq('token', voterData.value.token)
+      .eq('sesi_id', activeSession.value.id)
+
+    if (tokenError) {
+      console.error('❌ Error marking token:', tokenError)
+      // Note: Tidak throw error karena vote sudah berhasil masuk
+      // Token bisa di-mark manual nanti oleh admin
+    } else {
+      console.log('✅ Token successfully marked as used')
+    }
+
+    // Clear all local data
+    localStorage.removeItem('smanda_voter')
+    localStorage.removeItem('smanda_vote_draft')
+    console.log('🗑️ Cleared all local session data')
+
     // Success
     success.value = true
-
-    // Clear voter session
-    localStorage.removeItem('smanda_voter')
-    console.log('🗑️ Cleared voter session from localStorage')
 
     // Redirect after delay
     setTimeout(() => {
@@ -539,12 +672,34 @@ const confirmSubmit = async () => {
 const clearSessionAndRedirect = () => {
   console.log('🧹 Clearing session and redirecting...')
   localStorage.removeItem('smanda_voter')
+  localStorage.removeItem('smanda_vote_draft')
   router.push('/scan')
 }
 
+// =============================================
+// WATCHERS FOR AUTO-SAVE (NEW)
+// =============================================
+
+// Watch for selection changes and auto-save
+watch(
+  [selectedKesiswaan, selectedSarpras],
+  () => {
+    if (selectedKesiswaan.value || selectedSarpras.value) {
+      saveDraft()
+    }
+  },
+  { deep: true },
+)
+
+// Watch for step changes and auto-save
+watch(currentStep, () => {
+  saveDraft()
+})
+
 // Prevent accidental page leave
 const beforeUnloadHandler = (event) => {
-  if (!success.value && !submitting.value) {
+  // Only warn if there are unsaved selections
+  if ((selectedKesiswaan.value || selectedSarpras.value) && !success.value && !submitting.value) {
     event.preventDefault()
     event.returnValue = 'Voting Anda belum disimpan. Yakin ingin keluar?'
   }
@@ -555,12 +710,22 @@ onMounted(async () => {
   console.log('🚀 VotingPage mounted')
 
   // Load voter data first
-  loadVoterData()
+  const voterLoaded = loadVoterData()
+  if (!voterLoaded) return
 
   // Only load session and candidates if voter data is valid
-  if (voterData.value) {
-    await loadActiveSession()
-    await loadCandidates()
+  const sessionLoaded = await loadActiveSession()
+  if (!sessionLoaded) return
+
+  const candidatesLoaded = await loadCandidates()
+  if (!candidatesLoaded) return
+
+  // Load draft (if exists)
+  const draft = loadDraft()
+
+  // Restore selections after candidates are loaded
+  if (draft && kesiswaanCandidates.value.length > 0 && sarprasCandidates.value.length > 0) {
+    restoreSelections(draft)
   }
 
   // Add beforeunload listener

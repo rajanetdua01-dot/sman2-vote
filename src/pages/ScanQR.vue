@@ -183,7 +183,7 @@ const processToken = async (token) => {
       )
       .eq('token', cleanToken)
       .eq('sesi_id', activeSession.value.id)
-      .eq('sudah_digunakan', false)
+      .eq('sudah_digunakan', false) // Token belum digunakan
       .gt('kadaluarsa_pada', new Date().toISOString())
       .single()
 
@@ -222,19 +222,50 @@ const processToken = async (token) => {
       throw new Error('Anda sudah melakukan voting')
     }
 
-    // 4. Mark token as used
-    const { error: updateError } = await supabase
-      .from('token_qr')
-      .update({
-        sudah_digunakan: true,
-        digunakan_pada: new Date().toISOString(),
-        info_perangkat: navigator.userAgent,
-      })
-      .eq('id', tokenData.id)
+    // 4. Check if there's existing draft for this token
+    const existingDraft = localStorage.getItem('smanda_vote_draft')
+    if (existingDraft) {
+      try {
+        const draft = JSON.parse(existingDraft)
+        // Check if draft is for same token and session
+        if (draft.token === cleanToken && draft.sessionId === activeSession.value.id) {
+          console.log('🎯 Found existing draft for token, checking age...')
 
-    if (updateError) throw updateError
+          // Check draft age (max 30 minutes)
+          const draftAge = new Date() - new Date(draft.timestamp)
+          if (draftAge < 30 * 60 * 1000) {
+            // 30 minutes
+            console.log('✅ Draft valid, continuing voting session')
 
-    // 5. Save voter session
+            // Save voter session (refresh timestamp)
+            const voterSession = {
+              token: tokenData.token,
+              pengguna: tokenData.pengguna,
+              sesi_id: activeSession.value.id,
+              timestamp: new Date().toISOString(),
+            }
+
+            localStorage.setItem('smanda_voter', JSON.stringify(voterSession))
+
+            success.value = true
+            console.log('Redirecting to voting page with existing draft...')
+
+            setTimeout(() => {
+              router.push('/voting')
+            }, 500)
+            return
+          } else {
+            console.log('⚠️ Draft expired, clearing...')
+            localStorage.removeItem('smanda_vote_draft')
+          }
+        }
+      } catch (draftErr) {
+        console.error('Error parsing draft:', draftErr)
+        localStorage.removeItem('smanda_vote_draft')
+      }
+    }
+
+    // 5. Save voter session (NEW - tanpa mark token)
     const voterSession = {
       token: tokenData.token,
       pengguna: tokenData.pengguna,
@@ -246,7 +277,8 @@ const processToken = async (token) => {
 
     // 6. Success - redirect to voting page
     success.value = true
-    console.log('Token valid, redirecting to voting...')
+    console.log('✅ Token valid, redirecting to voting...')
+    console.log('ℹ️ Token NOT marked as used yet (will be marked after vote submission)')
 
     setTimeout(() => {
       router.push('/voting')
