@@ -19,7 +19,13 @@
           <span class="connection-dot"></span>
           <span class="connection-text">
             {{
-              isLargeScreen ? (isConnected ? '📺 LIVE TV' : '📺 DISCONNECTED') : '📱 AUTO-REFRESH'
+              isLargeScreen
+                ? isConnected
+                  ? '📺 LIVE TV'
+                  : '📺 DISCONNECTED'
+                : isPollingActive
+                  ? '📱 AUTO-REFRESH'
+                  : '📱 OFFLINE'
             }}
           </span>
         </div>
@@ -271,6 +277,29 @@
         </div>
       </div>
     </div>
+
+    <!-- 🔄 FLOATING REFRESH BUTTON FOR MOBILE -->
+    <div
+      v-if="showMobileRefresh"
+      class="mobile-refresh-btn"
+      @click="mobileRefresh"
+      :class="{ refreshing: isRefreshing }"
+      :title="isRefreshing ? 'Menyegarkan...' : 'Refresh data'"
+    >
+      <div class="refresh-icon">
+        {{ isRefreshing ? '⏳' : '🔄' }}
+      </div>
+      <div class="refresh-badge" v-if="refreshCount > 0">
+        {{ refreshCount }}
+      </div>
+      <div class="refresh-pulse" v-if="!isRefreshing"></div>
+    </div>
+
+    <!-- 📱 MOBILE REFRESH STATUS -->
+    <div v-if="showMobileRefresh && lastUpdateTime" class="mobile-refresh-status">
+      <span>Terakhir: {{ lastUpdateTime }}</span>
+      <span class="refresh-hint">↓ Tarik ke bawah untuk refresh</span>
+    </div>
   </div>
 </template>
 
@@ -285,6 +314,13 @@ const votingRound = ref(1)
 const isAdmin = ref(false)
 const isLargeScreen = ref(false)
 const isRefreshing = ref(false)
+
+// ⭐ STATE BARU UNTUK HP
+const isMobile = ref(false)
+const showMobileRefresh = ref(false)
+const refreshCount = ref(0)
+const isPollingActive = ref(false)
+const lastPollTime = ref('')
 
 // Data - SINGLE SOURCE OF TRUTH
 const candidatesData = ref([])
@@ -363,11 +399,19 @@ const cleanupAll = () => {
   if (document.fullscreenElement) {
     document.exitFullscreen()
   }
+
+  // Reset polling status
+  isPollingActive.value = false
 }
 
 // ===== FULLSCREEN HANDLER (named function) =====
 const handleFullscreen = () => {
   isFullscreen.value = !!document.fullscreenElement
+}
+
+// ===== RESIZE HANDLER UNTUK HP =====
+const handleResize = () => {
+  detectDeviceType()
 }
 
 // ===== COMPUTED =====
@@ -447,13 +491,24 @@ const formatCompactNumber = (value) => {
   return Math.floor(value / 1000000) + 'M'
 }
 
+// ⭐ UPDATE DETECT DEVICE TYPE UNTUK HP
 const detectDeviceType = () => {
   const width = window.innerWidth
   const height = window.innerHeight
+
+  // Deteksi mobile (width < 768px)
+  isMobile.value = width < 768
+
   const isWideScreen = width > 1024 && width / height > 1.5
   const urlParams = new URLSearchParams(window.location.search)
   const forceTV = urlParams.has('tv') || localStorage.getItem('tv_mode') === 'true'
-  return forceTV || isWideScreen
+
+  isLargeScreen.value = forceTV || isWideScreen
+
+  // Show mobile refresh button on mobile yang bukan TV mode
+  showMobileRefresh.value = isMobile.value && !isLargeScreen.value
+
+  return isLargeScreen.value
 }
 
 // Sound functions
@@ -514,7 +569,6 @@ const playFallbackSound = () => {
     audio.volume = 0.3
     audio.play().catch((e) => console.log('Fallback audio failed:', e))
   } catch {
-    // ⭐ HAPUS 'err' PARAMETER
     console.log('All audio methods failed')
   }
 }
@@ -713,6 +767,101 @@ const manualRefresh = async () => {
   }
 }
 
+// ⭐ TAMBAH FUNGSI MOBILE REFRESH KHUSUS UNTUK HP
+const mobileRefresh = async () => {
+  if (isRefreshing.value) return
+
+  // Show refreshing animation
+  isRefreshing.value = true
+  refreshCount.value++
+
+  try {
+    addActivity('📱 Refresh manual dari HP...', 'info')
+
+    // Force immediate refresh
+    await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
+
+    // Update waktu
+    lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'Asia/Jakarta',
+    })
+
+    addActivity(`✅ Data diperbarui (${refreshCount.value}x)`, 'info')
+
+    // Show success feedback untuk HP
+    if (isMobile.value) {
+      showRefreshFeedback()
+    }
+  } catch (err) {
+    console.error('❌ Mobile refresh error:', err)
+    addActivity('❌ Gagal refresh dari HP', 'error')
+  } finally {
+    setTimeout(() => {
+      isRefreshing.value = false
+    }, 1000)
+  }
+}
+
+// ⭐ FEEDBACK VISUAL UNTUK MOBILE
+const showRefreshFeedback = () => {
+  const feedbackEl = document.createElement('div')
+  feedbackEl.className = 'mobile-refresh-feedback'
+  feedbackEl.innerHTML = '✅ Data Diperbarui'
+  feedbackEl.style.cssText = `
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #10b981;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 1000;
+    animation: fadeOut 2s forwards;
+  `
+
+  document.body.appendChild(feedbackEl)
+
+  setTimeout(() => {
+    if (feedbackEl.parentNode) {
+      document.body.removeChild(feedbackEl)
+    }
+  }, 2000)
+}
+
+// ⭐ SETUP PULL-TO-REFRESH UNTUK HP
+const setupPullToRefresh = () => {
+  let startY = 0
+  let pullDistance = 0
+
+  document.addEventListener('touchstart', (e) => {
+    if (window.scrollY === 0) {
+      startY = e.touches[0].clientY
+    }
+  })
+
+  document.addEventListener('touchmove', (e) => {
+    if (startY && window.scrollY === 0) {
+      pullDistance = e.touches[0].clientY - startY
+
+      if (pullDistance > 50 && !isRefreshing.value) {
+        mobileRefresh()
+        startY = 0
+      }
+    }
+  })
+
+  document.addEventListener('touchend', () => {
+    startY = 0
+    pullDistance = 0
+  })
+}
+
 const setupRealtime = async () => {
   try {
     const { data: session, error: sessionError } = await supabase
@@ -897,6 +1046,7 @@ const updateCurrentTime = () => {
 
 let lastMinutes = ref(null)
 
+// ⭐ UPDATE START POLLING UNTUK HP
 const startPolling = (interval = 30000) => {
   // Clear interval lama
   if (autoRefreshInterval) {
@@ -907,6 +1057,7 @@ const startPolling = (interval = 30000) => {
   const refreshData = async () => {
     try {
       await Promise.all([loadTotalVoters(), loadAllData(), loadUniqueVoters()])
+
       // Update waktu polling juga dengan detik
       lastUpdateTime.value = new Date().toLocaleTimeString('id-ID', {
         hour: '2-digit',
@@ -914,25 +1065,42 @@ const startPolling = (interval = 30000) => {
         second: '2-digit',
         timeZone: 'Asia/Jakarta',
       })
+
+      // Update polling status
+      lastPollTime.value = lastUpdateTime.value
+      isPollingActive.value = true
     } catch (err) {
       console.error('❌ Polling error:', err)
+      isPollingActive.value = false
     }
   }
 
+  // Poll immediately
   refreshData()
+  isPollingActive.value = true
+
+  // Setup interval
   autoRefreshInterval = setInterval(refreshData, interval)
 }
 
 // ===== LIFECYCLE =====
 onMounted(async () => {
-  isLargeScreen.value = detectDeviceType()
+  detectDeviceType()
   updateCurrentTime()
 
   // ⭐ SIMPAN INTERVAL REFERENCE
   timeInterval = setInterval(updateCurrentTime, 1000)
 
+  // ⭐ TAMBAH RESIZE LISTENER UNTUK HP
+  addCleanupListener(window, 'resize', handleResize)
+
   // ⭐ GUNAKAN CLEANUP LISTENER (bukan langsung addEventListener)
   addCleanupListener(document, 'fullscreenchange', handleFullscreen)
+
+  // ⭐ SETUP PULL-TO-REFRESH UNTUK HP
+  if (isMobile.value && showMobileRefresh.value) {
+    setupPullToRefresh()
+  }
 
   // TV Mode: Realtime updates
   // Mobile/PC Mode: Polling every 30s
@@ -1755,6 +1923,144 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
+/* ===== MOBILE REFRESH BUTTON ===== */
+.mobile-refresh-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.mobile-refresh-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.mobile-refresh-btn:active {
+  transform: scale(0.95);
+}
+
+.mobile-refresh-btn.refreshing {
+  background: linear-gradient(135deg, #6b7280, #9ca3af);
+  animation: rotate 1s linear infinite;
+}
+
+.refresh-icon {
+  font-size: 24px;
+  color: white;
+}
+
+.refresh-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ef4444;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+}
+
+.refresh-pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile Refresh Status */
+.mobile-refresh-status {
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-soft);
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  z-index: 999;
+  backdrop-filter: blur(5px);
+}
+
+.refresh-hint {
+  display: block;
+  font-size: 10px;
+  color: #3b82f6;
+  margin-top: 2px;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* Hide mobile elements on desktop */
+@media (min-width: 769px) {
+  .mobile-refresh-btn,
+  .mobile-refresh-status {
+    display: none;
+  }
+}
+
+/* Hide desktop refresh button on mobile */
+@media (max-width: 768px) {
+  .refresh-btn {
+    display: none;
+  }
+}
+
 @media (min-width: 1921px) {
   .live-results {
     font-size: 1.1em;
@@ -1801,7 +2107,7 @@ onUnmounted(() => {
 }
 
 /* Loading animation for stats */
-@keyframes pulse {
+@keyframes pulse-loading {
   0%,
   100% {
     opacity: 1;
@@ -1812,7 +2118,7 @@ onUnmounted(() => {
 }
 
 .stat-value.loading {
-  animation: pulse 1.5s infinite;
+  animation: pulse-loading 1.5s infinite;
 }
 
 /* Digital clock effect */
