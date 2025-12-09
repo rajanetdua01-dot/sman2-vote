@@ -37,7 +37,8 @@
             <router-link to="/">Home</router-link>
             <router-link to="/login-calon">Pendaftaran Calon</router-link>
             <router-link to="/scan">Voting</router-link>
-            <router-link to="/live-results">Hasil</router-link>
+            <router-link to="/live-results">Hasil Live</router-link>
+            <!-- ⭐ UPDATED -->
           </nav>
 
           <!-- Dark/Light Mode Toggle -->
@@ -76,7 +77,8 @@
         <span class="nav-label">Voting</span>
       </router-link>
 
-      <router-link to="/live-results" class="nav-item" @click="closeMenu">
+      <!-- ⭐ TAMBAH LIVE RESULTS UNTUK HP -->
+      <router-link to="/live-results-hp" class="nav-item" @click="closeMenu">
         <span class="nav-icon">📊</span>
         <span class="nav-label">Hasil</span>
       </router-link>
@@ -91,9 +93,6 @@
     <footer :class="{ 'has-bottom-nav': isMobile }">
       <div class="footer-content">
         <!-- Quick Links Bar -->
-        <div class="footer-links-bar">
-          <span class="separator">•</span>
-        </div>
 
         <!-- Credit Section -->
         <div class="footer-credit">
@@ -105,12 +104,16 @@
             </span>
           </div>
 
+          <div class="credit-line-2">
+            <span class="school-year">SMAN 2 Bandar Lampung - Pemilihan Waka Tahun 2025</span>
+          </div>
+
           <div class="credit-description">
             This real-time voting system was developed by the School Administration Staff of SMA
             Negeri 2 Bandar Lampung to support and enhance the democratic process within the school.
           </div>
 
-          <div class="footer-content">
+          <div class="footer-school-link">
             <a href="https://smandabdl.sch.id" target="_blank" class="footer-link-item">
               <span class="link-icon">🌐</span>
               <span class="link-text">https://www.smandabdl.sch.id</span>
@@ -447,7 +450,7 @@ main.has-bottom-nav {
 }
 
 /* ============================================
-   BOTTOM NAVBAR FOR MOBILE
+   BOTTOM NAVBAR FOR MOBILE - SEMUA MENU SAMA
    ============================================ */
 .bottom-navbar {
   position: fixed;
@@ -463,6 +466,7 @@ main.has-bottom-nav {
   padding: 0.5rem 0;
   z-index: 999;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  height: 70px;
 }
 
 .dark-mode .bottom-navbar {
@@ -471,13 +475,14 @@ main.has-bottom-nav {
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
 }
 
+/* ⭐ NORMAL STATE - SEMUA MENU BIRU TUA */
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  color: var(--color-text-soft);
+  color: #1e3a8a !important; /* ⭐ BIRU TUA DI LIGHT MODE */
   padding: 0.5rem 0.3rem;
   flex: 1;
   min-height: 60px;
@@ -485,46 +490,56 @@ main.has-bottom-nav {
   border-radius: 8px;
   margin: 0 0.2rem;
   cursor: pointer;
+  position: relative;
+  background: rgba(30, 58, 138, 0.05); /* ⭐ BIRU TUA TRANSPARAN 5% */
 }
 
+.dark-mode .nav-item {
+  color: #3b82f6 !important; /* ⭐ BIRU CERAH DI DARK MODE */
+  background: rgba(59, 130, 246, 0.05); /* ⭐ BIRU CERAH TRANSPARAN 5% */
+}
+
+/* ⭐ ACTIVE STATE - SEMUA MENU BIRU TERANG */
 .nav-item.router-link-active {
-  color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6 !important; /* ⭐ BIRU TERANG */
+  background: rgba(59, 130, 246, 0.15); /* ⭐ BIRU TERANG TRANSPARAN 15% */
+  font-weight: 600;
+}
+
+.nav-item.router-link-active::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: #3b82f6; /* ⭐ DOT BIRU TERANG */
+  border-radius: 50%;
 }
 
 .dark-mode .nav-item.router-link-active {
-  color: var(--color-primary-light);
-  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa !important; /* ⭐ BIRU LEBIH TERANG DI DARK MODE */
+  background: rgba(96, 165, 250, 0.15);
 }
 
+.dark-mode .nav-item.router-link-active::after {
+  background: #60a5fa; /* ⭐ DOT BIRU LEBIH TERANG DI DARK MODE */
+}
+
+/* ⭐ HOVER STATE */
 .nav-item:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(30, 58, 138, 0.1); /* ⭐ BIRU TUA TRANSPARAN 10% */
+  transform: translateY(-1px);
 }
 
 .dark-mode .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(59, 130, 246, 0.1); /* ⭐ BIRU CERAH TRANSPARAN 10% */
 }
 
-.nav-scan {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
-  color: white !important;
-  margin: 0 0.5rem;
-  transform: translateY(-10px);
-  box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
-}
-
-.nav-scan.router-link-active {
-  background: linear-gradient(135deg, #1e40af, #3b82f6);
-  color: white !important;
-}
-
+/* ⭐ NAV ICONS - SEMUA SAMA */
 .nav-icon {
   font-size: 1.5rem;
-  margin-bottom: 0.2rem;
-}
-
-.nav-icon-scan {
-  font-size: 1.8rem;
   margin-bottom: 0.2rem;
 }
 
@@ -668,6 +683,10 @@ footer.has-bottom-nav {
   margin: 0 auto;
 }
 
+.footer-school-link {
+  margin-top: 1rem;
+}
+
 /* ============================================
    ADMIN PAGE OVERRIDES
    ============================================ */
@@ -720,6 +739,30 @@ footer.has-bottom-nav {
 
   main {
     padding: 0.8rem;
+  }
+
+  /* Bottom Navbar Mobile */
+  .bottom-navbar {
+    height: 65px;
+  }
+
+  .nav-item {
+    min-height: 55px;
+    padding: 0.4rem 0.2rem;
+  }
+
+  .nav-icon {
+    font-size: 1.4rem;
+  }
+
+  .nav-label {
+    font-size: 0.65rem;
+  }
+
+  .nav-item.router-link-active::after {
+    width: 5px;
+    height: 5px;
+    top: -2px;
   }
 
   /* Footer Mobile */
@@ -801,16 +844,28 @@ footer.has-bottom-nav {
     padding: 0.6rem;
   }
 
+  /* Bottom Navbar Small Mobile */
+  .bottom-navbar {
+    height: 60px;
+  }
+
+  .nav-item {
+    min-height: 50px;
+    padding: 0.3rem 0.1rem;
+  }
+
   .nav-icon {
     font-size: 1.3rem;
   }
 
-  .nav-icon-scan {
-    font-size: 1.5rem;
+  .nav-label {
+    font-size: 0.6rem;
   }
 
-  .nav-label {
-    font-size: 0.65rem;
+  .nav-item.router-link-active::after {
+    width: 4px;
+    height: 4px;
+    top: -1px;
   }
 
   /* Footer Small Mobile */

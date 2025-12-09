@@ -10,6 +10,7 @@ const TestConnection = () => import('@/pages/TestConnection.vue')
 const DashboardCalon = () => import('@/pages/DashboardCalon.vue')
 const VotingPage = () => import('@/pages/VotingPage.vue')
 const LiveResults = () => import('@/pages/LiveResults.vue')
+const LiveResultsHp = () => import('@/pages/LiveResultsHp.vue') // ⭐ TAMBAH INI
 const AdminLogin = () => import('@/pages/AdminLogin.vue')
 const PageNotFound = () => import('@/pages/PageNotFound.vue')
 
@@ -51,7 +52,16 @@ const router = createRouter({
       path: '/live-results',
       name: 'liveResults',
       component: LiveResults,
-      meta: { title: 'Hasil Live Voting' },
+      meta: { title: 'Hasil Live Voting - Desktop/TV' },
+    },
+    {
+      path: '/live-results-hp', // ⭐ ROUTE BARU KHUSUS HP
+      name: 'liveResultsHp',
+      component: LiveResultsHp,
+      meta: {
+        title: 'Hasil Live Voting - Mobile',
+        isMobileOnly: true,
+      },
     },
     {
       path: '/admin-login',
@@ -132,15 +142,39 @@ const router = createRouter({
   ],
 })
 
-// ✅ ENHANCED ROUTER GUARD
+// ✅ ENHANCED ROUTER GUARD dengan AUTO-REDIRECT HP
 router.beforeEach(async (to, from, next) => {
   console.log('🛡️ Route:', to.path, to.meta)
 
   // Set page title
   document.title = to.meta?.title || 'SMANDA VOTE'
 
+  // ⭐ DETECT MOBILE DEVICE
+  const isMobile = window.innerWidth <= 768
+
+  // ⭐ AUTO-REDIRECT LOGIC:
+  // 1. Jika HP akses desktop version, redirect ke mobile version
+  if (to.name === 'liveResults' && isMobile) {
+    console.log('📱 Mobile detected, redirecting to /live-results-hp')
+    return next({ name: 'liveResultsHp' })
+  }
+
+  // 2. Jika desktop akses mobile version, redirect ke desktop version
+  if (to.name === 'liveResultsHp' && !isMobile) {
+    console.log('🖥️ Desktop detected, redirecting to /live-results')
+    return next({ name: 'liveResults' })
+  }
+
   // 1. PUBLIC ROUTES - langsung lewat
-  const publicRoutes = ['/', '/test', '/login-calon', '/scan', '/live-results', '/admin-login']
+  const publicRoutes = [
+    '/',
+    '/test',
+    '/login-calon',
+    '/scan',
+    '/live-results',
+    '/live-results-hp', // ⭐ TAMBAH INI
+    '/admin-login',
+  ]
 
   if (publicRoutes.includes(to.path)) {
     console.log('✅ Public route')
